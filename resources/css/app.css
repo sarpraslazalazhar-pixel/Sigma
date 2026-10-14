@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Material Design 3 Color Tokens: SIGMA Brand Seed */
+    --color-md-primary: #0F2F57;
+    --color-md-on-primary: #FFFFFF;
+    --color-md-primary-container: #DCE5F6;
+    --color-md-on-primary-container: #001B3E;
+
+    --color-md-secondary: #485F7D;
+    --color-md-on-secondary: #FFFFFF;
+    --color-md-secondary-container: #E7EEF8;
+    --color-md-on-secondary-container: #031D36;
+
+    --color-md-tertiary: #006C4C;
+    --color-md-on-tertiary: #FFFFFF;
+    --color-md-tertiary-container: #D0F7E3;
+    --color-md-on-tertiary-container: #002114;
+
+    --color-md-error: #BA1A1A;
+    --color-md-on-error: #FFFFFF;
+    --color-md-error-container: #FFDAD6;
+    --color-md-on-error-container: #410002;
+
+    --color-md-surface: #F8FAFC;
+    --color-md-on-surface: #171C22;
+    --color-md-surface-variant: #E2E6EE;
+    --color-md-on-surface-variant: #424750;
+
+    --color-md-surface-container-lowest: #FFFFFF;
+    --color-md-surface-container-low: #F1F5F9;
+    --color-md-surface-container: #E9EFF6;
+    --color-md-surface-container-high: #E0E7F0;
+    --color-md-surface-container-highest: #D5DFEB;
+
+    --color-md-outline: #727782;
+    --color-md-outline-variant: #CBD5E1;
+
+    /* Material Design 3 Shape Tokens */
+    --radius-md-xs: 4px;
+    --radius-md-sm: 8px;
+    --radius-md-md: 12px;
+    --radius-md-lg: 16px;
+    --radius-md-xl: 28px;
+    --radius-md-full: 9999px;
+}
