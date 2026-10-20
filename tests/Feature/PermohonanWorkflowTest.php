@@ -22,12 +22,19 @@ class PermohonanWorkflowTest extends TestCase
     use RefreshDatabase;
 
     protected User $staffUser;
+
     protected User $managerUser;
+
     protected User $kadivUser;
+
     protected User $financeUser;
+
     protected TahunAnggaran $ta;
+
     protected Unit $unitKlm;
+
     protected KodeAnggaran $leafNode;
+
     protected SumberDana $sumberDana;
 
     protected function setUp(): void
@@ -72,7 +79,7 @@ class PermohonanWorkflowTest extends TestCase
 
     public function test_submit_generates_unique_auto_numbering_and_sets_leveling(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         $permohonan = Permohonan::create([
             'no_pengajuan' => '',
@@ -111,7 +118,7 @@ class PermohonanWorkflowTest extends TestCase
 
     public function test_approval_workflow_through_supervision_kadiv_and_keuangan(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         $permohonan = Permohonan::create([
             'no_pengajuan' => '',
@@ -155,7 +162,7 @@ class PermohonanWorkflowTest extends TestCase
 
     public function test_revision_and_cycle_increment(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         $permohonan = Permohonan::create([
             'no_pengajuan' => '',
@@ -192,7 +199,7 @@ class PermohonanWorkflowTest extends TestCase
 
     public function test_approved_permohonan_binds_budget_in_calculator(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         $permohonan = Permohonan::create([
             'no_pengajuan' => '',
@@ -224,7 +231,7 @@ class PermohonanWorkflowTest extends TestCase
         ]);
 
         // Verifikasi kalkulasi dana terikat pada BudgetCalculator
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $tree = $calculator->calculateTree($this->ta->id);
 
         $leafCalc = $tree->get($this->leafNode->id);

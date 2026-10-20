@@ -16,8 +16,11 @@ use Livewire\Component;
 class Login extends Component
 {
     public string $login_id = '';
+
     public string $password = '';
+
     public bool $remember = false;
+
     public bool $show_password = false;
 
     protected function rules(): array
@@ -39,7 +42,7 @@ class Login extends Component
 
     public function togglePassword(): void
     {
-        $this->show_password = !$this->show_password;
+        $this->show_password = ! $this->show_password;
     }
 
     public function fillDemo(string $username): void
@@ -58,7 +61,7 @@ class Login extends Component
     {
         $key = $this->throttleKey();
 
-        if (!RateLimiter::tooManyAttempts($key, 5)) {
+        if (! RateLimiter::tooManyAttempts($key, 5)) {
             return;
         }
 
@@ -79,7 +82,7 @@ class Login extends Component
 
         $user = User::where($fieldType, $identifier)->first();
 
-        if ($user && !$user->is_active) {
+        if ($user && ! $user->is_active) {
             RateLimiter::hit($this->throttleKey(), 60);
             throw ValidationException::withMessages([
                 'login_id' => 'Akun Anda dinonaktifkan. Hubungi Administrator IT untuk informasi lebih lanjut.',
@@ -91,7 +94,7 @@ class Login extends Component
             'password' => $this->password,
         ];
 
-        if (!Auth::attempt($credentials, $this->remember)) {
+        if (! Auth::attempt($credentials, $this->remember)) {
             RateLimiter::hit($this->throttleKey(), 60);
             throw ValidationException::withMessages([
                 'login_id' => 'Kombinasi username atau email dan kata sandi tidak cocok.',

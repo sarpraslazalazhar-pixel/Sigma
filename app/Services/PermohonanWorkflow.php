@@ -5,12 +5,15 @@ namespace App\Services;
 use App\Models\Approval;
 use App\Models\KodeAnggaran;
 use App\Models\Leveling;
+use App\Models\Pencairan;
 use App\Models\Penomoran;
 use App\Models\Permohonan;
 use App\Models\Setting;
 use App\Models\TahunAnggaran;
+use App\Models\Ump;
 use App\Models\Unit;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -29,7 +32,7 @@ class PermohonanWorkflow
                 ->lockForUpdate()
                 ->first();
 
-            if (!$penomoran) {
+            if (! $penomoran) {
                 $penomoran = Penomoran::create([
                     'jenis' => 'pmh',
                     'unit_id' => $unit->id,
@@ -53,12 +56,12 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            if (!in_array($locked->status, ['draft', 'perlu_perbaikan'])) {
+            if (! in_array($locked->status, ['draft', 'perlu_perbaikan'])) {
                 throw new RuntimeException("Permohonan dalam status {$locked->status} tidak dapat diajukan.");
             }
 
             $leaf = KodeAnggaran::findOrFail($locked->kode_anggaran_id);
-            if (!$leaf->isLeaf() || !$leaf->is_active) {
+            if (! $leaf->isLeaf() || ! $leaf->is_active) {
                 throw new RuntimeException('Kode anggaran yang dipilih harus berupa pos aktif tingkat terendah (leaf).');
             }
 
@@ -98,7 +101,23 @@ class PermohonanWorkflow
             $locked->submitted_at = now();
             $locked->save();
 
-            (new AuditLogger())->log('permohonan.submitted', $locked, $before, $locked->fresh()->toArray());
+            (new AuditLogger)->log('permohonan.submitted', $locked, $before, $locked->fresh()->toArray());
+
+            $currentCycle = (int) $locked->approvals()->max('siklus') ?: 1;
+            if ($locked->atasan) {
+                NotificationService::kirim(
+                    $locked->atasan,
+                    'dokumen_menunggu_tindakan',
+                    [
+                        'judul' => 'Permohonan Dana Baru Memerlukan Persetujuan',
+                        'pesan' => "Permohonan dana {$locked->no_pengajuan} dari {$locked->user?->name} memerlukan persetujuan Anda.",
+                        'url' => route('permohonan.detail', $locked->id),
+                        'jenis' => 'permohonan',
+                        'entity_id' => $locked->id,
+                    ],
+                    "tunggu_permohonan_{$locked->id}_diajukan_{$currentCycle}"
+                );
+            }
 
             return $locked;
         });
@@ -138,7 +157,7 @@ class PermohonanWorkflow
                 $isKadivOrHigher = $approverLevelingUrutan >= 3;
                 $isAdmin = $approver->role === 'admin';
 
-                if (!$isDesignatedAtasan && !$isSameUnitManager && !$isDivisiManager && !$isKadivOrHigher && !$isAdmin) {
+                if (! $isDesignatedAtasan && ! $isSameUnitManager && ! $isDivisiManager && ! $isKadivOrHigher && ! $isAdmin) {
                     throw new RuntimeException('Anda tidak memiliki wewenang untuk menyetujui permohonan pada tahap ini.');
                 }
 
@@ -165,7 +184,7 @@ class PermohonanWorkflow
                 $isFinanceRole = $approver->role === 'keuangan';
                 $isPetugasInputKeuangan = (bool) $approver->is_petugas_input;
 
-                if (!$isFinanceRole && !$isPetugasInputKeuangan && $approver->role !== 'admin') {
+                if (! $isFinanceRole && ! $isPetugasInputKeuangan && $approver->role !== 'admin') {
                     throw new RuntimeException('Hanya Bagian Keuangan yang berwenang memberikan persetujuan pencairan.');
                 }
 
@@ -212,7 +231,66 @@ class PermohonanWorkflow
             $locked->status = $nextStatus;
             $locked->save();
 
-            (new AuditLogger())->log("permohonan.approved.{$tahap}", $locked, $before, $locked->fresh()->toArray());
+            (new AuditLogger)->log("permohonan.approved.{$tahap}", $locked, $before, $locked->fresh()->toArray());
+
+            if ($locked->user) {
+                NotificationService::kirim(
+                    $locked->user,
+                    'dokumen_diputuskan',
+                    [
+                        'judul' => 'Permohonan Dana Disetujui',
+                        'pesan' => "Permohonan dana {$locked->no_pengajuan} telah disetujui pada tahap {$tahap}.",
+                        'url' => route('permohonan.detail', $locked->id),
+                        'jenis' => 'permohonan',
+                        'entity_id' => $locked->id,
+                    ],
+                    "putusan_permohonan_{$locked->id}_{$nextStatus}_{$currentCycle}"
+                );
+            }
+
+            if ($nextStatus === 'diketahui_kadiv') {
+                $keuanganUsers = User::whereIn('role', ['keuangan', 'admin'])->where('is_active', true)->get();
+                foreach ($keuanganUsers as $keu) {
+                    NotificationService::kirim(
+                        $keu,
+                        'dokumen_menunggu_tindakan',
+                        [
+                            'judul' => 'Permohonan Dana Menunggu Verifikasi Keuangan',
+                            'pesan' => "Permohonan dana {$locked->no_pengajuan} siap diverifikasi oleh Keuangan.",
+                            'url' => route('permohonan.detail', $locked->id),
+                            'jenis' => 'permohonan',
+                            'entity_id' => $locked->id,
+                        ],
+                        "tunggu_permohonan_{$locked->id}_keuangan_{$currentCycle}"
+                    );
+                }
+            }
+
+            if ($nextStatus === 'disetujui_keuangan') {
+                $taId = $locked->kodeAnggaran?->tahun_anggaran_id;
+                if ($taId) {
+                    $tree = (new BudgetCalculator)->calculateTree($taId);
+                    $nodeData = $tree->get($locked->kode_anggaran_id);
+                    $nodeStatus = $nodeData['status'] ?? null;
+                    if (in_array($nodeStatus, ['Limit', 'Over Budget'], true)) {
+                        $adminKeuangan = User::whereIn('role', ['admin', 'keuangan'])->where('is_active', true)->get();
+                        foreach ($adminKeuangan as $ak) {
+                            NotificationService::kirim(
+                                $ak,
+                                'anggaran_berubah_status',
+                                [
+                                    'judul' => "Peringatan Pos Anggaran {$nodeData['status']}",
+                                    'pesan' => "Pos anggaran {$nodeData['kode']} - {$nodeData['nama']} mencapai status {$nodeData['status']}.",
+                                    'url' => route('dashboard'),
+                                    'jenis' => 'anggaran',
+                                    'entity_id' => $locked->kode_anggaran_id,
+                                ],
+                                "anggaran_status_{$locked->kode_anggaran_id}_{$nodeStatus}"
+                            );
+                        }
+                    }
+                }
+            }
 
             return $locked;
         });
@@ -226,7 +304,7 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan, $user, $alasan) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            if (!in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
+            if (! in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
                 throw new RuntimeException('Hanya dokumen dalam proses persetujuan yang dapat diminta perbaikan.');
             }
 
@@ -250,7 +328,7 @@ class PermohonanWorkflow
             $locked->status = 'perlu_perbaikan';
             $locked->save();
 
-            (new AuditLogger())->log('permohonan.revision_requested', $locked, $before, $locked->fresh()->toArray());
+            (new AuditLogger)->log('permohonan.revision_requested', $locked, $before, $locked->fresh()->toArray());
 
             return $locked;
         });
@@ -264,7 +342,7 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan, $user, $alasan) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            if (!in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
+            if (! in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
                 throw new RuntimeException('Dokumen tidak dalam status yang dapat ditolak.');
             }
 
@@ -288,7 +366,7 @@ class PermohonanWorkflow
             $locked->status = 'ditolak';
             $locked->save();
 
-            (new AuditLogger())->log('permohonan.rejected', $locked, $before, $locked->fresh()->toArray());
+            (new AuditLogger)->log('permohonan.rejected', $locked, $before, $locked->fresh()->toArray());
 
             return $locked;
         });
@@ -326,9 +404,112 @@ class PermohonanWorkflow
             $locked->status = 'dibatalkan';
             $locked->save();
 
-            (new AuditLogger())->log('permohonan.cancelled', $locked, $before, $locked->fresh()->toArray());
+            (new AuditLogger)->log('permohonan.cancelled', $locked, $before, $locked->fresh()->toArray());
 
             return $locked;
+        });
+    }
+
+    public function cairkan(Permohonan $permohonan, User $user, array $data = []): Pencairan
+    {
+        return DB::transaction(function () use ($permohonan, $user, $data) {
+            $isAuthorized = $user->role === 'keuangan' || $user->role === 'admin' || $user->is_petugas_input;
+            if (! $isAuthorized) {
+                throw new RuntimeException('Tidak memiliki hak untuk mencairkan dana.');
+            }
+
+            $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
+
+            if ($locked->status !== 'disetujui_keuangan') {
+                throw new RuntimeException('Hanya permohonan dengan status Disetujui Keuangan yang dapat dicairkan.');
+            }
+
+            $noPpd = trim($data['no_ppd'] ?? '');
+            if ($noPpd === '') {
+                throw new RuntimeException('Nomor PPD wajib diisi.');
+            }
+
+            if (Pencairan::where('no_ppd', $noPpd)->exists()) {
+                throw new RuntimeException("Nomor PPD {$noPpd} sudah dipakai.");
+            }
+
+            $perluVerifikasi = (bool) ($user->is_petugas_input && $user->role !== 'admin' && $user->role !== 'keuangan');
+
+            $pencairan = Pencairan::create([
+                'permohonan_id' => $locked->id,
+                'no_ppd' => $noPpd,
+                'tgl_cair' => $data['tgl_cair'] ?? now()->toDateString(),
+                'jumlah' => $locked->total_disetujui,
+                'status' => 'dicairkan',
+                'perlu_verifikasi_keuangan' => $perluVerifikasi,
+            ]);
+
+            $before = $locked->toArray();
+            $locked->status = 'dicairkan';
+            $locked->save();
+
+            $pjId = $data['pj_id'] ?? $locked->user_id;
+            $tenggat = (int) Setting::get('ump.tenggat_hari', 14);
+            $jatuhTempo = Carbon::parse($pencairan->tgl_cair)->addDays($tenggat)->toDateString();
+
+            $ump = Ump::create([
+                'pencairan_id' => $pencairan->id,
+                'tgl_terima' => $pencairan->tgl_cair,
+                'tujuan' => $locked->nama_kegiatan,
+                'pj_id' => $pjId,
+                'jumlah_total' => $pencairan->jumlah,
+                'total_penggunaan' => 0,
+                'saldo' => $pencairan->jumlah,
+                'pembulatan' => 0,
+                'kekurangan' => 0,
+                'status' => 'draft',
+                'jatuh_tempo' => $jatuhTempo,
+                'perlu_verifikasi_keuangan' => $perluVerifikasi,
+            ]);
+
+            (new AuditLogger)->log('permohonan.cairkan', $locked, $before, $locked->fresh()->toArray());
+
+            if ($locked->user) {
+                NotificationService::kirim(
+                    $locked->user,
+                    'dokumen_diputuskan',
+                    [
+                        'judul' => 'Permohonan Dana Telah Dicairkan',
+                        'pesan' => "Permohonan dana {$locked->no_pengajuan} telah dicairkan dengan nomor PPD {$pencairan->no_ppd}.",
+                        'url' => route('pencairan.index'),
+                    ],
+                    "putusan_permohonan_{$locked->id}_dicairkan_{$pencairan->id}"
+                );
+            }
+
+            return $pencairan;
+        });
+    }
+
+    public function batalkanPencairan(Pencairan $pencairan, User $user, string $alasan): Pencairan
+    {
+        return DB::transaction(function () use ($pencairan, $alasan) {
+            $lockedPencairan = Pencairan::lockForUpdate()->findOrFail($pencairan->id);
+            $lockedPermohonan = Permohonan::lockForUpdate()->findOrFail($lockedPencairan->permohonan_id);
+            $lockedUmp = Ump::lockForUpdate()->where('pencairan_id', $lockedPencairan->id)->first();
+
+            $before = $lockedPencairan->toArray();
+
+            $lockedPencairan->status = 'dibatalkan';
+            $lockedPencairan->alasan_batal = $alasan;
+            $lockedPencairan->save();
+
+            if ($lockedUmp) {
+                $lockedUmp->status = 'dibatalkan';
+                $lockedUmp->save();
+            }
+
+            $lockedPermohonan->status = 'disetujui_keuangan';
+            $lockedPermohonan->save();
+
+            (new AuditLogger)->log('pencairan.batal', $lockedPencairan, $before, $lockedPencairan->fresh()->toArray());
+
+            return $lockedPencairan;
         });
     }
 }

@@ -4,10 +4,8 @@ namespace Tests\Feature;
 
 use App\Livewire\Permohonan\PermohonanCreate;
 use App\Livewire\Permohonan\PermohonanDetail;
-use App\Livewire\Permohonan\PermohonanIndex;
 use App\Models\Asnaf;
 use App\Models\KodeAnggaran;
-use App\Models\Leveling;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
 use App\Models\ProgramUtama;
@@ -27,16 +25,27 @@ class PermohonanUiTest extends TestCase
     use RefreshDatabase;
 
     protected User $staffUser;
+
     protected User $managerUser;
+
     protected User $kadivUser;
+
     protected User $financeUser;
+
     protected TahunAnggaran $ta;
+
     protected Unit $unitSek;
+
     protected Unit $unitKlm;
+
     protected SumberDana $sumberDanaZakat;
+
     protected SumberDana $sumberDanaInfak;
+
     protected KodeAnggaran $leafNode;
+
     protected ProgramUtama $programUtama;
+
     protected Asnaf $asnafFakir;
 
     protected function setUp(): void
@@ -212,7 +221,7 @@ class PermohonanUiTest extends TestCase
             'jumlah_diminta' => 5000000,
         ]);
 
-        (new PermohonanWorkflow())->submit($permohonan);
+        (new PermohonanWorkflow)->submit($permohonan);
         $this->assertEquals('diajukan', $permohonan->fresh()->status);
 
         // Akses halaman detail
@@ -253,10 +262,10 @@ class PermohonanUiTest extends TestCase
             'jumlah_diminta' => 10000000,
         ]);
 
-        (new PermohonanWorkflow())->submit($permohonan);
+        (new PermohonanWorkflow)->submit($permohonan);
 
         // Disetujui kadiv langsung
-        (new PermohonanWorkflow())->approve($permohonan, $this->kadivUser);
+        (new PermohonanWorkflow)->approve($permohonan, $this->kadivUser);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
 
         // User staff TU Sekretariat memiliki is_petugas_input = true

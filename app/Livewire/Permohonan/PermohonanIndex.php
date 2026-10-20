@@ -18,7 +18,9 @@ class PermohonanIndex extends Component
     use WithPagination;
 
     public string $search = '';
+
     public string $statusFilter = '';
+
     public string $unitFilter = '';
 
     public function updatingSearch(): void
@@ -94,7 +96,7 @@ class PermohonanIndex extends Component
 
         $query = Permohonan::with(['unit', 'user', 'kodeAnggaran', 'sumberDana'])
             ->when($this->search !== '', function ($q) {
-                $term = '%' . trim($this->search) . '%';
+                $term = '%'.trim($this->search).'%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('no_pengajuan', 'like', $term)
                         ->orWhere('nama_kegiatan', 'like', $term)
@@ -109,7 +111,7 @@ class PermohonanIndex extends Component
             });
 
         // Filter per hak akses: staf unit melihat permohonan unitnya atau miliknya
-        if ($user && !in_array($user->role, ['admin', 'keuangan'])) {
+        if ($user && ! in_array($user->role, ['admin', 'keuangan'])) {
             $query->where(function ($q) use ($user) {
                 if ($user->unit_id) {
                     $q->where('unit_id', $user->unit_id);

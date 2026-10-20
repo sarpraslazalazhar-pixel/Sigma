@@ -26,15 +26,25 @@ class PermohonanItGaApprovalTest extends TestCase
     use RefreshDatabase;
 
     protected User $koordinatorIt;
+
     protected User $managerHumas;
+
     protected User $kadivUser;
+
     protected User $financeUser;
+
     protected User $tuSekretariat;
+
     protected TahunAnggaran $ta;
+
     protected Unit $unitHum;
+
     protected KodeAnggaran $posSaranaIt;
+
     protected KodeAnggaran $posSistemIt;
+
     protected SumberDana $sumberDanaZakat;
+
     protected Asnaf $asnafAmil;
 
     protected function setUp(): void
@@ -81,7 +91,7 @@ class PermohonanItGaApprovalTest extends TestCase
 
     public function test_full_approval_flow_it_ga_to_budget_calculator(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         // 1. Koordinator IT mengajukan pengadaan laptop & server
         $permohonan = Permohonan::create([
@@ -134,7 +144,7 @@ class PermohonanItGaApprovalTest extends TestCase
         $this->assertEquals(24000000, $permohonan->total_disetujui);
 
         // 5. Verifikasi Dana Resmi Terikat di BudgetCalculator
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $tree = $calculator->calculateTree($this->ta->id);
 
         $leafCalc = $tree->get($this->posSaranaIt->id);
@@ -150,7 +160,7 @@ class PermohonanItGaApprovalTest extends TestCase
 
     public function test_manager_submission_skips_step_two_to_kadiv_directly(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
 
         // Manager mengajukan
         $permohonan = Permohonan::create([

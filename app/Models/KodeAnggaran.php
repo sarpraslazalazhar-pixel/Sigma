@@ -58,6 +58,6 @@ class KodeAnggaran extends Model
             return $this->children->where('is_active', true)->isEmpty();
         }
 
-        return !$this->children()->where('is_active', true)->exists();
+        return ! $this->children()->where('is_active', true)->exists();
     }
 }

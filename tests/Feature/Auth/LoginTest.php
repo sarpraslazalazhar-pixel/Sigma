@@ -13,6 +13,7 @@ class LoginTest extends TestCase
     use RefreshDatabase;
 
     protected User $activeUser;
+
     protected User $inactiveUser;
 
     protected function setUp(): void

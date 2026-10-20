@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Permohonan extends Model
@@ -29,6 +30,8 @@ class Permohonan extends Model
         'leveling_required_id',
         'butuh_direksi',
         'perlu_verifikasi_keuangan',
+        'verifikasi_keuangan_at',
+        'verifikasi_keuangan_oleh',
         'submitted_at',
     ];
 
@@ -41,6 +44,7 @@ class Permohonan extends Model
             'total_disetujui' => 'integer',
             'butuh_direksi' => 'boolean',
             'perlu_verifikasi_keuangan' => 'boolean',
+            'verifikasi_keuangan_at' => 'datetime',
             'submitted_at' => 'datetime',
         ];
     }
@@ -69,11 +73,11 @@ class Permohonan extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
     public function atasan(): BelongsTo
     {
         return $this->belongsTo(User::class, 'atasan_id');
     }
-
 
     public function kodeAnggaran(): BelongsTo
     {
@@ -88,5 +92,15 @@ class Permohonan extends Model
     public function levelingRequired(): BelongsTo
     {
         return $this->belongsTo(Leveling::class, 'leveling_required_id');
+    }
+
+    public function pencairan(): HasOne
+    {
+        return $this->hasOne(Pencairan::class, 'permohonan_id');
+    }
+
+    public function verifikator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verifikasi_keuangan_oleh');
     }
 }

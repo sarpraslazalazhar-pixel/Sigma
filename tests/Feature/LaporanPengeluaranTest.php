@@ -20,6 +20,7 @@ class LaporanPengeluaranTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected TahunAnggaran $ta;
 
     protected function setUp(): void
@@ -79,7 +80,7 @@ class LaporanPengeluaranTest extends TestCase
 
     public function test_calculator_monthly_expenditure_matrix_structure(): void
     {
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $report = $calculator->getMonthlyExpenditureReport($this->ta->id);
 
         $this->assertCount(3, $report);
@@ -103,6 +104,7 @@ class LaporanPengeluaranTest extends TestCase
 
         Excel::assertDownloaded("Laporan_Pengeluaran_Bulanan_{$this->ta->tahun}.xlsx", function (LaporanPengeluaranExport $export) {
             $data = $export->collection();
+
             return $data->count() === 3;
         });
     }

@@ -18,6 +18,7 @@ class UserManagementTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $unitUser;
 
     protected function setUp(): void

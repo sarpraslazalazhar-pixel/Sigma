@@ -13,7 +13,7 @@ class KodeAnggaranSeeder extends Seeder
         $ta = TahunAnggaran::where('status', 'aktif')->first()
             ?? TahunAnggaran::where('tahun', 2026)->first();
 
-        if (!$ta) {
+        if (! $ta) {
             return;
         }
 

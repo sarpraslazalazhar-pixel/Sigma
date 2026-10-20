@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Livewire\Ump;
+
+use App\Models\Ump;
+use App\Models\Unit;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+use Livewire\WithPagination;
+
+#[Layout('layouts.app')]
+#[Title('Laporan UMP: SIGMA LAZ Al-Azhar')]
+class UmpIndex extends Component
+{
+    use WithPagination;
+
+    public string $search = '';
+
+    public string $statusFilter = '';
+
+    public string $unitFilter = '';
+
+    public function updatingSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingUnitFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function resetFilters(): void
+    {
+        $this->reset(['search', 'statusFilter', 'unitFilter']);
+        $this->resetPage();
+    }
+
+    public function getStatusBadge(string $status): array
+    {
+        return match ($status) {
+            'draft' => [
+                'label' => 'Draft',
+                'class' => 'bg-slate-100 text-slate-700 border-slate-200',
+            ],
+            'perlu_perbaikan' => [
+                'label' => 'Perlu Perbaikan',
+                'class' => 'bg-amber-50 text-amber-800 border-amber-200',
+            ],
+            'ttd_pj' => [
+                'label' => 'Menunggu TTD Kadiv',
+                'class' => 'bg-blue-50 text-blue-700 border-blue-200',
+            ],
+            'ttd_manager_keuangan' => [
+                'label' => 'Menunggu TTD Mgr Keuangan',
+                'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
+            ],
+            'ttd_kepala_keuangan' => [
+                'label' => 'Menunggu TTD Kepala Keuangan',
+                'class' => 'bg-purple-50 text-purple-700 border-purple-200',
+            ],
+            'dibatalkan' => [
+                'label' => 'Dibatalkan',
+                'class' => 'bg-red-50 text-red-700 border-red-200',
+            ],
+            'selesai' => [
+                'label' => 'Selesai',
+                'class' => 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            ],
+            default => [
+                'label' => ucfirst(str_replace('_', ' ', $status)),
+                'class' => 'bg-slate-100 text-slate-600 border-slate-200',
+            ],
+        };
+    }
+
+    public function render(): View
+    {
+        $user = Auth::user();
+
+        $query = Ump::with(['pencairan.permohonan.unit', 'pj'])
+            ->when($this->search !== '', function ($q) {
+                $term = '%'.trim($this->search).'%';
+                $q->where(function ($sub) use ($term) {
+                    $sub->whereHas('pencairan', function ($q2) use ($term) {
+                        $q2->where('no_ppd', 'like', $term);
+                    })
+                        ->orWhere('tujuan', 'like', $term)
+                        ->orWhereHas('pj', function ($q2) use ($term) {
+                            $q2->where('name', 'like', $term);
+                        });
+                });
+            })
+            ->when($this->statusFilter !== '', function ($q) {
+                $q->where('status', $this->statusFilter);
+            })
+            ->when($this->unitFilter !== '', function ($q) {
+                $q->whereHas('pencairan.permohonan', function ($q2) {
+                    $q2->where('unit_id', $this->unitFilter);
+                });
+            });
+
+        // Filter per hak akses: staf unit hanya melihat UMP unitnya
+        if ($user && ! in_array($user->role, ['admin', 'keuangan'], true)) {
+            $query->whereHas('pencairan.permohonan', function ($q2) use ($user) {
+                $q2->where('unit_id', $user->unit_id);
+            });
+        }
+
+        $umpList = $query->orderBy('id', 'desc')->paginate(15);
+        $units = Unit::orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
+
+        // Scope metrics the same way as listing (non-admin/non-keuangan see only their unit)
+        $metricsBase = Ump::query();
+        if ($user && ! in_array($user->role, ['admin', 'keuangan'], true)) {
+            $metricsBase->whereHas('pencairan.permohonan', function ($q2) use ($user) {
+                $q2->where('unit_id', $user->unit_id);
+            });
+        }
+        $activeQuery = (clone $metricsBase)->whereIn('status', ['draft', 'perlu_perbaikan', 'ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan']);
+
+        return view('livewire.ump.ump-index', [
+            'umpList' => $umpList,
+            'units' => $units,
+            'metrics' => [
+                'berjalan' => (clone $activeQuery)->count(),
+                'diterima' => (int) (clone $metricsBase)->sum('jumlah_total'),
+                'realisasi' => (int) (clone $metricsBase)->sum('total_penggunaan'),
+                'saldo' => (int) (clone $metricsBase)->sum('saldo'),
+            ],
+        ]);
+    }
+}

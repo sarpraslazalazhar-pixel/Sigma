@@ -8,7 +8,6 @@ use App\Livewire\Master\UnitDivisiIndex;
 use App\Models\KodeAnggaran;
 use App\Models\TahunAnggaran;
 use App\Models\User;
-use Database\Seeders\KodeAnggaranSeeder;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -121,7 +120,7 @@ class MasterUiTest extends TestCase
         $level4 = KodeAnggaran::create([
             'tahun_anggaran_id' => $ta->id,
             'parent_id' => $leaf->id,
-            'kode' => $leaf->kode . '.1',
+            'kode' => $leaf->kode.'.1',
             'nama' => 'Level 4 Node',
             'depth' => 4,
             'is_active' => true,
@@ -130,7 +129,7 @@ class MasterUiTest extends TestCase
         Livewire::actingAs($this->adminUser)
             ->test(KodeAnggaranIndex::class)
             ->set('form_parent_id', $level4->id)
-            ->set('form_kode', $level4->kode . '.1')
+            ->set('form_kode', $level4->kode.'.1')
             ->set('form_nama', 'Level 5 Node')
             ->call('save')
             ->assertHasErrors(['form_parent_id']);

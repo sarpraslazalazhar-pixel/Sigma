@@ -309,7 +309,6 @@
                         >
                             Edit
                         </button>
-
                         @if ($node->budget_status === 'draft')
                             <button
                                 type="button"
@@ -399,15 +398,17 @@
                             </td>
 
                             <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                                @if ($node->budget_status === 'disahkan')
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                        Disahkan
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                        Draft
-                                    </span>
-                                @endif
+                                <div class="inline-flex flex-col items-center gap-1">
+                                    @if ($node->budget_status === 'disahkan')
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            Disahkan
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                            Draft
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
 
                             <td class="py-3.5 px-4 text-right whitespace-nowrap">
@@ -880,4 +881,5 @@
             </div>
         </div>
     @endif
+
 </div>

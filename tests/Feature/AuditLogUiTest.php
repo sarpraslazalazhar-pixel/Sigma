@@ -16,7 +16,9 @@ class AuditLogUiTest extends TestCase
     use RefreshDatabase;
 
     protected User $adminUser;
+
     protected User $keuanganUser;
+
     protected User $unitUser;
 
     protected function setUp(): void
@@ -145,7 +147,7 @@ class AuditLogUiTest extends TestCase
             ->call('openDiff', $updateLog->id)
             ->assertSet('showDiffModal', true)
             ->assertSet('selectedAuditId', $updateLog->id)
-            ->assertSee('Rincian Jejak Audit #' . $updateLog->id)
+            ->assertSee('Rincian Jejak Audit #'.$updateLog->id)
             ->assertSee('Plafon Lama')
             ->assertSee('Plafon Baru')
             ->assertSee('15000000')

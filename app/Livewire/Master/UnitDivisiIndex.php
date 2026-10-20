@@ -15,12 +15,17 @@ use Livewire\Component;
 class UnitDivisiIndex extends Component
 {
     public bool $showModal = false;
+
     public ?int $editingId = null;
 
     public ?int $form_parent_id = null;
+
     public string $form_kode = '';
+
     public string $form_nama = '';
+
     public string $form_tipe = 'divisi';
+
     public ?int $form_sumber_dana_default_id = null;
 
     public function openCreateModal(?int $parentId = null): void
@@ -72,7 +77,7 @@ class UnitDivisiIndex extends Component
             'is_active' => true,
         ];
 
-        $logger = new AuditLogger();
+        $logger = new AuditLogger;
 
         if ($this->editingId) {
             $unit = Unit::findOrFail($this->editingId);
@@ -93,9 +98,9 @@ class UnitDivisiIndex extends Component
     {
         $unit = Unit::findOrFail($id);
         $before = $unit->toArray();
-        $unit->update(['is_active' => !$unit->is_active]);
+        $unit->update(['is_active' => ! $unit->is_active]);
 
-        (new AuditLogger())->log('unit.toggle_active', $unit, $before, $unit->fresh()->toArray());
+        (new AuditLogger)->log('unit.toggle_active', $unit, $before, $unit->fresh()->toArray());
 
         $statusStr = $unit->is_active ? 'diaktifkan' : 'dinonaktifkan';
         session()->flash('success', "Unit/Divisi {$unit->kode} berhasil {$statusStr}.");

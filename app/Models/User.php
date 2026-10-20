@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -53,5 +54,20 @@ class User extends Authenticatable
     public function leveling(): BelongsTo
     {
         return $this->belongsTo(Leveling::class, 'leveling_id');
+    }
+
+    public function permohonan(): HasMany
+    {
+        return $this->hasMany(Permohonan::class, 'user_id');
+    }
+
+    public function ump(): HasMany
+    {
+        return $this->hasMany(Ump::class, 'pj_id');
+    }
+
+    public function getNamaLengkapAttribute(): string
+    {
+        return $this->name;
     }
 }

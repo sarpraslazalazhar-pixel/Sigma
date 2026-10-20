@@ -45,4 +45,14 @@ class Unit extends Model
     {
         return $this->hasMany(User::class, 'unit_id');
     }
+
+    public function getDivisiId(): ?int
+    {
+        return $this->tipe === 'divisi' ? $this->id : $this->parent_id;
+    }
+
+    public function getDivisiIdAttribute(): ?int
+    {
+        return $this->getDivisiId();
+    }
 }

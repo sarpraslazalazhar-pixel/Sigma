@@ -10,12 +10,13 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class LaporanPengeluaranExport implements FromCollection, WithHeadings, WithStyles, WithColumnFormatting, ShouldAutoSize
+class LaporanPengeluaranExport implements FromCollection, ShouldAutoSize, WithColumnFormatting, WithHeadings, WithStyles
 {
     protected int $tahunAnggaranId;
+
     protected ?string $search;
 
     public function __construct(int $tahunAnggaranId, ?string $search = null)
@@ -26,7 +27,7 @@ class LaporanPengeluaranExport implements FromCollection, WithHeadings, WithStyl
 
     public function collection(): Collection
     {
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $reportData = $calculator->getMonthlyExpenditureReport($this->tahunAnggaranId, $this->search);
 
         return $reportData->map(function ($row) {
@@ -48,7 +49,7 @@ class LaporanPengeluaranExport implements FromCollection, WithHeadings, WithStyl
                 'des' => $row['months'][12],
                 'total' => $row['total_pengeluaran'],
                 'sisa' => $row['sisa_anggaran'],
-                'serapan' => $row['persentase_penyerapan'] . '%',
+                'serapan' => $row['persentase_penyerapan'].'%',
             ];
         });
     }
@@ -86,7 +87,7 @@ class LaporanPengeluaranExport implements FromCollection, WithHeadings, WithStyl
             1 => [
                 'font' => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF']],
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'startColor' => ['argb' => 'FF0F2F57'], // Navy Al-Azhar
                 ],
             ],

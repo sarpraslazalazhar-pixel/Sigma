@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Master;
 
-use App\Models\KodeAnggaran;
 use App\Models\TahunAnggaran;
 use App\Services\AuditLogger;
 use Livewire\Attributes\Layout;
@@ -14,7 +13,9 @@ use Livewire\Component;
 class TahunAnggaranIndex extends Component
 {
     public bool $showModal = false;
+
     public string $form_tahun = '';
+
     public string $form_status = 'draft';
 
     public function openCreateModal(): void
@@ -43,7 +44,7 @@ class TahunAnggaranIndex extends Component
             'status' => $status,
         ]);
 
-        (new AuditLogger())->log('tahun_anggaran.created', $ta, null, $ta->toArray());
+        (new AuditLogger)->log('tahun_anggaran.created', $ta, null, $ta->toArray());
 
         $this->showModal = false;
         session()->flash('success', "Tahun Anggaran {$ta->tahun} berhasil dibuat.");
@@ -58,7 +59,7 @@ class TahunAnggaranIndex extends Component
         TahunAnggaran::where('status', 'aktif')->where('id', '!=', $id)->update(['status' => 'draft']);
         $target->update(['status' => 'aktif']);
 
-        (new AuditLogger())->log('tahun_anggaran.activated', $target, $before, $target->fresh()->toArray());
+        (new AuditLogger)->log('tahun_anggaran.activated', $target, $before, $target->fresh()->toArray());
 
         session()->flash('success', "Tahun Anggaran {$target->tahun} sekarang aktif.");
     }
@@ -70,7 +71,7 @@ class TahunAnggaranIndex extends Component
 
         $target->update(['status' => 'ditutup']);
 
-        (new AuditLogger())->log('tahun_anggaran.closed', $target, $before, $target->fresh()->toArray());
+        (new AuditLogger)->log('tahun_anggaran.closed', $target, $before, $target->fresh()->toArray());
 
         session()->flash('success', "Tahun Anggaran {$target->tahun} telah ditutup (read-only).");
     }

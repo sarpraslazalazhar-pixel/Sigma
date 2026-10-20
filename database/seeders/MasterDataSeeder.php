@@ -4,11 +4,14 @@ namespace Database\Seeders;
 
 use App\Models\Asnaf;
 use App\Models\Leveling;
+use App\Models\Penomoran;
+use App\Models\Permohonan;
 use App\Models\ProgramUtama;
 use App\Models\Setting;
 use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
 use App\Models\Unit;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class MasterDataSeeder extends Seeder
@@ -198,9 +201,9 @@ class MasterDataSeeder extends Seeder
             $oldU = Unit::where('kode', $oldKode)->first();
             $newU = Unit::where('kode', $newKode)->first();
             if ($oldU && $newU && $oldU->id !== $newU->id) {
-                \App\Models\User::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
-                \App\Models\Permohonan::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
-                \App\Models\Penomoran::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
+                User::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
+                Permohonan::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
+                Penomoran::where('unit_id', $oldU->id)->update(['unit_id' => $newU->id]);
                 Unit::where('parent_id', $oldU->id)->update(['parent_id' => $newU->id]);
                 $oldU->delete();
             }

@@ -16,7 +16,9 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 class LaporanPengeluaranIndex extends Component
 {
     public int $tahun_anggaran_id;
+
     public string $search = '';
+
     public ?int $selectedMonth = null; // null = semua bulan
 
     public array $expandedMobileNodes = [];
@@ -55,7 +57,7 @@ class LaporanPengeluaranIndex extends Component
         $years = TahunAnggaran::orderBy('tahun', 'desc')->get();
         $selectedYear = TahunAnggaran::find($this->tahun_anggaran_id);
 
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $reportData = $this->tahun_anggaran_id
             ? $calculator->getMonthlyExpenditureReport($this->tahun_anggaran_id, $this->search)
             : collect();

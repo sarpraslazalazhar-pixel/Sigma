@@ -4,16 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\KodeAnggaran;
-use App\Models\Leveling;
 use App\Models\Setting;
-use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
-use App\Models\Unit;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\BudgetCalculator;
-use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\KodeAnggaranSeeder;
+use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
@@ -86,7 +83,7 @@ class MasterDataTest extends TestCase
 
     public function test_audit_logger_service_works(): void
     {
-        $logger = new AuditLogger();
+        $logger = new AuditLogger;
         $user = User::first();
         $this->actingAs($user);
 
@@ -161,7 +158,7 @@ class MasterDataTest extends TestCase
         $ta = TahunAnggaran::where('tahun', 2026)->first();
         [$node1, $node11, $leaf] = $this->createSampleKodeAnggaran($ta->id);
 
-        $calculator = new BudgetCalculator();
+        $calculator = new BudgetCalculator;
         $calculated = $calculator->calculateTree($ta->id);
 
         $this->assertNotEmpty($calculated);

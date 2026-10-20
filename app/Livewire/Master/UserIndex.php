@@ -18,31 +18,49 @@ use Livewire\Component;
 class UserIndex extends Component
 {
     public string $search = '';
+
     public string $roleFilter = '';
+
     public string $unitFilter = '';
+
     public string $levelingFilter = '';
+
     public string $statusFilter = '';
 
     // Modal Form Create/Edit
     public bool $showModal = false;
+
     public ?int $editingId = null;
 
     public string $form_name = '';
+
     public string $form_username = '';
+
     public string $form_email = '';
+
     public string $form_password = '';
+
     public string $form_role = 'unit';
+
     public ?int $form_unit_id = null;
+
     public ?int $form_leveling_id = null;
+
     public string $form_jabatan = '';
+
     public string $form_status_kepegawaian = 'Tetap';
+
     public bool $form_is_petugas_input = false;
+
     public bool $form_is_active = true;
 
     // Modal Reset Password
     public bool $showResetPasswordModal = false;
+
     public ?int $resetUserId = null;
+
     public string $resetUserName = '';
+
     public string $resetNewPassword = '';
 
     public function mount(): void
@@ -117,7 +135,7 @@ class UserIndex extends Component
             'form_is_active' => ['boolean'],
         ];
 
-        if (!$this->editingId) {
+        if (! $this->editingId) {
             $rules['form_password'] = ['required', 'string', 'min:6'];
         } else {
             $rules['form_password'] = ['nullable', 'string', 'min:6'];
@@ -138,11 +156,11 @@ class UserIndex extends Component
             'is_active' => $this->form_is_active,
         ];
 
-        if (!empty($this->form_password)) {
+        if (! empty($this->form_password)) {
             $data['password'] = Hash::make($this->form_password);
         }
 
-        $logger = new AuditLogger();
+        $logger = new AuditLogger;
 
         if ($this->editingId) {
             $user = User::findOrFail($this->editingId);
@@ -164,7 +182,7 @@ class UserIndex extends Component
         $this->resetValidation();
         $user = User::findOrFail($id);
         $this->resetUserId = $user->id;
-        $this->resetUserName = $user->name . ' (' . $user->username . ')';
+        $this->resetUserName = $user->name.' ('.$user->username.')';
         $this->resetNewPassword = '';
         $this->showResetPasswordModal = true;
     }
@@ -180,7 +198,7 @@ class UserIndex extends Component
             'password' => Hash::make($this->resetNewPassword),
         ]);
 
-        (new AuditLogger())->log('user.password_reset', $user, null, ['status' => 'password_reset_by_admin']);
+        (new AuditLogger)->log('user.password_reset', $user, null, ['status' => 'password_reset_by_admin']);
 
         $this->showResetPasswordModal = false;
         session()->flash('success', "Kata sandi untuk {$user->username} berhasil diatur ulang.");
@@ -191,14 +209,15 @@ class UserIndex extends Component
         // Cegah admin menonaktifkan akunnya sendiri saat sedang login
         if ($id === Auth::id()) {
             session()->flash('error', 'Anda tidak dapat menonaktifkan akun sendiri.');
+
             return;
         }
 
         $user = User::findOrFail($id);
         $before = ['is_active' => $user->is_active];
-        $user->update(['is_active' => !$user->is_active]);
+        $user->update(['is_active' => ! $user->is_active]);
 
-        (new AuditLogger())->log('user.toggle_active', $user, $before, ['is_active' => $user->is_active]);
+        (new AuditLogger)->log('user.toggle_active', $user, $before, ['is_active' => $user->is_active]);
 
         $statusStr = $user->is_active ? 'diaktifkan' : 'dinonaktifkan';
         session()->flash('success', "Akun {$user->username} berhasil {$statusStr}.");

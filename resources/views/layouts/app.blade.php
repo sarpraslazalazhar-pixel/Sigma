@@ -6,6 +6,9 @@
         <meta name="theme-color" content="#0F2F57">
 
         <title>{{ $title ?? 'SIGMA: LAZ Al-Azhar' }}</title>
+        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+        <link rel="alternate icon" href="{{ asset('favicon.ico') }}">
+        <link rel="apple-touch-icon" href="{{ asset('favicon.png') }}">
 
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @livewireStyles
@@ -33,30 +36,25 @@
                 class="w-64 xl:w-72 h-screen bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-50 lg:static transition-transform duration-200 ease-in-out"
             >
                     {{-- Header Brand --}}
-                    <div class="h-16 flex items-center justify-between px-5 border-b border-slate-100 shrink-0">
-                        <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2.5">
+                    <div class="h-16 px-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center">
                             <img
-                                src="{{ asset('images/logo-sigma-transparent.png') }}"
+                                src="{{ asset('images/logo-sigma.svg') }}"
                                 alt="SIGMA LAZ Al-Azhar"
-                                class="h-9 w-auto object-contain"
+                                class="h-11 w-auto max-w-[200px] xl:max-w-[220px] object-contain"
                             >
                         </a>
-                        <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 hidden sm:inline-block lg:hidden xl:inline-block">
-                                Unit Sekretariat
-                            </span>
-                            {{-- Close button for mobile drawer --}}
-                            <button
-                                type="button"
-                                @click="sidebarOpen = false"
-                                class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                                aria-label="Tutup menu navigasi"
-                            >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
+                        {{-- Close button for mobile drawer --}}
+                        <button
+                            type="button"
+                            @click="sidebarOpen = false"
+                            class="lg:hidden shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            aria-label="Tutup menu navigasi"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
 
                     {{-- Nav Menus --}}
@@ -129,42 +127,102 @@
                                 </a>
 
                                 {{-- Pencairan PPD --}}
-                                <span class="text-slate-400 rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm cursor-not-allowed">
+                                <a
+                                    href="{{ route('pencairan.index') }}"
+                                    wire:navigate
+                                    @click="sidebarOpen = false"
+                                    class="{{ request()->routeIs('pencairan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                >
                                     <span class="flex items-center gap-3 truncate">
                                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                                         </svg>
                                         <span class="truncate">Pencairan PPD</span>
                                     </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-semibold">R3</span>
-                                </span>
-
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('pencairan.*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R3</span>
+                                </a>
                                 {{-- Laporan UMP --}}
-                                <span class="text-slate-400 rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm cursor-not-allowed">
+                                <a
+                                    href="{{ route('ump.index') }}"
+                                    wire:navigate
+                                    @click="sidebarOpen = false"
+                                    class="{{ request()->routeIs('ump.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                >
                                     <span class="flex items-center gap-3 truncate">
                                         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                                         </svg>
                                         <span class="truncate">Laporan UMP</span>
                                     </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-semibold">R3</span>
-                                </span>
-
-                                {{-- Monitoring & Laporan --}}
-                                <a
-                                    href="{{ route('laporan.pengeluaran-bulanan') }}"
-                                    wire:navigate
-                                    @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('laporan.pengeluaran-bulanan') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
-                                >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                        </svg>
-                                        <span class="truncate">Monitoring & Laporan</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('laporan.pengeluaran-bulanan') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R4</span>
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('ump.*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R3</span>
                                 </a>
+
+                                {{-- Verifikasi Keuangan (R5) --}}
+                                @if (in_array(Auth::user()?->role, ['admin', 'keuangan']))
+                                    @php
+                                        $pendingVerifikasiCount = \App\Models\Permohonan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
+                                            + \App\Models\Pencairan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
+                                            + \App\Models\Ump::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count();
+                                    @endphp
+                                    <a
+                                        href="{{ route('keuangan.verifikasi') }}"
+                                        wire:navigate
+                                        @click="sidebarOpen = false"
+                                        class="{{ request()->routeIs('keuangan.verifikasi*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    >
+                                        <span class="flex items-center gap-3 truncate">
+                                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                            <span class="truncate">Verifikasi Keuangan</span>
+                                        </span>
+                                        <div class="flex items-center gap-1.5 shrink-0">
+                                            @if ($pendingVerifikasiCount > 0)
+                                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold animate-pulse">
+                                                    {{ $pendingVerifikasiCount }}
+                                                </span>
+                                            @endif
+                                            <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('keuangan.verifikasi*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R5</span>
+                                        </div>
+                                    </a>
+                                @endif
+
+                                {{-- Monitoring & Laporan Submenu --}}
+                                <div x-data="{ open: {{ request()->routeIs('laporan.*') ? 'true' : 'false' }} }" class="space-y-1">
+                                    <button
+                                        type="button"
+                                        @click="open = !open"
+                                        class="{{ request()->routeIs('laporan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} w-full rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    >
+                                        <span class="flex items-center gap-3 truncate">
+                                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                            <span class="truncate">Monitoring & Laporan</span>
+                                        </span>
+                                        <svg class="w-4 h-4 transition-transform duration-200" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    <div x-show="open" class="pl-9 pr-2 py-1 space-y-1" x-cloak>
+                                        <a
+                                            href="{{ route('laporan.pengeluaran-bulanan') }}"
+                                            wire:navigate
+                                            @click="sidebarOpen = false"
+                                            class="{{ request()->routeIs('laporan.pengeluaran-bulanan') ? 'text-blue-700 font-bold' : 'text-slate-600 hover:text-slate-900' }} block py-1.5 text-xs transition-colors"
+                                        >
+                                            • Pengeluaran Bulanan
+                                        </a>
+                                        <a
+                                            href="{{ route('laporan.monitoring') }}"
+                                            wire:navigate
+                                            @click="sidebarOpen = false"
+                                            class="{{ request()->routeIs('laporan.monitoring') ? 'text-blue-700 font-bold' : 'text-slate-600 hover:text-slate-900' }} block py-1.5 text-xs transition-colors"
+                                        >
+                                            • Monitoring & Rekap Excel
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -284,6 +342,12 @@
                             </svg>
                         </button>
 
+                        {{-- Logo mobile (hanya tampil saat sidebar tersembunyi) --}}
+                        <a href="{{ route('dashboard') }}" wire:navigate class="lg:hidden flex items-center mr-1">
+                            <img src="{{ asset('images/logo-sigma.svg') }}" alt="SIGMA" class="h-7 w-auto object-contain">
+                        </a>
+
+
                         {{-- Breadcrumb --}}
                         <nav class="flex items-center text-xs font-medium text-slate-500" aria-label="Breadcrumb">
                             <span class="text-slate-800 font-semibold">
@@ -295,8 +359,14 @@
                                     Tahun Anggaran
                                 @elseif (request()->routeIs('master.unit-divisi'))
                                     Unit & Divisi
-                                @elseif (request()->routeIs('laporan.pengeluaran-bulanan'))
-                                    Laporan
+                                @elseif (request()->routeIs('permohonan.*'))
+                                    Permohonan Dana
+                                @elseif (request()->routeIs('pencairan.*'))
+                                    Pencairan PPD
+                                @elseif (request()->routeIs('ump.*'))
+                                    Laporan UMP
+                                @elseif (request()->routeIs('laporan.*'))
+                                    Laporan & Monitoring
                                 @elseif (request()->routeIs('master.users'))
                                     Pengaturan
                                 @else
@@ -313,8 +383,16 @@
                                     Daftar Tahun Buku
                                 @elseif (request()->routeIs('master.unit-divisi'))
                                     Struktur Organisasi
+                                @elseif (request()->routeIs('permohonan.*'))
+                                    Alur Pengajuan Dana
+                                @elseif (request()->routeIs('pencairan.*'))
+                                    Pencairan Kas & Bank
+                                @elseif (request()->routeIs('ump.*'))
+                                    Pertanggungjawaban Uang Muka
                                 @elseif (request()->routeIs('laporan.pengeluaran-bulanan'))
                                     Pengeluaran Bulanan
+                                @elseif (request()->routeIs('laporan.monitoring'))
+                                    Monitoring Anggaran & Export
                                 @elseif (request()->routeIs('master.users'))
                                     Pengguna & Leveling
                                 @else
@@ -324,7 +402,7 @@
                         </nav>
                     </div>
 
-                    {{-- Status Chips --}}
+                    {{-- Status Chips & Notifications --}}
                     <div class="flex items-center gap-2 sm:gap-3">
                         <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-[#0F2F57] text-xs font-medium border border-blue-100">
                             Mode Input Atas Nama Keuangan
@@ -333,19 +411,20 @@
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                             <span>TA 2026</span>
                         </span>
+                        <livewire:components.notification-bell />
                     </div>
                 </header>
 
                 {{-- Scroll Container Mandiri untuk Halaman Konten --}}
                 <div class="flex-1 overflow-y-auto flex flex-col">
-                    <main class="p-6 sm:p-8 flex-1 max-w-7xl w-full">
+                    <main class="p-6 sm:p-8 flex-1 max-w-7xl w-full mx-auto">
                         {{ $slot }}
                     </main>
 
                     <footer class="bg-white border-t border-slate-200 py-3.5 px-6 shrink-0">
-                        <div class="max-w-7xl w-full flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
+                        <div class="max-w-7xl w-full mx-auto flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-2">
                             <div class="flex items-center gap-2">
-                                <img src="{{ asset('images/logo-mark.png') }}" alt="SIGMA" class="h-4 w-auto">
+                                <img src="{{ asset('images/logo-mark.svg') }}" alt="SIGMA" class="h-4 w-auto">
                                 <p>&copy; {{ date('Y') }} LAZ Al Azhar. Sistem Informasi & Monitoring Anggaran.</p>
                             </div>
                             <div class="flex items-center gap-3 text-slate-400 text-[11px]">

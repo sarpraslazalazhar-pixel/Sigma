@@ -24,15 +24,22 @@ class PermohonanDetail extends Component
 
     // Standard Approval Actions Modal
     public bool $showActionModal = false;
+
     public string $actionType = ''; // 'setuju', 'perbaikan', 'tolak', 'batal'
+
     public string $actionNotes = '';
 
     // Proxy Keuangan Form
     public array $approvedItemAmounts = [];
+
     public string $proxySignerName = 'Rochadi Kohar';
+
     public string $proxySignerJabatan = 'Manajer Anggaran & Treasury';
+
     public string $proxySignedAt = '';
+
     public string $proxyNotes = '';
+
     public $proxyScanFile = null;
 
     public function mount(int $id): void
@@ -66,6 +73,7 @@ class PermohonanDetail extends Component
     public function getStatusBadgeProperty(): array
     {
         $status = $this->permohonan->status;
+
         return match ($status) {
             'draft' => [
                 'label' => 'Draft',
@@ -113,13 +121,14 @@ class PermohonanDetail extends Component
     public function getIsFinanceStageProperty(): bool
     {
         $p = $this->permohonan;
+
         return $p->status === 'diketahui_kadiv';
     }
 
     public function getCanProxyFinanceApproveProperty(): bool
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -136,7 +145,7 @@ class PermohonanDetail extends Component
         $user = Auth::user();
         $p = $this->permohonan;
 
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -177,11 +186,12 @@ class PermohonanDetail extends Component
         $user = Auth::user();
         $p = $this->permohonan;
 
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
         $isOwnerOrAdmin = ($p->user_id === $user->id) || ($user->role === 'admin');
+
         return $isOwnerOrAdmin && in_array($p->status, ['draft', 'diajukan', 'disetujui_atasan', 'diketahui_kadiv', 'perlu_perbaikan']);
     }
 
@@ -190,11 +200,12 @@ class PermohonanDetail extends Component
         $user = Auth::user();
         $p = $this->permohonan;
 
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
         $isOwnerOrAdmin = ($p->user_id === $user->id) || ($user->role === 'admin');
+
         return $isOwnerOrAdmin && in_array($p->status, ['draft', 'perlu_perbaikan']);
     }
 
@@ -214,7 +225,7 @@ class PermohonanDetail extends Component
 
     public function submitAction(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
         $user = Auth::user();
 
         if (in_array($this->actionType, ['perbaikan', 'tolak', 'batal'])) {
@@ -290,7 +301,7 @@ class PermohonanDetail extends Component
             }
 
             // Submit approval ke workflow
-            $workflow = new PermohonanWorkflow();
+            $workflow = new PermohonanWorkflow;
             $workflow->approve($p, Auth::user(), [
                 'items' => $this->approvedItemAmounts,
                 'signer_name' => $this->proxySignerName,
@@ -304,7 +315,7 @@ class PermohonanDetail extends Component
 
     public function submitPermohonan(): void
     {
-        $workflow = new PermohonanWorkflow();
+        $workflow = new PermohonanWorkflow;
         $workflow->submit($this->permohonan);
 
         session()->flash('success', "Permohonan dana {$this->permohonan->fresh()->no_pengajuan} berhasil diajukan.");

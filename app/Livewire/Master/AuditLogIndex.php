@@ -18,17 +18,22 @@ class AuditLogIndex extends Component
     use WithPagination;
 
     public string $search = '';
+
     public string $actionFilter = '';
+
     public string $dateFrom = '';
+
     public string $dateTo = '';
+
     public string $userFilter = '';
 
     public bool $showDiffModal = false;
+
     public ?int $selectedAuditId = null;
 
     public function mount(): void
     {
-        if (!Auth::check() || !in_array(Auth::user()->role, ['admin', 'keuangan'])) {
+        if (! Auth::check() || ! in_array(Auth::user()->role, ['admin', 'keuangan'])) {
             abort(403, 'Akses terbatas untuk Administrator atau Petugas Keuangan.');
         }
     }
@@ -60,7 +65,7 @@ class AuditLogIndex extends Component
 
     public function getDiffRows(?AuditLog $log): array
     {
-        if (!$log) {
+        if (! $log) {
             return [];
         }
 
@@ -77,9 +82,9 @@ class AuditLogIndex extends Component
             $oldVal = $hasBefore ? $before[$key] : null;
             $newVal = $hasAfter ? $after[$key] : null;
 
-            if (!$hasBefore && $hasAfter) {
+            if (! $hasBefore && $hasAfter) {
                 $status = 'added';
-            } elseif ($hasBefore && !$hasAfter) {
+            } elseif ($hasBefore && ! $hasAfter) {
                 $status = 'removed';
             } elseif ($oldVal !== $newVal) {
                 $status = 'modified';
@@ -110,6 +115,7 @@ class AuditLogIndex extends Component
         if (str_contains($act, 'hapus') || str_contains($act, 'delete') || str_contains($act, 'nonaktif') || str_contains($act, 'batal') || str_contains($act, 'tutup')) {
             return 'bg-amber-50 text-amber-800 border-amber-200';
         }
+
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
 
@@ -117,7 +123,7 @@ class AuditLogIndex extends Component
     {
         $query = AuditLog::with('user')
             ->when($this->search !== '', function ($q) {
-                $term = '%' . trim($this->search) . '%';
+                $term = '%'.trim($this->search).'%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('action', 'like', $term)
                         ->orWhere('entity_type', 'like', $term)
@@ -125,7 +131,7 @@ class AuditLogIndex extends Component
                 });
             })
             ->when($this->actionFilter !== '', function ($q) {
-                $q->where('action', 'like', '%' . trim($this->actionFilter) . '%');
+                $q->where('action', 'like', '%'.trim($this->actionFilter).'%');
             })
             ->when($this->userFilter !== '', function ($q) {
                 $q->where('user_id', $this->userFilter);
