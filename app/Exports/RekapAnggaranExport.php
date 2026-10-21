@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Models\KodeAnggaran;
 use App\Services\BudgetCalculator;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
@@ -37,7 +38,7 @@ class RekapAnggaranExport implements FromCollection, ShouldAutoSize, WithColumnF
             });
         }
 
-        return $tree->sortBy('kode')->values()->map(function ($row) {
+        return KodeAnggaran::sortHierarchically($tree)->values()->map(function ($row) {
             $depth = $row['depth'] ?? 1;
             $indent = str_repeat('  ', max(0, $depth - 1));
             $eff = $row['effective_budget'] ?? 0;

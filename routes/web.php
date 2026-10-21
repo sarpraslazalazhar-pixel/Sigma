@@ -36,28 +36,28 @@ Route::middleware('auth')->group(function () {
     Route::get('/master/kode-anggaran', KodeAnggaranIndex::class)->name('master.kode-anggaran');
     Route::get('/master/tahun-anggaran', TahunAnggaranIndex::class)->name('master.tahun-anggaran');
     Route::get('/master/unit-divisi', UnitDivisiIndex::class)->name('master.unit-divisi');
-    Route::get('/master/users', UserIndex::class)->name('master.users');
-    Route::get('/master/audit-logs', AuditLogIndex::class)->name('master.audit-logs');
+    Route::get('/master/users', UserIndex::class)->middleware('can:manage-users')->name('master.users');
+    Route::get('/master/audit-logs', AuditLogIndex::class)->middleware('can:view-audit-logs')->name('master.audit-logs');
     Route::get('/laporan/pengeluaran-bulanan', LaporanPengeluaranIndex::class)->name('laporan.pengeluaran-bulanan');
     Route::get('/laporan/monitoring', LaporanMonitoringIndex::class)->name('laporan.monitoring');
 
-    // Permohonan Dana (R2)
+    // Permohonan Dana
     Route::get('/permohonan', PermohonanIndex::class)->name('permohonan.index');
-    Route::get('/permohonan/buat', PermohonanCreate::class)->name('permohonan.create');
+    Route::get('/permohonan/buat', PermohonanCreate::class)->middleware('can:create-permohonan')->name('permohonan.create');
     Route::get('/permohonan/{id}', PermohonanDetail::class)->name('permohonan.detail');
     Route::get('/permohonan/{id}/cetak-pdf', [PermohonanPdfController::class, 'cetak'])->name('permohonan.cetak-pdf');
 
-    // Pencairan Dana / PPD (R3)
+    // Pencairan Dana / PPD
     Route::get('/pencairan', PencairanIndex::class)->name('pencairan.index');
     Route::get('/pencairan/{id}/cetak-pdf', [PencairanPdfController::class, 'cetak'])->name('pencairan.cetak-pdf');
-
-    // Pertanggungjawaban Dana / UMP (R3)
+    Route::get('/pencairan/{id}/pdf', [PencairanPdfController::class, 'cetak'])->name('pencairan.pdf');
+    // Pertanggungjawaban Dana / UMP
     Route::get('/ump', UmpIndex::class)->name('ump.index');
     Route::get('/ump/{id}', UmpDetail::class)->name('ump.detail');
     Route::get('/ump/{id}/cetak-pdf', [UmpPdfController::class, 'cetak'])->name('ump.cetak-pdf');
 
     // Verifikasi Keuangan (Mode Atas Nama)
-    Route::get('/keuangan/verifikasi', VerifikasiKeuanganIndex::class)->name('keuangan.verifikasi');
+    Route::get('/keuangan/verifikasi', VerifikasiKeuanganIndex::class)->middleware('can:verifikasi-keuangan')->name('keuangan.verifikasi');
 
     // Lampiran Download/Stream
     Route::get('/lampiran/{id}', [LampiranController::class, 'show'])->name('lampiran.show');

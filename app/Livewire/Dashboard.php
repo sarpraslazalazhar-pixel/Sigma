@@ -106,9 +106,10 @@ class Dashboard extends Component
         $daftarTahun = TahunAnggaran::orderBy('tahun', 'desc')->get();
         $daftarUnit = Unit::orderBy('nama', 'asc')->get();
         $daftarSumberDana = SumberDana::where('is_active', true)->orderBy('nama', 'asc')->get();
-        $daftarKodeAnggaran = $this->tahunAnggaranId
-            ? KodeAnggaran::where('tahun_anggaran_id', $this->tahunAnggaranId)->where('is_active', true)->orderBy('kode', 'asc')->get()
+        $rawKodeAnggaran = $this->tahunAnggaranId
+            ? KodeAnggaran::where('tahun_anggaran_id', $this->tahunAnggaranId)->where('is_active', true)->get()
             : collect();
+        $daftarKodeAnggaran = KodeAnggaran::sortHierarchically($rawKodeAnggaran);
 
         $calculator = new BudgetCalculator;
         $treeData = $this->tahunAnggaranId
@@ -221,18 +222,37 @@ class Dashboard extends Component
         $isAdmin = $user->role === 'admin';
 
         // Permohonan
-        $pmhDiajukan = Permohonan::with(['user', 'unit'])
+        $pmhDiajukan = Permohonan::with(['user', 'unit', 'levelingRequired'])
             ->where('status', 'diajukan')
             ->where(function ($q) use ($user, $levelingUrutan, $isAdmin) {
                 if ($isAdmin) {
                     return;
                 }
-                $q->where('atasan_id', $user->id)
-                    ->orWhere(function ($sub) use ($user, $levelingUrutan) {
-                        if ($levelingUrutan >= 2) {
-                            $sub->where('unit_id', $user->unit_id);
+                $q->where('atasan_id', $user->id);
+
+                if ($levelingUrutan >= 3) {
+                    $divisiId = $user->unit?->parent_id ?? $user->unit_id;
+                    $q->orWhere(function ($sub) use ($divisiId) {
+                        if ($divisiId) {
+                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
+                        } else {
+                            $sub->whereRaw('1 = 1');
                         }
                     });
+                } elseif ($levelingUrutan == 2) {
+                    $divisiId = $user->unit?->parent_id ?? $user->unit_id;
+                    $q->orWhere(function ($sub) use ($user, $divisiId) {
+                        $sub->where('unit_id', $user->unit_id);
+                        if ($divisiId) {
+                            $sub->orWhereHas('unit', fn ($u) => $u->where('parent_id', $divisiId));
+                        }
+                    });
+                } elseif ($levelingUrutan == 1) {
+                    $q->orWhere(function ($sub) use ($user) {
+                        $sub->where('unit_id', $user->unit_id)
+                            ->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
+                    });
+                }
             })->get();
 
         $pmhKadiv = Permohonan::with(['user', 'unit'])

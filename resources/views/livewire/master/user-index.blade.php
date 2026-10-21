@@ -78,15 +78,13 @@
 
             {{-- Divisi / Unit Filter --}}
             <div>
-                <select
+                <x-searchable-select
                     wire:model.live="unitFilter"
-                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-700 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                >
-                    <option value="">Semua Divisi / Unit</option>
-                    @foreach ($units as $u)
-                        <option value="{{ $u->id }}">{{ $u->kode }} : {{ $u->nama }}</option>
-                    @endforeach
-                </select>
+                    :options="$units"
+                    placeholder="Semua Divisi / Unit"
+                    null-label="Semua Divisi / Unit"
+                    search-placeholder="Cari divisi atau unit..."
+                />
             </div>
 
             {{-- Status Filter --}}
@@ -487,16 +485,14 @@
                             <label for="form_unit_id" class="block text-xs font-semibold text-slate-700 mb-1">
                                 Unit / Divisi Kerja
                             </label>
-                            <select
-                                id="form_unit_id"
+                            <x-searchable-select
                                 wire:model="form_unit_id"
-                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                            >
-                                <option value="">Tanpa Divisi (Umum / Global)</option>
-                                @foreach ($units as $u)
-                                    <option value="{{ $u->id }}">{{ $u->kode }} : {{ $u->nama }}</option>
-                                @endforeach
-                            </select>
+                                :options="$units"
+                                placeholder="Pilih Unit / Divisi Kerja..."
+                                null-label="Tanpa Divisi (Umum / Global)"
+                                search-placeholder="Cari divisi atau unit..."
+                                :nullable="true"
+                            />
                         </div>
 
                         <div>

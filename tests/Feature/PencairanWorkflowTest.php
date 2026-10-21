@@ -3,6 +3,9 @@
 namespace Tests\Feature;
 
 use App\Livewire\Pencairan\PencairanIndex;
+use App\Livewire\Permohonan\PermohonanCreate;
+use App\Livewire\Permohonan\PermohonanDetail;
+use App\Models\Asnaf;
 use App\Models\KodeAnggaran;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
@@ -18,6 +21,7 @@ use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -30,6 +34,8 @@ class PencairanWorkflowTest extends TestCase
     protected User $petugasUser;
 
     protected User $plainUser;
+
+    protected User $managerUser;
 
     protected Permohonan $permohonan;
 
@@ -44,6 +50,7 @@ class PencairanWorkflowTest extends TestCase
         $this->financeUser = User::where('username', 'rochadi.kohar')->firstOrFail();
         $this->petugasUser = User::where('username', 'subakti')->firstOrFail();
         $this->plainUser = User::where('username', 'rudiansah')->firstOrFail();
+        $this->managerUser = User::where('username', 'deden.salim')->firstOrFail();
 
         $ta = TahunAnggaran::where('status', 'aktif')->firstOrFail();
         $unit = Unit::where('kode', 'UNT-SEK-KLM')->firstOrFail();
@@ -106,7 +113,7 @@ class PencairanWorkflowTest extends TestCase
         $this->assertSame(0, $ump->total_penggunaan);
         $this->assertSame(5000000, $ump->saldo);
         $this->assertSame(5000000, $ump->jumlah_total);
-        $this->assertSame($this->permohonan->user_id, $ump->pj_id);
+        $this->assertSame($this->managerUser->id, $ump->pj_id);
         $this->assertSame('Santunan Yatim Piatu', $ump->tujuan);
 
         // jatuh_tempo = tgl_cair + ump.tenggat_hari (default 14 hari)
@@ -215,7 +222,7 @@ class PencairanWorkflowTest extends TestCase
     public function test_cairkan_with_custom_pj_id_sets_ump_pj(): void
     {
         $workflow = new PermohonanWorkflow;
-        $customPj = User::where('username', 'rudiansah')->firstOrFail();
+        $customPj = User::where('username', 'manager.humas')->firstOrFail();
 
         $pencairan = $workflow->cairkan($this->permohonan, $this->financeUser, [
             'no_ppd' => 'PPD/KEU/2026/PJ-TEST',
@@ -227,7 +234,22 @@ class PencairanWorkflowTest extends TestCase
         $this->assertSame($customPj->id, $ump->pj_id);
     }
 
-    public function test_cairkan_without_pj_id_defaults_to_permohonan_user(): void
+    public function test_cairkan_with_non_manager_pj_falls_back_to_unit_manager(): void
+    {
+        $workflow = new PermohonanWorkflow;
+        $staffUser = User::where('username', 'rudiansah')->firstOrFail(); // urutan 1
+
+        $pencairan = $workflow->cairkan($this->permohonan, $this->financeUser, [
+            'no_ppd' => 'PPD/KEU/2026/PJ-STAFF-TEST',
+            'tgl_cair' => '2026-10-16',
+            'pj_id' => $staffUser->id,
+        ]);
+
+        $ump = Ump::where('pencairan_id', $pencairan->id)->firstOrFail();
+        $this->assertSame($this->managerUser->id, $ump->pj_id);
+    }
+
+    public function test_cairkan_without_pj_id_defaults_to_unit_manager(): void
     {
         $workflow = new PermohonanWorkflow;
         $p2 = $this->makePermohonan('KLM-PMH-2026-9102');
@@ -238,7 +260,7 @@ class PencairanWorkflowTest extends TestCase
         ]);
 
         $ump = Ump::where('pencairan_id', $pencairan->id)->firstOrFail();
-        $this->assertSame($p2->user_id, $ump->pj_id);
+        $this->assertSame($this->managerUser->id, $ump->pj_id);
     }
 
     public function test_batalkan_pencairan_by_finance_cancels_pencairan_and_ump(): void
@@ -272,6 +294,112 @@ class PencairanWorkflowTest extends TestCase
             ->assertSee('Total Dana Dicairkan')
             ->set('search', 'NONEXISTENT')
             ->assertSee('Tidak ada data pencairan PPD');
+    }
+
+    public function test_pencairan_index_filters_by_bulan_tahun_sumber_dana_and_exports_excel(): void
+    {
+        $workflow = new PermohonanWorkflow;
+        $workflow->cairkan($this->permohonan, $this->financeUser, [
+            'no_ppd' => 'PPD/202610/0001',
+            'tgl_cair' => '2026-10-15',
+        ]);
+
+        Excel::fake();
+
+        Livewire::actingAs($this->financeUser)
+            ->test(PencairanIndex::class)
+            ->assertOk()
+            ->assertSee('PPD/202610/0001')
+            ->set('tahunFilter', '2026')
+            ->set('bulanFilter', '10')
+            ->assertSee('PPD/202610/0001')
+            ->set('bulanFilter', '11')
+            ->assertDontSee('PPD/202610/0001')
+            ->set('bulanFilter', '')
+            ->set('sumberDanaFilter', (string) $this->permohonan->sumber_dana_id)
+            ->assertSee('PPD/202610/0001')
+            ->call('exportExcel');
+
+        Excel::assertDownloaded('Rekap_PPD_dan_UMP_2026.xlsx');
+    }
+
+    public function test_cairkan_modal_suggests_4_angka_tahun_dan_bulan_and_allows_custom(): void
+    {
+        $component = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $this->permohonan->id])
+            ->call('openCairkanModal');
+
+        $suggestedNoPpd = $component->get('noPpd');
+        $year = date('Y');
+        $month = date('m');
+        $this->assertMatchesRegularExpression("/^PPD\/{$year}{$month}\/\d{4}$/", $suggestedNoPpd);
+        $this->assertSame($this->managerUser->id, $component->get('pjId'));
+        // Allow custom input as required by Gambaran & Flow line 48
+        $component->set('noPpd', 'PPD-CUSTOM-2026-9999')
+            ->call('submitCairkan');
+
+        $this->assertDatabaseHas('pencairan', [
+            'permohonan_id' => $this->permohonan->id,
+            'no_ppd' => 'PPD-CUSTOM-2026-9999',
+        ]);
+
+        $this->assertDatabaseHas('ump', [
+            'tujuan' => $this->permohonan->nama_kegiatan,
+        ]);
+    }
+
+    public function test_cairkan_modal_auto_selects_manager_for_humas_and_diklat(): void
+    {
+        $unitHum = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
+        $unitDkl = Unit::where('kode', 'UNT-SEK-DKL')->firstOrFail();
+        $mgrHum = $unitHum->getManager();
+        $mgrDkl = $unitDkl->getManager();
+
+        $this->assertNotNull($mgrHum);
+        $this->assertNotNull($mgrDkl);
+
+        // Permohonan Humas -> Manager Humas
+        $pHum = $this->makePermohonan('HUM-PMH-2026-0001');
+        $pHum->unit_id = $unitHum->id;
+        $pHum->save();
+
+        $compHum = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pHum->id])
+            ->call('openCairkanModal');
+        $this->assertSame($mgrHum->id, $compHum->get('pjId'));
+
+        // Permohonan Diklat -> Manager Diklat
+        $pDkl = $this->makePermohonan('DKL-PMH-2026-0001');
+        $pDkl->unit_id = $unitDkl->id;
+        $pDkl->save();
+
+        $compDkl = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pDkl->id])
+            ->call('openCairkanModal');
+        $this->assertSame($mgrDkl->id, $compDkl->get('pjId'));
+    }
+
+    public function test_permohonan_create_auto_selects_infak_umum_for_humas_and_amil_for_other(): void
+    {
+        $unitHumas = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
+        $unitKlm = Unit::where('kode', 'UNT-SEK-KLM')->firstOrFail();
+        $infakUmum = SumberDana::where('nama', 'like', '%Infak Umum%')->firstOrFail();
+        $zakat = SumberDana::where('nama', 'like', '%Zakat%')->firstOrFail();
+        $asnafAmil = Asnaf::where('nama', 'Amil')->firstOrFail();
+
+        // Humas -> Infak Umum
+        Livewire::actingAs($this->financeUser)
+            ->test(PermohonanCreate::class)
+            ->set('unit_id', $unitHumas->id)
+            ->assertSet('sumber_dana_id', $infakUmum->id);
+
+        // Non-Humas (selain Humas) -> Amil / Zakat
+        Livewire::actingAs($this->financeUser)
+            ->test(PermohonanCreate::class)
+            ->set('unit_id', $unitKlm->id)
+            ->assertSet('sumber_dana_id', $zakat->id)
+            ->call('addItem')
+            ->assertCount('items', 2);
     }
 
     protected function makePermohonan(string $noPengajuan): Permohonan

@@ -6,6 +6,7 @@ use App\Exports\RekapAnggaranExport;
 use App\Exports\RekapPermohonanExport;
 use App\Exports\RekapPpdUmpExport;
 use App\Exports\RekapRealisasiBulananExport;
+use App\Models\KodeAnggaran;
 use App\Models\TahunAnggaran;
 use App\Models\Unit;
 use App\Services\AuditLogger;
@@ -132,7 +133,7 @@ class LaporanMonitoringIndex extends Component
             });
         }
 
-        $monitoringRows = $treeData->sortBy('kode')->values()->map(function ($item) {
+        $monitoringRows = KodeAnggaran::sortHierarchically($treeData)->values()->map(function ($item) {
             $eff = $item['effective_budget'] ?? 0;
             $pemakaian = ($item['dana_terikat'] ?? 0) + ($item['realisasi'] ?? 0);
             $item['pemakaian_persen'] = $eff > 0 ? round(($pemakaian / $eff) * 100, 1) : 0;

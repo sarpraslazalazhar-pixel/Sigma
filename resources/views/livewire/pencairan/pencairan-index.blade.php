@@ -9,6 +9,18 @@
                 Daftar pencairan kas dan transfer bank yang diterbitkan beserta status pertanggungjawaban UMP
             </p>
         </div>
+        <div class="flex items-center gap-2">
+            <button
+                type="button"
+                wire:click="exportExcel"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors"
+            >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export Excel PPD
+            </button>
+        </div>
     </div>
 
     {{-- Flash Message --}}
@@ -74,13 +86,13 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Cari No PPD / Kegiatan</label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="lg:col-span-1">
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Cari No PPD / Pengajuan / Kegiatan / PJ</label>
                 <input
                     type="text"
                     wire:model.live.debounce.300ms="search"
-                    placeholder="Nomor PPD, No. Pengajuan, atau Kegiatan..."
+                    placeholder="Nomor PPD, No. Pengajuan, Kegiatan, atau Nama..."
                     class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
                 />
             </div>
@@ -91,9 +103,38 @@
                     wire:model.live="statusFilter"
                     class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
                 >
-                    <option value="">Semua Status</option>
+                    <option value="">Semua Status PPD</option>
                     <option value="dicairkan">Dicairkan</option>
                     <option value="dibatalkan">Dibatalkan</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Status UMP</label>
+                <select
+                    wire:model.live="umpStatusFilter"
+                    class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                >
+                    <option value="">Semua Status UMP</option>
+                    <option value="draft">Draft</option>
+                    <option value="menunggu_kadiv">Menunggu Kepala Divisi</option>
+                    <option value="menunggu_keuangan">Menunggu Keuangan</option>
+                    <option value="disetujui_keuangan">Disetujui Keuangan</option>
+                    <option value="selesai">Selesai (LPJ Tuntas)</option>
+                    <option value="dibatalkan">Dibatalkan</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Sumber Dana</label>
+                <select
+                    wire:model.live="sumberDanaFilter"
+                    class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                >
+                    <option value="">Semua Sumber Dana</option>
+                    @foreach ($sumberDanas as $sd)
+                        <option value="{{ $sd->id }}">{{ $sd->nama }}</option>
+                    @endforeach
                 </select>
             </div>
 
@@ -106,6 +147,33 @@
                     null-label="Semua Unit"
                     search-placeholder="Cari unit atau divisi..."
                 />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Bulan Cair</label>
+                    <select
+                        wire:model.live="bulanFilter"
+                        class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    >
+                        <option value="">Semua Bulan</option>
+                        @foreach (range(1, 12) as $m)
+                            <option value="{{ $m }}">{{ \Carbon\Carbon::create(2026, $m, 1)->translatedFormat('F') }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Tahun Cair</label>
+                    <select
+                        wire:model.live="tahunFilter"
+                        class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    >
+                        <option value="">Semua Tahun</option>
+                        @foreach ($daftarTahun as $th)
+                            <option value="{{ $th }}">{{ $th }}</option>
+                        @endforeach
+                    </select>
+                </div>
             </div>
         </div>
     </div>
@@ -155,7 +223,11 @@
                                 <p class="text-slate-600 line-clamp-1 mt-0.5">
                                     {{ $item->permohonan?->nama_kegiatan ?? '-' }}
                                 </p>
-                            </td>
+                                @if ($item->permohonan?->sumberDana)
+                                    <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                        {{ $item->permohonan->sumberDana->nama }}
+                                    </span>
+                                @endif
                             <td class="py-3 px-3.5 min-w-[140px]">
                                 <p class="font-medium text-slate-900">{{ $item->permohonan?->unit?->nama ?? '-' }}</p>
                                 <p class="text-[11px] text-slate-500 mt-0.5">PJ: {{ $ump?->pj?->name ?? ($item->permohonan?->user?->name ?? '-') }}</p>

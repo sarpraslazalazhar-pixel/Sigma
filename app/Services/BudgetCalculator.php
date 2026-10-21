@@ -229,7 +229,7 @@ class BudgetCalculator
             $months = [];
             for ($m = 1; $m <= 12; $m++) {
                 if ($isLeaf) {
-                    // R3: realisasi leaf = sum ump_items UMP selesai pada bulan $m
+                    // Realisasi leaf = sum ump_items UMP selesai pada bulan $m
                     $months[$m] = $realisasiMonthly[$node->id][$m] ?? 0;
                 } else {
                     // Rollup dari anak-anak
@@ -261,8 +261,8 @@ class BudgetCalculator
             ]);
         }
 
-        // Urutkan kembali sesuai urutan kode hierarkis (kode asc)
-        $ordered = KodeAnggaran::where('tahun_anggaran_id', $tahunAnggaranId)
+        // Urutkan kembali sesuai urutan kode hierarkis dan alami
+        $rawOrdered = KodeAnggaran::where('tahun_anggaran_id', $tahunAnggaranId)
             ->where('is_active', true)
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
@@ -270,8 +270,9 @@ class BudgetCalculator
                         ->orWhere('nama', 'like', "%{$search}%");
                 });
             })
-            ->orderBy('kode', 'asc')
-            ->get()
+            ->get();
+
+        $ordered = KodeAnggaran::sortHierarchically($rawOrdered)
             ->map(function ($node) use ($monthlyByNode) {
                 return $monthlyByNode->get($node->id);
             })

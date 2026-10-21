@@ -55,4 +55,56 @@ class Unit extends Model
     {
         return $this->getDivisiId();
     }
+
+    /**
+     * Dapatkan semua ID unit dalam divisi yang sama (divisi induk dan semua unit anak).
+     *
+     * @return array<int>
+     */
+    public function getSameDivisiUnitIds(): array
+    {
+        $divisiId = $this->getDivisiId();
+        if (! $divisiId) {
+            return [$this->id];
+        }
+
+        return static::where('id', $divisiId)
+            ->orWhere('parent_id', $divisiId)
+            ->pluck('id')
+            ->toArray();
+    }
+
+    public function getManager(): ?User
+    {
+        // 1. Prioritaskan Manager langsung di unit ini (urutan 2)
+        $unitManager = User::where('unit_id', $this->id)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', 2))
+            ->where('is_active', true)
+            ->first();
+
+        if ($unitManager) {
+            return $unitManager;
+        }
+
+        // 2. Jika tidak ada, cari manager di divisi induk
+        $divisiId = $this->getDivisiId();
+        if ($divisiId && $divisiId !== $this->id) {
+            $divisiManager = User::where('unit_id', $divisiId)
+                ->whereHas('leveling', fn ($q) => $q->where('urutan', 2))
+                ->where('is_active', true)
+                ->first();
+
+            if ($divisiManager) {
+                return $divisiManager;
+            }
+        }
+
+        // 3. Fallback: cari manager atau pimpinan di lingkup divisi yang sama (urutan >= 2)
+        $sameDivisiUnitIds = $this->getSameDivisiUnitIds();
+
+        return User::whereIn('unit_id', $sameDivisiUnitIds)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 2))
+            ->where('is_active', true)
+            ->first();
+    }
 }

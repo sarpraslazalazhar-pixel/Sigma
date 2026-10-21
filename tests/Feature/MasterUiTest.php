@@ -245,4 +245,63 @@ class MasterUiTest extends TestCase
             ->assertSee('Beban Operasional & Program') // 500jt > 100jt
             ->assertDontSee('Operasional Kantor & IT'); // 50jt < 100jt
     }
+
+    public function test_kode_anggaran_natural_hierarchical_sorting(): void
+    {
+        $ta = TahunAnggaran::where('status', 'aktif')->first();
+        $parent = KodeAnggaran::where('kode', '1.1')->first();
+
+        for ($i = 2; $i <= 10; $i++) {
+            KodeAnggaran::create([
+                'tahun_anggaran_id' => $ta->id,
+                'parent_id' => $parent->id,
+                'kode' => "1.1.{$i}",
+                'nama' => "Sub Item {$i}",
+                'depth' => 3,
+                'plafon' => 10000000,
+                'budget_status' => 'disahkan',
+                'is_active' => true,
+            ]);
+        }
+
+        $allSorted = KodeAnggaran::sortHierarchically(KodeAnggaran::where('tahun_anggaran_id', $ta->id)->get());
+        $codes = $allSorted->pluck('kode')->values()->toArray();
+
+        // 1.1.2 HARUS berada sebelum 1.1.10 (natural sort: 1.1.1, 1.1.2, ..., 1.1.9, 1.1.10)
+        $pos2 = array_search('1.1.2', $codes);
+        $pos9 = array_search('1.1.9', $codes);
+        $pos10 = array_search('1.1.10', $codes);
+
+        $this->assertNotFalse($pos2);
+        $this->assertNotFalse($pos9);
+        $this->assertNotFalse($pos10);
+
+        $this->assertLessThan($pos9, $pos2);
+        $this->assertLessThan($pos10, $pos9);
+    }
+
+    public function test_tree_expand_collapse_and_default_state(): void
+    {
+        $ta = TahunAnggaran::where('status', 'aktif')->first();
+        $rootNode = KodeAnggaran::where('tahun_anggaran_id', $ta->id)
+            ->whereNull('parent_id')
+            ->first();
+
+        Livewire::actingAs($this->adminUser)
+            ->test(KodeAnggaranIndex::class)
+            // Default state: collapsed (anak-anak di-hide, expandedNodes kosong)
+            ->assertSet('expandedNodes', [])
+            // Buka node induk
+            ->call('toggleNode', $rootNode->id)
+            ->assertSet('expandedNodes', [$rootNode->id])
+            // Tutup kembali
+            ->call('toggleNode', $rootNode->id)
+            ->assertSet('expandedNodes', [])
+            // Buka semua
+            ->call('expandAll')
+            ->assertCount('expandedNodes', KodeAnggaran::where('tahun_anggaran_id', $ta->id)->whereHas('children')->count())
+            // Tutup semua
+            ->call('collapseAll')
+            ->assertSet('expandedNodes', []);
+    }
 }

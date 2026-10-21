@@ -61,14 +61,27 @@ class KodeAnggaranIndex extends Component
 
         $this->tahun_anggaran_id = $activeYear ? $activeYear->id : 0;
 
-        // Default expand top-level nodes
-        if ($this->tahun_anggaran_id) {
-            $rootIds = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
-                ->whereNull('parent_id')
-                ->pluck('id')
-                ->toArray();
-            $this->expandedNodes = $rootIds;
-        }
+        // Default: semua cabang di-hide (hanya level 1 yang tampil), anak-anak bisa di-show saat di-klik
+        $this->expandedNodes = [];
+    }
+
+    public function expandAll(): void
+    {
+        $this->expandedNodes = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
+            ->whereHas('children')
+            ->pluck('id')
+            ->toArray();
+    }
+
+    public function collapseAll(): void
+    {
+        $this->expandedNodes = [];
+    }
+
+    public function updatedTahunAnggaranId(): void
+    {
+        $this->expandedNodes = [];
+        $this->resetFilters();
     }
 
     public function toggleNode(int $id): void
@@ -192,7 +205,7 @@ class KodeAnggaranIndex extends Component
                     return;
                 }
 
-                // Floor Guard (R5 Invariant)
+                // Floor Guard (Realisasi + Terikat)
                 $calc = (new BudgetCalculator)->calculateTree($this->tahun_anggaran_id)->get($node->id);
                 $floor = ($calc['realisasi'] ?? 0) + ($calc['dana_terikat'] ?? 0);
                 if ($plafonValue < $floor) {
@@ -235,15 +248,18 @@ class KodeAnggaranIndex extends Component
             $logger->log('kode_anggaran.updated', $node, $before, $node->fresh()->toArray());
 
             if ($node->budget_status === 'disahkan' && $plafonValue !== ($before['plafon'] ?? null)) {
-                session()->flash('success', "Plafon pos anggaran {$node->kode} berhasil diperbarui dari Rp ".number_format($before['plafon'] ?? 0, 0, ',', '.').' menjadi Rp '.number_format($node->plafon, 0, ',', '.').'.');
+                $msg = "Plafon pos anggaran {$node->kode} berhasil diperbarui dari Rp ".number_format($before['plafon'] ?? 0, 0, ',', '.').' menjadi Rp '.number_format($node->plafon, 0, ',', '.').'.';
             } else {
-                session()->flash('success', "Kode anggaran {$node->kode} berhasil diperbarui.");
+                $msg = "Kode anggaran {$node->kode} berhasil diperbarui.";
             }
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
         } else {
             $node = KodeAnggaran::create($data);
             $logger->log('kode_anggaran.created', $node, null, $node->toArray());
-            session()->flash('success', "Kode anggaran {$node->kode} berhasil ditambahkan.");
-
+            $msg = "Kode anggaran {$node->kode} berhasil ditambahkan.";
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
             if ($this->form_parent_id && ! in_array($this->form_parent_id, $this->expandedNodes)) {
                 $this->expandedNodes[] = $this->form_parent_id;
             }
@@ -260,7 +276,9 @@ class KodeAnggaranIndex extends Component
 
         (new AuditLogger)->log('kode_anggaran.disahkan', $node, $before, $node->fresh()->toArray());
 
-        session()->flash('success', "Budget kode anggaran {$node->kode} berhasil disahkan.");
+        $msg = "Budget kode anggaran {$node->kode} berhasil disahkan.";
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function toggleActive(int $id): void
@@ -272,7 +290,9 @@ class KodeAnggaranIndex extends Component
         (new AuditLogger)->log('kode_anggaran.toggle_active', $node, $before, $node->fresh()->toArray());
 
         $statusStr = $node->is_active ? 'diaktifkan' : 'dinonaktifkan';
-        session()->flash('success', "Kode anggaran {$node->kode} berhasil {$statusStr}.");
+        $msg = "Kode anggaran {$node->kode} berhasil {$statusStr}.";
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function openDetailModal(int $id): void
@@ -316,11 +336,11 @@ class KodeAnggaranIndex extends Component
         $calculatedData = $this->tahun_anggaran_id ? $calculator->calculateTree($this->tahun_anggaran_id) : collect();
 
         // Prefix list for filter dropdown (Distinct parent / sub-parent codes like 1, 2, 2.1, 2.4, 2.4.1, 2.4.2)
-        $prefixOptions = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
+        $rawPrefix = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
             ->where('depth', '<=', 3)
             ->whereHas('children')
-            ->orderBy('kode', 'asc')
-            ->get(['id', 'kode', 'nama', 'depth']);
+            ->get(['id', 'kode', 'nama', 'depth', 'parent_id']);
+        $prefixOptions = KodeAnggaran::sortHierarchically($rawPrefix);
 
         // Query nodes with all interactive filters
         $query = KodeAnggaran::query()
@@ -358,21 +378,24 @@ class KodeAnggaranIndex extends Component
             })
             ->orderBy('kode', 'asc');
 
-        $allNodes = $query->get();
+        $rawNodes = $query->get();
+        $allNodes = KodeAnggaran::sortHierarchically($rawNodes);
 
         // Build parent-child tree
         $nodesByParent = $allNodes->groupBy('parent_id');
         $rootNodes = $nodesByParent->get(null, collect());
 
+        $parentsMap = $allNodes->pluck('parent_id', 'id')->toArray();
+        $allParentIds = $allNodes->whereIn('id', $nodesByParent->keys())->pluck('id')->values()->toArray();
+
         // Potential parent choices for create modal
-        $parentChoices = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
+        $rawParentChoices = KodeAnggaran::where('tahun_anggaran_id', $this->tahun_anggaran_id)
             ->where('depth', '<', (int) Setting::get('kode.max_depth', 4))
             ->when($this->editingId, function ($q) {
                 $q->where('id', '!=', $this->editingId);
             })
-            ->orderBy('kode')
             ->get();
-
+        $parentChoices = KodeAnggaran::sortHierarchically($rawParentChoices);
         // Detail node inspection if open
         $detailNode = null;
         $detailMetrics = null;
@@ -396,6 +419,8 @@ class KodeAnggaranIndex extends Component
             'prefixOptions' => $prefixOptions,
             'detailNode' => $detailNode,
             'detailMetrics' => $detailMetrics,
+            'parentsMap' => $parentsMap,
+            'allParentIds' => $allParentIds,
         ]);
     }
 }

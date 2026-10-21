@@ -18,7 +18,7 @@ class UmpPdfController extends Controller
             'lampiran',
         ])->findOrFail($id);
 
-        $logoPath = public_path('images/logo-sigma.png');
+        $logoPath = public_path('images/logo-alazhar.png');
         $logoBase64 = file_exists($logoPath) ? base64_encode(file_get_contents($logoPath)) : null;
 
         $pdf = Pdf::loadView('pdf.ump', [

@@ -7,7 +7,7 @@ laveling (grup) (supervior min0-max2jt, manager 2,1jt-10jt, kepala divisi 10jt-1
 User (nama, leveling, email, username, password divisi unit dll)  
 bukti transaksi (TF, nota dll tapi suruh kirim gambar atau pdf)
 
-di anggaran ada budget pertahun (bisa naik turun {RAB}), pemakaian berbulan per anggaran
+di anggaran ada budget pertahun (bisa naik turun {RAB}), dan pemakaian berbulan per anggaran
 
 (form custom multi feild)  
 1 program  
@@ -20,7 +20,7 @@ di anggaran ada budget pertahun (bisa naik turun {RAB}), pemakaian berbulan per 
 8 jumlah permohonan  
 8 jumlah yang anggaran disetujui
 
-Alur nya pengimput atau yang ajukan isi form -&gt;di approve/tanda tangan (basah) pembuat supervisor/manajer unit-&gt;di lihat/tanda tangan (Basah) kepala divisi-&gt;di tanda tangani/di setujui keuangan  
+Alur nya pengimput atau yang ajukan isi form -&gt;di approve/tanda tangan (basah) pembuat supervisor/manajer unit-&gt;di lihat/tanda tangan (Basah) kepala divisi-&gt;di tanda tangani/di setujui keuangan (basah)  
 1-4 kaya list aja  
 5-8 tabel  
 dokumen lancepe

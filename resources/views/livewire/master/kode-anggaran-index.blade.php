@@ -174,319 +174,432 @@
         </div>
     </div>
 
-    {{-- VIEW 1: TAMPILAN MOBILE-FIRST (Card Tree, < 1024px) --}}
-    <div class="block lg:hidden space-y-3">
-        @if ($allNodes->isEmpty())
-            <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-                <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                    </svg>
-                </div>
-                <p class="text-sm font-semibold text-slate-700">Belum ada kode anggaran</p>
-                <p class="text-xs text-slate-500 mt-1">Silakan mulai dengan menambahkan kode tingkat pertama.</p>
+    {{-- COLLAPSIBLE TREE CONTROLLER (Alpine.js + Livewire Synchronized) --}}
+    <div
+        x-data="{
+            expanded: @js($expandedNodes),
+            parents: @js($parentsMap),
+            hasFilter: {{ $this->hasActiveFilters ? 'true' : 'false' }},
+            toggle(id) {
+                const idx = this.expanded.indexOf(id);
+                if (idx > -1) {
+                    this.expanded.splice(idx, 1);
+                } else {
+                    this.expanded.push(id);
+                }
+                $wire.set('expandedNodes', this.expanded, false);
+            },
+            expandAll() {
+                this.expanded = @js($allParentIds);
+                $wire.set('expandedNodes', this.expanded, false);
+            },
+            collapseAll() {
+                this.expanded = [];
+                $wire.set('expandedNodes', [], false);
+            },
+            isVisible(id, parentId) {
+                if (this.hasFilter) return true;
+                if (!parentId) return true;
+                let curr = parentId;
+                while (curr) {
+                    if (!this.expanded.includes(curr)) return false;
+                    curr = this.parents[curr] || null;
+                }
+                return true;
+            }
+        }"
+        x-effect="expanded = @js($expandedNodes); hasFilter = {{ $this->hasActiveFilters ? 'true' : 'false' }}; parents = @js($parentsMap);"
+        class="space-y-4"
+    >
+        {{-- Toolbar Navigasi Pohon Hierarki & Expand/Collapse All --}}
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 sm:px-4 rounded-2xl border border-slate-200 shadow-2xs text-xs">
+            <div class="flex items-center gap-2 flex-wrap text-slate-600">
+                <span class="font-bold text-[#0F2F57]">{{ $allNodes->count() }}</span>
+                <span>Pos Anggaran terdaftar</span>
+                @if ($this->hasActiveFilters)
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        Filter Aktif (Semua Hasil Terbuka)
+                    </span>
+                @else
+                    <span class="text-slate-400 text-[11px] hidden sm:inline">
+                        • Klik panah (<span class="text-[#1E60D5] font-bold">▶</span> / <span class="text-[#1E60D5] font-bold">▼</span>) untuk buka-tutup cabang kode
+                    </span>
+                @endif
             </div>
-        @else
-            @foreach ($allNodes as $node)
-                @php
-                    $calc = $calculatedData->get($node->id);
-                    $hasChildren = $nodesByParent->has($node->id);
-                    $isExpanded = in_array($node->id, $expandedNodes);
-                    $levelLabel = match($node->depth) {
-                        1 => 'Level 1 Induk',
-                        2 => 'Level 2 Sub-Induk',
-                        3 => 'Level 3 Leaf',
-                        default => 'Level ' . $node->depth,
-                    };
-                @endphp
 
-                <div class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs space-y-3 {{ !$node->is_active ? 'opacity-60 bg-slate-50' : '' }}">
-                    {{-- Top Header Row --}}
-                    <div class="flex items-start justify-between gap-2.5">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-[#DCE5F6] text-[#001B3E]">
-                                {{ $node->kode }}
-                            </span>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                {{ $levelLabel }}
-                            </span>
-                            @if ($node->budget_status === 'disahkan')
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    Disahkan
+            <div class="flex items-center gap-2 shrink-0">
+                <button
+                    type="button"
+                    @click="expandAll()"
+                    class="min-h-[36px] px-3.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Buka seluruh cabang kode anggaran"
+                >
+                    <svg class="w-3.5 h-3.5 text-[#1E60D5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <span>Buka Semua</span>
+                </button>
+
+                <button
+                    type="button"
+                    @click="collapseAll()"
+                    class="min-h-[36px] px-3.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Tutup semua cabang (hanya tampilkan level 1)"
+                >
+                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                    </svg>
+                    <span>Tutup Semua</span>
+                </button>
+            </div>
+        </div>
+
+        {{-- VIEW 1: TAMPILAN MOBILE-FIRST (Card Tree, < 1024px) --}}
+        <div class="block lg:hidden space-y-3">
+            @if ($allNodes->isEmpty())
+                <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+                    <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                    </div>
+                    <p class="text-sm font-semibold text-slate-700">Belum ada kode anggaran</p>
+                    <p class="text-xs text-slate-500 mt-1">Silakan mulai dengan menambahkan kode tingkat pertama.</p>
+                </div>
+            @else
+                @foreach ($allNodes as $node)
+                    @php
+                        $calc = $calculatedData->get($node->id);
+                        $hasChildren = $nodesByParent->has($node->id);
+                        $levelLabel = match($node->depth) {
+                            1 => 'Level 1 Induk',
+                            2 => 'Level 2 Sub-Induk',
+                            3 => 'Level 3 Pos',
+                            default => 'Level ' . $node->depth . ' Rincian',
+                        };
+                        $mobileIndent = ($node->depth - 1) * 12;
+                    @endphp
+
+                    <div
+                        x-show="isVisible({{ $node->id }}, {{ $node->parent_id ?? 'null' }})"
+                        wire:key="mobile-card-{{ $node->id }}"
+                        style="margin-left: {{ $mobileIndent }}px"
+                        class="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs space-y-3 {{ !$node->is_active ? 'opacity-60 bg-slate-50' : '' }} {{ $node->depth > 1 ? 'border-l-4 border-l-[#1E60D5]' : '' }}"
+                    >
+                        {{-- Top Header Row --}}
+                        <div class="flex items-start justify-between gap-2.5">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-lg font-mono text-xs font-bold {{ $node->depth === 1 ? 'bg-[#1E60D5] text-white' : ($node->depth === 2 ? 'bg-[#DCE5F6] text-[#001B3E]' : 'bg-slate-100 text-slate-800') }}">
+                                    {{ $node->kode }}
                                 </span>
-                            @else
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                    Draft
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    {{ $levelLabel }}
                                 </span>
+                                @if ($node->budget_status === 'disahkan')
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        Disahkan
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                        Draft
+                                    </span>
+                                @endif
+                            </div>
+
+                            {{-- Expand/Collapse Branch Button (tap target >= 44x44px) --}}
+                            @if ($hasChildren)
+                                <button
+                                    type="button"
+                                    @click.stop="toggle({{ $node->id }})"
+                                    class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-[#1E60D5] transition-colors shrink-0 cursor-pointer"
+                                    aria-label="Buka / Tutup cabang"
+                                >
+                                    <svg
+                                        class="w-4 h-4 transform transition-transform duration-200"
+                                        :class="expanded.includes({{ $node->id }}) ? 'rotate-180 text-[#1E60D5]' : ''"
+                                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    >
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
                             @endif
                         </div>
 
-                        {{-- Expand/Collapse Branch Button (tap target >= 44x44px) --}}
-                        @if ($hasChildren)
-                            <button
-                                type="button"
-                                wire:click="toggleNode({{ $node->id }})"
-                                class="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors shrink-0"
-                                aria-label="{{ $isExpanded ? 'Tutup cabang' : 'Buka cabang' }}"
-                            >
-                                <svg class="w-4 h-4 transform transition-transform {{ $isExpanded ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                        @endif
-                    </div>
-
-                    {{-- Nama & Deskripsi --}}
-                    <div>
-                        <h2 class="text-sm font-bold text-slate-900 leading-snug">
-                            {{ $node->nama }}
-                        </h2>
-                        @if ($node->deskripsi)
-                            <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                                {{ $node->deskripsi }}
-                            </p>
-                        @endif
-                    </div>
-
-                    {{-- Data Anggaran Grid (No Horizontal Scroll Leak) --}}
-                    <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
-                        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Plafon Budget</span>
-                            <span class="font-bold text-slate-900 tabular-nums mt-0.5 block">
-                                {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : 'Mengikuti Anak' }}
-                            </span>
+                        {{-- Nama & Deskripsi --}}
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900 leading-snug">
+                                {{ $node->nama }}
+                            </h2>
+                            @if ($node->deskripsi)
+                                <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                                    {{ $node->deskripsi }}
+                                </p>
+                            @endif
                         </div>
 
-                        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                            <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Total Anak</span>
-                            <span class="font-bold text-slate-900 tabular-nums mt-0.5 block">
-                                Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
-                            </span>
-                        </div>
-
-                        @if ($node->plafon !== null && !$calc['is_leaf'])
-                            <div class="col-span-2 p-2.5 rounded-xl bg-blue-50/70 border border-blue-100">
-                                <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 block">Belum Dialokasikan</span>
-                                <span class="font-bold text-[#0F2F57] tabular-nums mt-0.5 block">
-                                    Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
+                        {{-- Data Anggaran Grid --}}
+                        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Plafon Budget</span>
+                                <span class="font-bold text-slate-900 tabular-nums mt-0.5 block">
+                                    {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : 'Mengikuti Anak' }}
                                 </span>
                             </div>
-                        @endif
-                    </div>
 
-                    {{-- Action Row (Tap targets >= 44px) --}}
-                    <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
-                        <button
-                            type="button"
-                            wire:click="openDetailModal({{ $node->id }})"
-                            class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                            title="Lihat Detail Pos"
-                        >
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                            <span>Detail</span>
-                        </button>
+                            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Total Anak</span>
+                                <span class="font-bold text-slate-900 tabular-nums mt-0.5 block">
+                                    Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
+                                </span>
+                            </div>
 
-                        @if ($node->depth < 4)
+                            @if ($node->plafon !== null && !$calc['is_leaf'])
+                                <div class="col-span-2 p-2.5 rounded-xl bg-blue-50/70 border border-blue-100">
+                                    <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 block">Belum Dialokasikan</span>
+                                    <span class="font-bold text-[#0F2F57] tabular-nums mt-0.5 block">
+                                        Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
+                                    </span>
+                                </div>
+                            @endif
+                        </div>
+
+                        {{-- Action Row (Tap targets >= 44px) --}}
+                        <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
                             <button
                                 type="button"
-                                wire:click="openCreateModal({{ $node->id }})"
-                                class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                wire:click="openDetailModal({{ $node->id }})"
+                                class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                title="Lihat Detail Pos"
                             >
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
-                                <span>+ Anak</span>
+                                <span>Detail</span>
                             </button>
-                        @endif
 
-                        <button
-                            type="button"
-                            wire:click="openEditModal({{ $node->id }})"
-                            class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                            Edit
-                        </button>
-                        @if ($node->budget_status === 'draft')
+                            @if ($node->depth < 4)
+                                <button
+                                    type="button"
+                                    wire:click="openCreateModal({{ $node->id }})"
+                                    class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    <span>+ Anak</span>
+                                </button>
+                            @endif
+
                             <button
                                 type="button"
-                                wire:click="sahkanBudget({{ $node->id }})"
-                                class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 transition-colors cursor-pointer"
+                                wire:click="openEditModal({{ $node->id }})"
+                                class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                title="Edit Node"
                             >
-                                Sahkan
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                <span>Edit</span>
                             </button>
-                        @endif
 
-                        <button
-                            type="button"
-                            wire:click="toggleActive({{ $node->id }})"
-                            class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold {{ $node->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer"
-                        >
-                            {{ $node->is_active ? 'Nonaktif' : 'Aktifkan' }}
-                        </button>
+                            @if ($node->budget_status === 'draft')
+                                <button
+                                    type="button"
+                                    wire:click="sahkanBudget({{ $node->id }})"
+                                    class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                                    title="Sahkan Budget Pos Ini"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span>Sahkan</span>
+                                </button>
+                            @endif
+                        </div>
                     </div>
-                </div>
-            @endforeach
-        @endif
-    </div>
+                @endforeach
+            @endif
+        </div>
 
-    {{-- VIEW 2: TAMPILAN DESKTOP (Hierarchical Table, >= 1024px) --}}
-    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-                <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
-                    <tr>
-                        <th class="py-3.5 px-4">Kode Pos</th>
-                        <th class="py-3.5 px-4">Nama Pos Anggaran</th>
-                        <th class="py-3.5 px-3 text-center">Tingkat</th>
-                        <th class="py-3.5 px-4 text-right">Plafon Induk</th>
-                        <th class="py-3.5 px-4 text-right">Total Alokasi Anak</th>
-                        <th class="py-3.5 px-4 text-right">Belum Dialokasikan</th>
-                        <th class="py-3.5 px-3 text-center">Status</th>
-                        <th class="py-3.5 px-4 text-right">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @forelse ($allNodes as $node)
-                        @php
-                            $calc = $calculatedData->get($node->id);
-                            $paddingLeft = ($node->depth - 1) * 20;
-                        @endphp
-                        <tr class="hover:bg-slate-50/80 transition-colors {{ !$node->is_active ? 'opacity-50 bg-slate-50/50' : '' }}">
-                            <td class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                                <span style="margin-left: {{ $paddingLeft }}px" class="inline-flex items-center gap-1.5">
-                                    @if ($node->depth > 1)
-                                        <span class="text-slate-300">└</span>
-                                    @endif
-                                    <span class="px-2 py-0.5 rounded-md bg-[#DCE5F6] text-[#001B3E] text-[11px]">
-                                        {{ $node->kode }}
-                                    </span>
-                                </span>
-                            </td>
-
-                            <td class="py-3.5 px-4 font-medium text-slate-900">
-                                <div>
-                                    <p class="font-bold text-slate-900">{{ $node->nama }}</p>
-                                    @if ($node->deskripsi)
-                                        <p class="text-[11px] text-slate-400 mt-0.5">{{ $node->deskripsi }}</p>
-                                    @endif
-                                </div>
-                            </td>
-
-                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                    Depth {{ $node->depth }}
-                                </span>
-                            </td>
-
-                            <td class="py-3.5 px-4 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">
-                                {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : '-' }}
-                            </td>
-
-                            <td class="py-3.5 px-4 text-right tabular-nums text-slate-700 whitespace-nowrap">
-                                Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
-                            </td>
-
-                            <td class="py-3.5 px-4 text-right tabular-nums font-semibold whitespace-nowrap {{ ($calc['belum_dialokasikan'] ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700' }}">
-                                @if ($node->plafon !== null && !$calc['is_leaf'])
-                                    Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
-                                @else
-                                    <span class="text-slate-300">-</span>
-                                @endif
-                            </td>
-
-                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                                <div class="inline-flex flex-col items-center gap-1">
-                                    @if ($node->budget_status === 'disahkan')
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            Disahkan
-                                        </span>
-                                    @else
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                            Draft
-                                        </span>
-                                    @endif
-                                </div>
-                            </td>
-
-                            <td class="py-3.5 px-4 text-right whitespace-nowrap">
-                                <div class="inline-flex items-center gap-1.5 justify-end">
-                                    <button
-                                        type="button"
-                                        wire:click="openDetailModal({{ $node->id }})"
-                                        class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                        title="Lihat Detail Satu per Satu"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    </button>
-
-                                    @if ($node->depth < 4)
-                                        <button
-                                            type="button"
-                                            wire:click="openCreateModal({{ $node->id }})"
-                                            class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors"
-                                            title="Tambah Sub-Kode Anak"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                            </svg>
-                                        </button>
-                                    @endif
-
-                                    <button
-                                        type="button"
-                                        wire:click="openEditModal({{ $node->id }})"
-                                        class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
-                                        title="Edit Node"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                    </button>
-
-                                    @if ($node->budget_status === 'draft')
-                                        <button
-                                            type="button"
-                                            wire:click="sahkanBudget({{ $node->id }})"
-                                            class="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors"
-                                            title="Sahkan Budget"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </button>
-                                    @endif
-
-                                    <button
-                                        type="button"
-                                        wire:click="toggleActive({{ $node->id }})"
-                                        class="p-1.5 rounded-lg {{ $node->is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50' }} transition-colors"
-                                        title="{{ $node->is_active ? 'Nonaktifkan' : 'Aktifkan' }}"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
+        {{-- VIEW 2: TAMPILAN DESKTOP (Hierarchical Table, >= 1024px) --}}
+        <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                         <tr>
-                            <td colspan="8" class="py-8 text-center text-slate-500">
-                                Tidak ada kode anggaran yang cocok dengan filter.
-                            </td>
+                            <th class="py-3.5 px-4">Kode Pos</th>
+                            <th class="py-3.5 px-4">Nama Pos Anggaran</th>
+                            <th class="py-3.5 px-3 text-center">Tingkat</th>
+                            <th class="py-3.5 px-4 text-right">Plafon Induk</th>
+                            <th class="py-3.5 px-4 text-right">Total Alokasi Anak</th>
+                            <th class="py-3.5 px-4 text-right">Belum Dialokasikan</th>
+                            <th class="py-3.5 px-3 text-center">Status</th>
+                            <th class="py-3.5 px-4 text-right">Aksi</th>
                         </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse ($allNodes as $node)
+                            @php
+                                $calc = $calculatedData->get($node->id);
+                                $hasChildren = $nodesByParent->has($node->id);
+                                $paddingLeft = ($node->depth - 1) * 24;
+                            @endphp
+                            <tr
+                                x-show="isVisible({{ $node->id }}, {{ $node->parent_id ?? 'null' }})"
+                                wire:key="node-row-{{ $node->id }}"
+                                class="hover:bg-blue-50/40 transition-colors {{ !$node->is_active ? 'opacity-50 bg-slate-50/50' : '' }} {{ $node->depth === 1 ? 'bg-slate-50/70 font-semibold' : '' }}"
+                            >
+                                <td class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                                    <div style="margin-left: {{ $paddingLeft }}px" class="inline-flex items-center gap-1.5">
+                                        @if ($hasChildren)
+                                            <button
+                                                type="button"
+                                                @click.stop="toggle({{ $node->id }})"
+                                                class="w-6 h-6 rounded-lg inline-flex items-center justify-center text-slate-500 hover:text-[#1E60D5] hover:bg-blue-100/60 transition-all cursor-pointer"
+                                                title="Buka / Tutup Rincian Pos"
+                                            >
+                                                <svg
+                                                    class="w-3.5 h-3.5 transform transition-transform duration-200"
+                                                    :class="expanded.includes({{ $node->id }}) ? 'rotate-90 text-[#1E60D5]' : 'text-slate-400'"
+                                                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                                >
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </button>
+                                        @else
+                                            <span class="w-6 h-6 inline-flex items-center justify-center text-slate-300">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                            </span>
+                                        @endif
+
+                                        <span class="px-2 py-0.5 rounded-md {{ $node->depth === 1 ? 'bg-[#1E60D5] text-white font-bold' : ($node->depth === 2 ? 'bg-[#DCE5F6] text-[#001B3E] font-bold' : 'bg-slate-100 text-slate-700 font-semibold') }} text-[11px] shadow-2xs">
+                                            {{ $node->kode }}
+                                        </span>
+                                    </div>
+                                </td>
+
+                                <td class="py-3.5 px-4 font-medium text-slate-900">
+                                    <div>
+                                        <p class="font-bold text-slate-900">{{ $node->nama }}</p>
+                                        @if ($node->deskripsi)
+                                            <p class="text-[11px] text-slate-400 mt-0.5">{{ $node->deskripsi }}</p>
+                                        @endif
+                                    </div>
+                                </td>
+
+                                <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                        Depth {{ $node->depth }}
+                                    </span>
+                                </td>
+
+                                <td class="py-3.5 px-4 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">
+                                    {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : '-' }}
+                                </td>
+
+                                <td class="py-3.5 px-4 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                                    Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
+                                </td>
+
+                                <td class="py-3.5 px-4 text-right tabular-nums font-semibold whitespace-nowrap {{ ($calc['belum_dialokasikan'] ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700' }}">
+                                    @if ($node->plafon !== null && !$calc['is_leaf'])
+                                        Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
+                                    @else
+                                        <span class="text-slate-300">-</span>
+                                    @endif
+                                </td>
+
+                                <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                                    <div class="inline-flex flex-col items-center gap-1">
+                                        @if ($node->budget_status === 'disahkan')
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                Disahkan
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                                Draft
+                                            </span>
+                                        @endif
+                                    </div>
+                                </td>
+
+                                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                                    <div class="inline-flex items-center gap-1.5 justify-end">
+                                        <button
+                                            type="button"
+                                            wire:click="openDetailModal({{ $node->id }})"
+                                            class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                            title="Lihat Detail Satu per Satu"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                        </button>
+
+                                        @if ($node->depth < 4)
+                                            <button
+                                                type="button"
+                                                wire:click="openCreateModal({{ $node->id }})"
+                                                class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors"
+                                                title="Tambah Sub-Kode Anak"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                                </svg>
+                                            </button>
+                                        @endif
+
+                                        <button
+                                            type="button"
+                                            wire:click="openEditModal({{ $node->id }})"
+                                            class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+                                            title="Edit Node"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+
+                                        @if ($node->budget_status === 'draft')
+                                            <button
+                                                type="button"
+                                                wire:click="sahkanBudget({{ $node->id }})"
+                                                class="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                                title="Sahkan Budget"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                        @endif
+
+                                        <button
+                                            type="button"
+                                            wire:click="toggleActive({{ $node->id }})"
+                                            class="p-1.5 rounded-lg {{ $node->is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50' }} transition-colors"
+                                            title="{{ $node->is_active ? 'Nonaktifkan' : 'Aktifkan' }}"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="8" class="py-8 text-center text-slate-500">
+                                    Tidak ada kode anggaran yang cocok dengan filter.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-
     {{-- MODAL TAMBAH / EDIT KODE ANGGARAN (M3 Dialog) --}}
     @if ($showModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
@@ -521,18 +634,14 @@
                             <label for="form_parent_id" class="block text-xs font-semibold text-slate-700 mb-1">
                                 Kode Induk (Parent)
                             </label>
-                            <select
-                                id="form_parent_id"
+                            <x-searchable-select
                                 wire:model.live="form_parent_id"
-                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                            >
-                                <option value="">Tanpa Induk (Tingkat 1 Teratas)</option>
-                                @foreach ($parentChoices as $pChoice)
-                                    <option value="{{ $pChoice->id }}">
-                                        {{ $pChoice->kode }} : {{ $pChoice->nama }} (Depth {{ $pChoice->depth }})
-                                    </option>
-                                @endforeach
-                            </select>
+                                :options="$parentChoices"
+                                placeholder="Pilih Pos Induk (Opsional)..."
+                                null-label="Tanpa Induk (Tingkat 1 Teratas)"
+                                search-placeholder="Ketik kode atau nama pos induk..."
+                                :nullable="true"
+                            />
                             @error('form_parent_id')
                                 <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
                             @enderror

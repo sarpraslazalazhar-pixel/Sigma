@@ -108,21 +108,32 @@ class UmpIndex extends Component
                 });
             });
 
-        // Filter per hak akses: staf unit hanya melihat UMP unitnya
+        // Filter per hak akses: staf unit melihat UMP semua unit dalam divisi yang sama (misal Sekretariat)
         if ($user && ! in_array($user->role, ['admin', 'keuangan'], true)) {
-            $query->whereHas('pencairan.permohonan', function ($q2) use ($user) {
-                $q2->where('unit_id', $user->unit_id);
+            $divisiUnitIds = $user->unit?->getSameDivisiUnitIds() ?? ($user->unit_id ? [$user->unit_id] : []);
+            $query->whereHas('pencairan.permohonan', function ($q2) use ($divisiUnitIds) {
+                if (! empty($divisiUnitIds)) {
+                    $q2->whereIn('unit_id', $divisiUnitIds);
+                }
             });
         }
 
         $umpList = $query->orderBy('id', 'desc')->paginate(15);
-        $units = Unit::orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
 
-        // Scope metrics the same way as listing (non-admin/non-keuangan see only their unit)
+        $unitsQuery = Unit::query();
+        if ($user && ! in_array($user->role, ['admin', 'keuangan'], true) && $user->unit) {
+            $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
+        }
+        $units = $unitsQuery->orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
+
+        // Scope metrics the same way as listing
         $metricsBase = Ump::query();
         if ($user && ! in_array($user->role, ['admin', 'keuangan'], true)) {
-            $metricsBase->whereHas('pencairan.permohonan', function ($q2) use ($user) {
-                $q2->where('unit_id', $user->unit_id);
+            $divisiUnitIds = $user->unit?->getSameDivisiUnitIds() ?? ($user->unit_id ? [$user->unit_id] : []);
+            $metricsBase->whereHas('pencairan.permohonan', function ($q2) use ($divisiUnitIds) {
+                if (! empty($divisiUnitIds)) {
+                    $q2->whereIn('unit_id', $divisiUnitIds);
+                }
             });
         }
         $activeQuery = (clone $metricsBase)->whereIn('status', ['draft', 'perlu_perbaikan', 'ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan']);

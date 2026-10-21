@@ -2,8 +2,12 @@
 
 namespace App\Livewire\Pencairan;
 
+use App\Exports\RekapPpdUmpExport;
 use App\Models\Pencairan;
+use App\Models\SumberDana;
+use App\Models\TahunAnggaran;
 use App\Models\Unit;
+use App\Services\AuditLogger;
 use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -11,7 +15,9 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 #[Layout('layouts.app')]
 #[Title('Pencairan PPD: SIGMA LAZ Al-Azhar')]
@@ -24,6 +30,14 @@ class PencairanIndex extends Component
     public string $statusFilter = '';
 
     public string $unitFilter = '';
+
+    public string $sumberDanaFilter = '';
+
+    public string $tahunFilter = '';
+
+    public string $bulanFilter = '';
+
+    public string $umpStatusFilter = '';
 
     public bool $batalModalOpen = false;
 
@@ -46,9 +60,29 @@ class PencairanIndex extends Component
         $this->resetPage();
     }
 
+    public function updatingSumberDanaFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingTahunFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingBulanFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingUmpStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
     public function resetFilters(): void
     {
-        $this->reset(['search', 'statusFilter', 'unitFilter']);
+        $this->reset(['search', 'statusFilter', 'unitFilter', 'sumberDanaFilter', 'tahunFilter', 'bulanFilter', 'umpStatusFilter']);
         $this->resetPage();
     }
 
@@ -80,11 +114,37 @@ class PencairanIndex extends Component
 
         try {
             (new PermohonanWorkflow)->batalkanPencairan($pencairan, Auth::user(), $this->alasanBatal);
-            session()->flash('success', "Pencairan PPD {$pencairan->no_ppd} berhasil dibatalkan.");
+            $msg = "Pencairan PPD {$pencairan->no_ppd} berhasil dibatalkan.";
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
             $this->tutupModalBatal();
         } catch (RuntimeException $e) {
             $this->addError('alasanBatal', $e->getMessage());
         }
+    }
+
+    public function exportExcel(): BinaryFileResponse
+    {
+        $user = Auth::user();
+        $isGlobal = $user && ($user->role === 'admin' || $user->role === 'keuangan' || $user->is_petugas_input);
+        $unitId = $this->unitFilter !== '' ? (int) $this->unitFilter : (! $isGlobal ? $user?->unit_id : null);
+
+        $ta = $this->tahunFilter !== ''
+            ? TahunAnggaran::where('tahun', (int) $this->tahunFilter)->first()
+            : TahunAnggaran::where('status', 'aktif')->first();
+
+        $taId = $ta?->id ?? 1;
+        $tahun = $ta?->tahun ?? date('Y');
+
+        (new AuditLogger)->log('export.ppd_ump', null, [], [
+            'tahun_anggaran_id' => $taId,
+            'unit_id' => $unitId,
+        ]);
+
+        return Excel::download(
+            new RekapPpdUmpExport($taId, $unitId),
+            "Rekap_PPD_dan_UMP_{$tahun}.xlsx"
+        );
     }
 
     public function render(): View
@@ -96,9 +156,12 @@ class PencairanIndex extends Component
             ->orderBy('tgl_cair', 'desc');
 
         if (! $isGlobal) {
-            $query->whereHas('permohonan', function ($q) use ($user) {
-                $q->where('unit_id', $user?->unit_id)
-                    ->orWhere('user_id', $user?->id);
+            $divisiUnitIds = $user?->unit?->getSameDivisiUnitIds() ?? ($user?->unit_id ? [$user->unit_id] : []);
+            $query->whereHas('permohonan', function ($q) use ($user, $divisiUnitIds) {
+                if (! empty($divisiUnitIds)) {
+                    $q->whereIn('unit_id', $divisiUnitIds);
+                }
+                $q->orWhere('user_id', $user?->id);
             });
         }
 
@@ -116,8 +179,11 @@ class PencairanIndex extends Component
                 $sub->where('no_ppd', 'like', $term)
                     ->orWhereHas('permohonan', function ($p) use ($term) {
                         $p->where('no_pengajuan', 'like', $term)
-                            ->orWhere('nama_kegiatan', 'like', $term);
-                    });
+                            ->orWhere('nama_kegiatan', 'like', $term)
+                            ->orWhere('program', 'like', $term)
+                            ->orWhereHas('user', fn ($u) => $u->where('name', 'like', $term));
+                    })
+                    ->orWhereHas('ump.pj', fn ($pj) => $pj->where('name', 'like', $term));
             });
         }
 
@@ -129,8 +195,33 @@ class PencairanIndex extends Component
             $query->whereHas('permohonan', fn ($p) => $p->where('unit_id', (int) $this->unitFilter));
         }
 
+        if ($this->sumberDanaFilter !== '') {
+            $query->whereHas('permohonan', fn ($p) => $p->where('sumber_dana_id', (int) $this->sumberDanaFilter));
+        }
+
+        if ($this->tahunFilter !== '') {
+            $query->whereYear('tgl_cair', (int) $this->tahunFilter);
+        }
+
+        if ($this->bulanFilter !== '') {
+            $query->whereMonth('tgl_cair', (int) $this->bulanFilter);
+        }
+
+        if ($this->umpStatusFilter !== '') {
+            $query->whereHas('ump', fn ($u) => $u->where('status', $this->umpStatusFilter));
+        }
+
         $pencairans = $query->paginate(15);
-        $units = Unit::orderBy('nama')->get();
+        $unitsQuery = Unit::query();
+        if (! $isGlobal && $user?->unit) {
+            $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
+        }
+        $units = $unitsQuery->orderBy('nama')->get();
+        $sumberDanas = SumberDana::where('is_active', true)->orderBy('id')->get();
+        $daftarTahun = TahunAnggaran::orderBy('tahun', 'desc')->pluck('tahun')->all();
+        if (empty($daftarTahun)) {
+            $daftarTahun = [(int) date('Y')];
+        }
 
         return view('livewire.pencairan.pencairan-index', [
             'pencairans' => $pencairans,
@@ -139,6 +230,8 @@ class PencairanIndex extends Component
             'totalNominal' => $totalNominal,
             'umpBerjalan' => $umpBerjalan,
             'umpSelesai' => $umpSelesai,
+            'sumberDanas' => $sumberDanas,
+            'daftarTahun' => $daftarTahun,
             'canManage' => $isGlobal,
         ]);
     }

@@ -526,9 +526,25 @@
 
     {{-- MODAL PERSETUJUAN --}}
     @if ($showApprovalModal)
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-            <div class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden" @click.outside="closeApprovalModal">
-                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs transition-opacity duration-300 ease-m3-standard"
+            x-transition:enter="transition-opacity duration-300 ease-m3-standard"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition-opacity duration-200 ease-m3-standard"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+        >
+            <div
+                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden transition-all duration-300 ease-m3-emphasized-decel"
+                x-transition:enter="transition-all duration-300 ease-m3-emphasized-decel"
+                x-transition:enter-start="opacity-0 scale-95 translate-y-3"
+                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                x-transition:leave="transition-all duration-200 ease-m3-emphasized-accel"
+                x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                x-transition:leave-end="opacity-0 scale-95 translate-y-3"
+                @click.outside="closeApprovalModal"
+            >
                     <h2 class="text-base font-bold text-[#0F2F57]">
                         @if ($approvalAction === 'setuju')
                             Konfirmasi Persetujuan UMP
@@ -597,11 +613,14 @@
                             Tutup
                         </button>
                         <button type="submit" wire:loading.attr="disabled"
-                            class="min-h-[44px] px-5 py-2.5 rounded-full text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer disabled:opacity-60
+                            class="min-h-[44px] px-5 py-2.5 rounded-full text-white text-xs font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-60 m3-press inline-flex items-center gap-1.5
                             {{ $approvalAction === 'setuju' ? 'bg-emerald-600 hover:bg-emerald-700' : ($approvalAction === 'perbaikan' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-red-600 hover:bg-red-700') }}">
-                            Konfirmasi
+                            <span wire:loading.remove wire:target="submitApproval">Konfirmasi</span>
+                            <span wire:loading wire:target="submitApproval" class="inline-flex items-center gap-1.5">
+                                <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                <span>Memproses...</span>
+                            </span>
                         </button>
-                    </div>
                 </form>
             </div>
         </div>
@@ -621,17 +640,25 @@
                     type="button"
                     wire:click="simpanDraft"
                     wire:loading.attr="disabled"
-                    class="min-h-[44px] px-5 py-2.5 rounded-full bg-slate-100 hover:bg-[#DCE5F6] text-[#001B3E] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                    class="min-h-[44px] px-5 py-2.5 rounded-full bg-slate-100 hover:bg-[#DCE5F6] text-[#001B3E] text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60 m3-press inline-flex items-center gap-2"
                 >
-                    Simpan Draft
+                    <span wire:loading.remove wire:target="simpanDraft">Simpan Draft</span>
+                    <span wire:loading wire:target="simpanDraft" class="inline-flex items-center gap-1.5">
+                        <svg class="animate-spin w-4 h-4 text-[#001B3E]" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                        <span>Menyimpan...</span>
+                    </span>
                 </button>
                 <button
                     type="button"
                     wire:click="ajukanUMP"
                     wire:loading.attr="disabled"
-                    class="min-h-[44px] px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+                    class="min-h-[44px] px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-60 m3-press inline-flex items-center gap-2"
                 >
-                    Ajukan / Tanda Tangan PJ
+                    <span wire:loading.remove wire:target="ajukanUMP">Ajukan / Tanda Tangan PJ</span>
+                    <span wire:loading wire:target="ajukanUMP" class="inline-flex items-center gap-1.5">
+                        <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                        <span>Mengajukan...</span>
+                    </span>
                 </button>
             </div>
         @else

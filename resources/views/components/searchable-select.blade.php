@@ -14,7 +14,7 @@
     $normalizedOptions = collect($options)->map(function ($opt) {
         if (is_array($opt)) {
             $val = $opt['value'] ?? $opt['id'] ?? '';
-            $sub = $opt['sub'] ?? $opt['kode'] ?? '';
+            $sub = $opt['sub'] ?? $opt['kode'] ?? $opt['jabatan'] ?? '';
             $label = $opt['label'] ?? $opt['nama'] ?? $opt['name'] ?? '';
             return [
                 'value' => (string) $val,
@@ -23,7 +23,7 @@
             ];
         } elseif (is_object($opt)) {
             $val = $opt->value ?? $opt->id ?? '';
-            $sub = $opt->sub ?? $opt->kode ?? '';
+            $sub = $opt->sub ?? $opt->kode ?? $opt->jabatan ?? '';
             $label = $opt->label ?? $opt->nama ?? $opt->name ?? '';
             return [
                 'value' => (string) $val,
@@ -114,7 +114,7 @@
         type="button"
         @click="toggle()"
         :disabled="{{ $disabled ? 'true' : 'false' }}"
-        class="w-full text-left rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden transition-colors flex items-center justify-between gap-2 shadow-2xs {{ $disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-100/60' }}"
+        class="w-full text-left rounded-xl border border-slate-300 bg-white min-h-[44px] py-2.5 px-3 text-slate-800 focus:bg-white focus:border-[#1E60D5] focus:outline-hidden transition-colors flex items-center justify-between gap-2 shadow-2xs {{ $disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50' }}"
         aria-haspopup="listbox"
         :aria-expanded="open"
     >

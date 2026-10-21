@@ -321,12 +321,12 @@
                 </div>
             </td>
             <td class="sig-box">
-                <div class="sig-header">DITERIMA OLEH (PENERIMA DANA / PEMOHON)</div>
+                <div class="sig-header">PENANGGUNG JAWAB (PJ / MANAGER)</div>
                 <div class="sig-name">
-                    {{ $permohonan->user?->name ?? '................................................' }}
+                    {{ $pencairan->ump?->pj?->name ?? ($permohonan->user?->name ?? '................................................') }}
                 </div>
                 <div class="sig-role">
-                    {{ $permohonan->user?->jabatan ?? 'Penerima Dana / Pemohon' }}
+                    {{ $pencairan->ump?->pj?->jabatan ?? ($permohonan->user?->jabatan ?? 'Penanggung Jawab') }}
                 </div>
                 <div class="sig-date">
                     Tgl: {{ $pencairan->tgl_cair->format('d/m/Y') }}

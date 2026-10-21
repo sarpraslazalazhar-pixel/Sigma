@@ -3,8 +3,10 @@
 namespace App\Livewire\Permohonan;
 
 use App\Models\Lampiran;
+use App\Models\Pencairan;
 use App\Models\Permohonan;
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -42,12 +44,31 @@ class PermohonanDetail extends Component
 
     public $proxyScanFile = null;
 
+    // Modal Cairkan Dana (Penerbitan PPD)
+    public bool $showCairkanModal = false;
+
+    public string $noPpd = '';
+
+    public string $tglCair = '';
+
+    public ?int $pjId = null;
+
     public function mount(int $id): void
     {
         $this->permohonanId = $id;
         $this->proxySignedAt = now()->toDateString();
 
-        $permohonan = Permohonan::with('items')->findOrFail($id);
+        $user = Auth::user();
+        $permohonan = Permohonan::with(['items', 'unit'])->findOrFail($id);
+
+        if ($user && ! in_array($user->role, ['admin', 'keuangan'])) {
+            $docDivisiId = $permohonan->unit?->getDivisiId();
+            $userDivisiId = $user->unit?->getDivisiId();
+            $sameDivisi = ($docDivisiId !== null && $userDivisiId !== null && $docDivisiId === $userDivisiId);
+            $isOwner = ($permohonan->user_id === $user->id);
+
+            abort_unless($sameDivisi || $isOwner, 403, 'Anda tidak memiliki hak akses untuk melihat permohonan dari divisi lain.');
+        }
 
         foreach ($permohonan->items as $item) {
             $this->approvedItemAmounts[$item->id] = $item->jumlah_disetujui ?? $item->jumlah_diminta;
@@ -67,6 +88,7 @@ class PermohonanDetail extends Component
             'items.programUtama',
             'approvals.approver',
             'lampiran.uploadedBy',
+            'pencairan.ump.pj',
         ])->findOrFail($this->permohonanId);
     }
 
@@ -140,6 +162,18 @@ class PermohonanDetail extends Component
         return $this->isFinanceStage && ($isAdmin || $isFinanceRole || ($isPetugas && $keuanganMode === 'atas_nama'));
     }
 
+    public function getCanCairkanProperty(): bool
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        $isAuthorized = $user->role === 'keuangan' || $user->role === 'admin' || (bool) $user->is_petugas_input;
+
+        return $this->permohonan->status === 'disetujui_keuangan' && $isAuthorized;
+    }
+
     public function getCanApproveProperty(): bool
     {
         $user = Auth::user();
@@ -161,12 +195,14 @@ class PermohonanDetail extends Component
         $urutan = $user->leveling?->urutan ?? 0;
 
         if ($p->status === 'diajukan') {
+            $requiredUrutan = $p->levelingRequired?->urutan ?? 1;
             $isDesignatedAtasan = $p->atasan_id && $p->atasan_id === $user->id;
-            $isSameUnitManager = ($p->unit_id === $user->unit_id) && ($urutan >= 2);
-            $isDivisiManager = ($p->unit?->parent_id === $user->unit_id) && ($urutan >= 2);
+            $isSameUnitOrDivisi = ($p->unit_id === $user->unit_id) || ($p->unit?->parent_id === $user->unit_id);
+            $isSameUnitSupervisor = $isSameUnitOrDivisi && ($urutan >= 1) && ($requiredUrutan <= 1);
+            $isSameUnitManager = $isSameUnitOrDivisi && ($urutan >= 2);
             $isKadivOrHigher = $urutan >= 3;
 
-            return $isDesignatedAtasan || $isSameUnitManager || $isDivisiManager || $isKadivOrHigher;
+            return $isDesignatedAtasan || $isSameUnitSupervisor || $isSameUnitManager || $isKadivOrHigher;
         }
 
         if ($p->status === 'disetujui_atasan') {
@@ -237,22 +273,25 @@ class PermohonanDetail extends Component
             ]);
         }
 
+        $msg = '';
         if ($this->actionType === 'setuju') {
             $workflow->approve($this->permohonan, $user, [
                 'catatan' => $this->actionNotes ?: null,
             ]);
-            session()->flash('success', 'Permohonan berhasil disetujui.');
+            $msg = 'Permohonan berhasil disetujui.';
         } elseif ($this->actionType === 'perbaikan') {
             $workflow->requestRevision($this->permohonan, $user, $this->actionNotes);
-            session()->flash('success', 'Permohonan dikembalikan untuk perbaikan.');
+            $msg = 'Permohonan dikembalikan untuk perbaikan.';
         } elseif ($this->actionType === 'tolak') {
             $workflow->reject($this->permohonan, $user, $this->actionNotes);
-            session()->flash('success', 'Permohonan berhasil ditolak.');
+            $msg = 'Permohonan berhasil ditolak.';
         } elseif ($this->actionType === 'batal') {
             $workflow->cancel($this->permohonan, $user, $this->actionNotes);
-            session()->flash('success', 'Permohonan berhasil dibatalkan.');
+            $msg = 'Permohonan berhasil dibatalkan.';
         }
 
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
         $this->closeActionModal();
     }
 
@@ -309,8 +348,9 @@ class PermohonanDetail extends Component
                 'catatan' => $this->proxyNotes ?: 'Persetujuan Keuangan dicatat sistem',
             ]);
         });
-
-        session()->flash('success', 'Persetujuan Keuangan berhasil dicatat. Dana kini berstatus TERIKAT.');
+        $msg = 'Persetujuan Keuangan berhasil dicatat. Dana kini berstatus TERIKAT.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function submitPermohonan(): void
@@ -318,17 +358,110 @@ class PermohonanDetail extends Component
         $workflow = new PermohonanWorkflow;
         $workflow->submit($this->permohonan);
 
-        session()->flash('success', "Permohonan dana {$this->permohonan->fresh()->no_pengajuan} berhasil diajukan.");
+        $msg = "Permohonan dana {$this->permohonan->fresh()->no_pengajuan} berhasil diajukan.";
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+    }
+
+    public function openCairkanModal(): void
+    {
+        $p = $this->permohonan;
+        $this->tglCair = now()->toDateString();
+        $year = date('Y');
+        $month = date('m');
+        $count = Pencairan::whereYear('tgl_cair', $year)->whereMonth('tgl_cair', $month)->count();
+        $seq = $count + 1;
+        $candidate = sprintf('PPD/%s%s/%04d', $year, $month, $seq);
+        while (Pencairan::where('no_ppd', $candidate)->exists()) {
+            $seq++;
+            $candidate = sprintf('PPD/%s%s/%04d', $year, $month, $seq);
+        }
+        $this->noPpd = $candidate;
+        $manager = $p->unit?->getManager();
+        $this->pjId = $manager?->id;
+        $this->showCairkanModal = true;
+    }
+
+    public function closeCairkanModal(): void
+    {
+        $this->showCairkanModal = false;
+        $this->resetErrorBag();
+    }
+
+    public function submitCairkan(): void
+    {
+        $this->validate([
+            'noPpd' => ['required', 'string', 'max:100', 'unique:pencairan,no_ppd'],
+            'tglCair' => ['required', 'date'],
+            'pjId' => [
+                'required',
+                'exists:users,id',
+                function ($attribute, $value, $fail) {
+                    $cand = User::with('leveling')->find($value);
+                    if (! $cand || ($cand->leveling?->urutan ?? 0) < 2) {
+                        $fail('Penanggung Jawab (PJ) UMP wajib pejabat berlevel Manager atau lebih tinggi.');
+                    }
+                },
+            ],
+        ], [
+            'noPpd.required' => 'Nomor PPD wajib diisi.',
+            'noPpd.unique' => 'Nomor PPD sudah dipakai.',
+            'tglCair.required' => 'Tanggal pencairan wajib diisi.',
+            'pjId.required' => 'Penanggung Jawab (PJ) UMP wajib dipilih (level Manager).',
+        ]);
+
+        try {
+            $workflow = new PermohonanWorkflow;
+            $pencairan = $workflow->cairkan($this->permohonan, Auth::user(), [
+                'no_ppd' => $this->noPpd,
+                'tgl_cair' => $this->tglCair,
+                'pj_id' => $this->pjId,
+            ]);
+            $this->showCairkanModal = false;
+            $msg = "Pencairan PPD {$pencairan->no_ppd} berhasil diterbitkan.";
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+        } catch (RuntimeException $e) {
+            $this->addError('noPpd', $e->getMessage());
+        }
     }
 
     public function render(): View
     {
+        $unitId = $this->permohonan->unit_id;
+        $divisiId = $this->permohonan->unit?->getDivisiId();
+
+        $pjCandidates = User::where(function ($q) use ($unitId, $divisiId) {
+            $q->where('unit_id', $unitId);
+            if ($divisiId) {
+                $q->orWhere('unit_id', $divisiId);
+            }
+        })
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 2))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        if ($pjCandidates->isEmpty()) {
+            $pjCandidates = User::whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 2))
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+        }
+
+        $unitManager = $this->permohonan->unit?->getManager();
+        if ($unitManager) {
+            $pjCandidates = $pjCandidates->reject(fn ($u) => $u->id === $unitManager->id)->prepend($unitManager);
+        }
+
         return view('livewire.permohonan.permohonan-detail', [
             'permohonan' => $this->permohonan,
             'statusBadge' => $this->statusBadge,
             'canApprove' => $this->canApprove,
             'canCancel' => $this->canCancel,
             'canResubmit' => $this->canResubmit,
+            'canCairkan' => $this->canCairkan,
+            'pjCandidates' => $pjCandidates,
             'isFinanceStage' => $this->isFinanceStage,
             'canProxyFinanceApprove' => $this->canProxyFinanceApprove,
         ]);

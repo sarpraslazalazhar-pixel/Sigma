@@ -179,21 +179,27 @@ class UmpDetail extends Component
         $user = Auth::user();
 
         try {
+            $msg = '';
             if ($action === 'setuju') {
                 $workflow->approve($this->ump, $user, [
                     'catatan' => $this->approvalNotes ?: null,
                     'scan_final' => $this->scanFinalFile,
                 ]);
-                session()->flash('success', 'Persetujuan UMP tercatat. Tahap berikutnya diproses sistem.');
+                $msg = 'Persetujuan UMP tercatat. Tahap berikutnya diproses sistem.';
             } elseif ($action === 'perbaikan') {
                 $workflow->requestRevision($this->ump, $user, $this->approvalNotes);
-                session()->flash('success', 'UMP dikembalikan untuk perbaikan.');
+                $msg = 'UMP dikembalikan untuk perbaikan.';
             } elseif ($action === 'batal') {
                 $workflow->cancel($this->ump, $user, $this->approvalNotes);
-                session()->flash('success', 'UMP berhasil dibatalkan.');
+                $msg = 'UMP berhasil dibatalkan.';
             }
+
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+            $this->loadItems();
         } catch (RuntimeException $e) {
             session()->flash('error', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
 
             return;
         }
@@ -256,12 +262,15 @@ class UmpDetail extends Component
             (new UmpWorkflow)->saveItems($this->ump, $this->cleanedItems());
         } catch (RuntimeException $e) {
             session()->flash('error', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
 
             return;
         }
 
         $this->loadItems();
-        session()->flash('success', 'Draft UMP tersimpan. Saldo dan pembulatan diperbarui.');
+        $msg = 'Draft UMP tersimpan. Saldo dan pembulatan diperbarui.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function ajukanUMP(): void
@@ -296,12 +305,15 @@ class UmpDetail extends Component
             (new UmpWorkflow)->submitByPj($ump, $user, $this->catatanKekurangan);
         } catch (RuntimeException $e) {
             session()->flash('error', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
 
             return;
         }
 
         $this->loadItems();
-        session()->flash('success', 'UMP berhasil diajukan dan menunggu tanda tangan Penanggung Jawab.');
+        $msg = 'UMP berhasil diajukan dan menunggu tanda tangan Penanggung Jawab.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function simpanBuktiPendukung(): void

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Livewire\Master\KodeAnggaranIndex;
+use App\Livewire\Permohonan\PermohonanDetail;
+use App\Livewire\Permohonan\PermohonanIndex;
 use App\Models\KodeAnggaran;
 use App\Models\Lampiran;
 use App\Models\Permohonan;
@@ -133,5 +135,60 @@ class DivisionSecurityAndIntegrityTest extends TestCase
             ->assertHasErrors(['form_plafon']);
 
         $this->assertEquals(20000000, $parent->fresh()->plafon);
+    }
+
+    public function test_permohonan_is_visible_to_all_units_in_the_same_division_but_hidden_from_other_divisions(): void
+    {
+        $ta = TahunAnggaran::where('status', 'aktif')->firstOrFail();
+        $sumberDana = SumberDana::firstOrFail();
+
+        $userKlm = User::where('username', 'deden.salim')->firstOrFail(); // Unit Kelembagaan (DIV-SEK)
+        $userHum = User::where('username', 'manager.humas')->firstOrFail(); // Unit Humas (DIV-SEK, Sibling)
+        $userOtherDiv = User::where('username', 'manager.program')->firstOrFail(); // Unit Program (DIV-PRG)
+
+        $kode = KodeAnggaran::create([
+            'tahun_anggaran_id' => $ta->id,
+            'kode' => '89.1',
+            'nama' => 'Testing Node Divisi',
+            'depth' => 1,
+            'plafon' => 10000000,
+            'budget_status' => 'disahkan',
+            'is_active' => true,
+        ]);
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => 'TEST-SEK-9999',
+            'unit_id' => $userKlm->unit_id,
+            'user_id' => $userKlm->id,
+            'kode_anggaran_id' => $kode->id,
+            'program' => 'Program Sekretariat Bersama',
+            'nama_kegiatan' => 'Kegiatan Internal Divisi Sekretariat',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $sumberDana->id,
+            'status' => 'diajukan',
+            'total_diminta' => 2000000,
+        ]);
+
+        // 1. User dari unit Humas (masih satu Divisi Sekretariat) BISA melihat di daftar permohonan
+        Livewire::actingAs($userHum)
+            ->test(PermohonanIndex::class)
+            ->assertSee('TEST-SEK-9999')
+            ->assertSee('Kegiatan Internal Divisi Sekretariat');
+
+        // 2. User dari unit Humas BISA membuka detail permohonan
+        Livewire::actingAs($userHum)
+            ->test(PermohonanDetail::class, ['id' => $permohonan->id])
+            ->assertOk()
+            ->assertSee('TEST-SEK-9999');
+
+        // 3. User dari Divisi lain (Program) TIDAK BISA melihat di daftar permohonan
+        Livewire::actingAs($userOtherDiv)
+            ->test(PermohonanIndex::class)
+            ->assertDontSee('TEST-SEK-9999');
+
+        // 4. User dari Divisi lain ditolak 403 saat mencoba membuka detail langsung
+        $this->actingAs($userOtherDiv)
+            ->get("/permohonan/{$permohonan->id}")
+            ->assertStatus(403);
     }
 }

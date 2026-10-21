@@ -368,12 +368,12 @@
         <tr>
             {{-- Kiri: Diperiksa Oleh --}}
             <td class="sig-box">
-                <div class="sig-header">DIPERIKSA OLEH (KEPALA DIVISI / ATASAN)</div>
+                <div class="sig-header">DIPERIKSA OLEH (KEPALA DIVISI)</div>
                 <div class="sig-name">
-                    {{ $signerAtasan ? $signerAtasan->signer_name : ($permohonan->atasan ? $permohonan->atasan->name : '................................................') }}
+                    {{ $signerAtasan ? $signerAtasan->signer_name : '................................................' }}
                 </div>
                 <div class="sig-role">
-                    {{ $signerAtasan ? $signerAtasan->signer_jabatan : ($permohonan->atasan ? ($permohonan->atasan->jabatan ?? 'Atasan Langsung') : 'Kepala Divisi / Atasan Langsung') }}
+                    {{ $signerAtasan ? $signerAtasan->signer_jabatan : 'Kepala Divisi / Dirops' }}
                 </div>
                 <div class="sig-date">
                     Tgl: {{ $signerAtasan && $signerAtasan->signed_at ? \Carbon\Carbon::parse($signerAtasan->signed_at)->format('d/m/Y') : '......................' }}

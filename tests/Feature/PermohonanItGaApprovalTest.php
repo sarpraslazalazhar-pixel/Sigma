@@ -79,12 +79,12 @@ class PermohonanItGaApprovalTest extends TestCase
         $this->asnafAmil = Asnaf::where('nama', 'Amil')->firstOrFail();
     }
 
-    public function test_create_component_auto_selects_manager_and_zakat_for_pos_2_4(): void
+    public function test_create_component_determines_approver_by_nominal_and_auto_selects_zakat_for_pos_2_4(): void
     {
         Livewire::actingAs($this->koordinatorIt)
             ->test(PermohonanCreate::class)
             ->assertSet('unit_id', $this->unitIt->id)
-            ->assertSet('atasan_id', $this->managerHumas->id)
+            ->assertSet('atasan_id', null)
             ->set('kode_anggaran_id', $this->posSaranaIt->id)
             ->assertSet('sumber_dana_id', $this->sumberDanaZakat->id);
     }

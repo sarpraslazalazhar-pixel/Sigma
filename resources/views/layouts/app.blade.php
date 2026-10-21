@@ -14,6 +14,58 @@
         @livewireStyles
     </head>
     <body class="min-h-full font-sans antialiased text-slate-800 bg-slate-50 selection:bg-blue-600 selection:text-white" x-data="{ sidebarOpen: false }">
+        {{-- Material Design 3 Top Linear Progress Bar saat aksi Livewire --}}
+        <div
+            x-data="{
+                loading: false,
+                activeCount: 0,
+                timer: null,
+                init() {
+                    const setup = () => {
+                        if (!window.Livewire) return;
+                        Livewire.hook('commit', ({ succeed, fail }) => {
+                            this.activeCount++;
+                            if (!this.timer) {
+                                this.timer = setTimeout(() => {
+                                    if (this.activeCount > 0) this.loading = true;
+                                }, 150);
+                            }
+                            const done = () => {
+                                this.activeCount = Math.max(0, this.activeCount - 1);
+                                if (this.activeCount === 0) {
+                                    clearTimeout(this.timer);
+                                    this.timer = null;
+                                    this.loading = false;
+                                }
+                            };
+                            succeed(done);
+                            fail(done);
+                        });
+                    };
+                    if (window.Livewire) {
+                        setup();
+                    } else {
+                        document.addEventListener('livewire:init', setup, { once: true });
+                    }
+                    document.addEventListener('livewire:navigating', () => { this.loading = true; });
+                    document.addEventListener('livewire:navigated', () => {
+                        this.loading = false;
+                        this.activeCount = 0;
+                        if (this.timer) {
+                            clearTimeout(this.timer);
+                            this.timer = null;
+                        }
+                    });
+                }
+            }"
+            x-show="loading"
+            x-cloak
+            style="display: none;"
+            class="fixed top-0 inset-x-0 z-[100] m3-progress-bar pointer-events-none"
+            role="progressbar"
+            aria-label="Memproses..."
+        ></div>
+
         <div class="h-screen flex overflow-hidden bg-slate-50">
             {{-- Mobile Backdrop --}}
             <div
@@ -83,15 +135,12 @@
                                     href="{{ route('master.kode-anggaran') }}"
                                     wire:navigate
                                     @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('master.kode-anggaran') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    class="{{ request()->routeIs('master.kode-anggaran') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                 >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                                        </svg>
-                                        <span class="truncate">Master Anggaran</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('master.kode-anggaran') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R1</span>
+                                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                    </svg>
+                                    <span class="truncate">Master Anggaran</span>
                                 </a>
 
                                 {{-- Unit & Divisi --}}
@@ -99,15 +148,12 @@
                                     href="{{ route('master.unit-divisi') }}"
                                     wire:navigate
                                     @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('master.unit-divisi') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    class="{{ request()->routeIs('master.unit-divisi') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                 >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                        </svg>
-                                        <span class="truncate">Unit & Divisi</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('master.unit-divisi') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R1</span>
+                                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                    <span class="truncate">Unit & Divisi</span>
                                 </a>
 
                                 {{-- Permohonan Dana --}}
@@ -115,15 +161,12 @@
                                     href="{{ route('permohonan.index') }}"
                                     wire:navigate
                                     @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('permohonan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    class="{{ request()->routeIs('permohonan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                 >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <span class="truncate">Permohonan Dana</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('permohonan.*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R2</span>
+                                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span class="truncate">Permohonan Dana</span>
                                 </a>
 
                                 {{-- Pencairan PPD --}}
@@ -131,34 +174,28 @@
                                     href="{{ route('pencairan.index') }}"
                                     wire:navigate
                                     @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('pencairan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    class="{{ request()->routeIs('pencairan.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                 >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                                        </svg>
-                                        <span class="truncate">Pencairan PPD</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('pencairan.*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R3</span>
+                                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                    <span class="truncate">Pencairan PPD</span>
                                 </a>
                                 {{-- Laporan UMP --}}
                                 <a
                                     href="{{ route('ump.index') }}"
                                     wire:navigate
                                     @click="sidebarOpen = false"
-                                    class="{{ request()->routeIs('ump.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                    class="{{ request()->routeIs('ump.*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                 >
-                                    <span class="flex items-center gap-3 truncate">
-                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                        </svg>
-                                        <span class="truncate">Laporan UMP</span>
-                                    </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('ump.*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R3</span>
+                                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                    <span class="truncate">Laporan UMP</span>
                                 </a>
 
-                                {{-- Verifikasi Keuangan (R5) --}}
-                                @if (in_array(Auth::user()?->role, ['admin', 'keuangan']))
+                                {{-- Verifikasi Keuangan --}}
+                                @can('verifikasi-keuangan')
                                     @php
                                         $pendingVerifikasiCount = \App\Models\Permohonan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
                                             + \App\Models\Pencairan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
@@ -176,17 +213,13 @@
                                             </svg>
                                             <span class="truncate">Verifikasi Keuangan</span>
                                         </span>
-                                        <div class="flex items-center gap-1.5 shrink-0">
-                                            @if ($pendingVerifikasiCount > 0)
-                                                <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold animate-pulse">
-                                                    {{ $pendingVerifikasiCount }}
-                                                </span>
-                                            @endif
-                                            <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('keuangan.verifikasi*') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R5</span>
-                                        </div>
+                                        @if ($pendingVerifikasiCount > 0)
+                                            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold animate-pulse">
+                                                {{ $pendingVerifikasiCount }}
+                                            </span>
+                                        @endif
                                     </a>
-                                @endif
-
+                                @endcan
                                 {{-- Monitoring & Laporan Submenu --}}
                                 <div x-data="{ open: {{ request()->routeIs('laporan.*') ? 'true' : 'false' }} }" class="space-y-1">
                                     <button
@@ -247,7 +280,7 @@
                                     <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">TA 2026 Aktif</span>
                                 </a>
 
-                                @if (Auth::user()?->role === 'admin')
+                                @can('manage-users')
                                     <a
                                         href="{{ route('master.users') }}"
                                         wire:navigate
@@ -262,23 +295,20 @@
                                         </span>
                                         <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('master.users') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">Admin</span>
                                     </a>
-                                @endif
-                                @if (in_array(Auth::user()?->role, ['admin', 'keuangan']))
+                                @endcan
+                                @can('view-audit-logs')
                                     <a
                                         href="{{ route('master.audit-logs') }}"
                                         wire:navigate
                                         @click="sidebarOpen = false"
-                                        class="{{ request()->routeIs('master.audit-logs') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                        class="{{ request()->routeIs('master.audit-logs') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors"
                                     >
-                                        <span class="flex items-center gap-3 truncate">
-                                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span class="truncate">Audit Trail</span>
-                                        </span>
-                                        <span class="text-[9px] px-1.5 py-0.5 rounded-full {{ request()->routeIs('master.audit-logs') ? 'bg-blue-200 text-[#001B3E]' : 'bg-slate-100 text-slate-500' }} font-semibold">R1</span>
+                                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span class="truncate">Audit Trail</span>
                                     </a>
-                                @endif
+                                @endcan
                             </div>
                         </div>
                     </nav>
@@ -436,6 +466,89 @@
                     </footer>
                 </div>
             </div>
+        </div>
+
+        {{-- Material Design 3 Floating Snackbar (Toast Notification) --}}
+        <div
+            x-data="{
+                notifications: [],
+                add(data) {
+                    const id = Date.now() + Math.random();
+                    const notification = {
+                        id: id,
+                        type: data.type || 'success',
+                        message: typeof data === 'string' ? data : (data.message || 'Operasi berhasil.'),
+                        duration: data.duration || 4000
+                    };
+                    this.notifications.push(notification);
+                    setTimeout(() => {
+                        this.remove(id);
+                    }, notification.duration);
+                },
+                remove(id) {
+                    this.notifications = this.notifications.filter(n => n.id !== id);
+                }
+            }"
+            x-init="
+                window.addEventListener('notify', event => {
+                    add(event.detail);
+                });
+                @if (session()->has('success'))
+                    add({ type: 'success', message: '{{ addslashes(session('success')) }}' });
+                @endif
+                @if (session()->has('error'))
+                    add({ type: 'error', message: '{{ addslashes(session('error')) }}' });
+                @endif
+                @if (session()->has('warning'))
+                    add({ type: 'warning', message: '{{ addslashes(session('warning')) }}' });
+                @endif
+            "
+            class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"
+            aria-live="polite"
+        >
+            <template x-for="item in notifications" :key="item.id">
+                <div
+                    x-transition:enter="transition-all duration-300 ease-m3-emphasized-decel"
+                    x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave="transition-all duration-200 ease-m3-emphasized-accel"
+                    x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+                    class="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl shadow-lg border text-xs font-medium"
+                    :class="{
+                        'bg-[#0F2F57] text-white border-blue-900/40': item.type === 'success' || item.type === 'info',
+                        'bg-[#BA1A1A] text-white border-red-900/40': item.type === 'error',
+                        'bg-[#92400E] text-white border-amber-900/40': item.type === 'warning'
+                    }"
+                >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <template x-if="item.type === 'success' || item.type === 'info'">
+                            <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            </span>
+                        </template>
+                        <template x-if="item.type === 'error'">
+                            <span class="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </span>
+                        </template>
+                        <template x-if="item.type === 'warning'">
+                            <span class="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            </span>
+                        </template>
+                        <p x-text="item.message" class="truncate font-medium"></p>
+                    </div>
+                    <button
+                        type="button"
+                        @click="remove(item.id)"
+                        class="shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+                        aria-label="Tutup notifikasi"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </template>
         </div>
 
         @livewireScripts

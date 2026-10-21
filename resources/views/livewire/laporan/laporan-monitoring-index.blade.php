@@ -122,6 +122,7 @@
                     null-label="Semua Unit & Divisi"
                     search-placeholder="Cari unit atau divisi..."
                 />
+            </div>
 
             <div>
                 <label class="block text-[11px] font-semibold text-slate-600 mb-1">Status Pos</label>

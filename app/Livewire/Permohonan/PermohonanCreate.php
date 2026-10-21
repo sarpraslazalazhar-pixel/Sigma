@@ -46,6 +46,11 @@ class PermohonanCreate extends Component
 
     public ?int $atasan_id = null;
 
+    // Field khusus Petugas Input / TU: Pejabat Pembuat (Supervisor, Manajer, atau Kadiv)
+    public ?int $user_id = null;
+
+    public string $creatorLevel = '';
+
     // Multi-row items
     public array $items = [];
 
@@ -53,14 +58,27 @@ class PermohonanCreate extends Component
     {
         $user = Auth::user();
 
+        $this->user_id = $user?->id;
         $this->unit_id = $user?->unit_id;
         $this->tgl_mulai = now()->toDateString();
 
-        // Default sumber dana from unit default, parent divisi default, or first available
         $defaultSumberDana = null;
+        $defaultAsnafId = null;
         if ($this->unit_id) {
             $unit = Unit::with('parent')->find($this->unit_id);
-            $defaultSumberDana = $unit?->sumber_dana_default_id ?? $unit?->parent?->sumber_dana_default_id;
+            $isHumas = $unit && (
+                str_contains(strtoupper($unit->kode), 'HUM') ||
+                str_contains(strtolower($unit->nama), 'humas')
+            );
+
+            if ($isHumas) {
+                $infakUmum = SumberDana::where('nama', 'like', '%Infak Umum%')->first();
+                $defaultSumberDana = $infakUmum?->id ?? $unit?->sumber_dana_default_id;
+            } else {
+                $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
+                $defaultSumberDana = $unit?->sumber_dana_default_id ?? $zakat?->id;
+                $defaultAsnafId = Asnaf::where('nama', 'Amil')->value('id');
+            }
         }
 
         if (! $defaultSumberDana) {
@@ -71,31 +89,12 @@ class PermohonanCreate extends Component
 
         // Default program kosong agar diketik manual oleh pengaju
         $this->program = '';
-        // Default atasan_id to Manager of unit or parent divisi
-        if ($this->unit_id) {
-            $unit = Unit::find($this->unit_id);
-            $parentDivisiId = $unit?->parent_id;
-            $manager = User::where(function ($q) use ($parentDivisiId) {
-                $q->where('unit_id', $this->unit_id);
-                if ($parentDivisiId) {
-                    $q->orWhere('unit_id', $parentDivisiId)
-                        ->orWhereHas('unit', fn ($uq) => $uq->where('parent_id', $parentDivisiId));
-                }
-            })
-                ->whereHas('leveling', fn ($q) => $q->where('urutan', 2))
-                ->where('is_active', true)
-                ->orderByRaw('case when unit_id = '.(int) $this->unit_id.' then 0 else 1 end')
-                ->first();
-            if ($manager) {
-                $this->atasan_id = $manager->id;
-            }
-        }
 
         // Default 1 row
         $this->items = [
             [
                 'uraian' => '',
-                'asnaf_id' => null,
+                'asnaf_id' => $defaultAsnafId,
                 'program_utama_id' => null,
                 'jumlah_diminta' => '',
             ],
@@ -104,24 +103,60 @@ class PermohonanCreate extends Component
 
     public function updatedUnitId(?int $value): void
     {
-        if ($value) {
-            $unit = Unit::find($value);
-            $parentDivisiId = $unit?->parent_id;
-            $manager = User::where(function ($q) use ($value, $parentDivisiId) {
-                $q->where('unit_id', $value);
-                if ($parentDivisiId) {
-                    $q->orWhere('unit_id', $parentDivisiId)
-                        ->orWhereHas('unit', fn ($uq) => $uq->where('parent_id', $parentDivisiId));
+        if (! $value) {
+            return;
+        }
+
+        $unit = Unit::with('parent')->find($value);
+        $isHumas = $unit && (
+            str_contains(strtoupper($unit->kode), 'HUM') ||
+            str_contains(strtolower($unit->nama), 'humas')
+        );
+
+        if ($isHumas) {
+            $infakUmum = SumberDana::where('nama', 'like', '%Infak Umum%')->first();
+            $this->sumber_dana_id = $infakUmum?->id ?? $unit?->sumber_dana_default_id;
+        } else {
+            $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
+            $this->sumber_dana_id = $unit?->sumber_dana_default_id ?? $zakat?->id;
+
+            $asnafAmil = Asnaf::where('nama', 'Amil')->first();
+            if ($asnafAmil) {
+                foreach ($this->items as $idx => $item) {
+                    if (empty($this->items[$idx]['asnaf_id'])) {
+                        $this->items[$idx]['asnaf_id'] = $asnafAmil->id;
+                    }
                 }
-            })
-                ->whereHas('leveling', fn ($q) => $q->where('urutan', 2))
-                ->where('is_active', true)
-                ->orderByRaw('case when unit_id = '.(int) $value.' then 0 else 1 end')
-                ->first();
-            if ($manager) {
-                $this->atasan_id = $manager->id;
             }
         }
+    }
+
+    public function updatedUserId(?int $value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $selected = User::with('unit')->find($value);
+        if ($selected && $selected->unit_id) {
+            $this->unit_id = $selected->unit_id;
+            $this->updatedUnitId($selected->unit_id);
+        }
+    }
+
+    public function getIsTuProperty(): bool
+    {
+        $user = Auth::user();
+
+        return $user && ($user->is_petugas_input || $user->role === 'admin' || $user->role === 'keuangan');
+    }
+
+    public function getSelectedCreatorLevelProperty(): int
+    {
+        $creatorId = ($this->isTu && $this->user_id) ? $this->user_id : Auth::id();
+        $creator = $creatorId ? User::with('leveling')->find($creatorId) : null;
+
+        return $creator?->leveling?->urutan ?? 1;
     }
 
     public function updatedKodeAnggaranId(?int $value): void
@@ -147,9 +182,14 @@ class PermohonanCreate extends Component
 
     public function addItem(): void
     {
+        $sumberDana = $this->sumber_dana_id ? SumberDana::find($this->sumber_dana_id) : null;
+        $defaultAsnaf = ($sumberDana && $sumberDana->butuh_asnaf)
+            ? Asnaf::where('nama', 'Amil')->value('id')
+            : null;
+
         $this->items[] = [
             'uraian' => '',
-            'asnaf_id' => null,
+            'asnaf_id' => $defaultAsnaf,
             'program_utama_id' => null,
             'jumlah_diminta' => '',
         ];
@@ -239,7 +279,6 @@ class PermohonanCreate extends Component
             'tgl_selesai' => ['nullable', 'date', 'after_or_equal:tgl_mulai'],
             'sumber_dana_id' => ['required', 'exists:sumber_dana,id'],
             'kode_anggaran_id' => ['required', 'exists:kode_anggaran,id'],
-            'atasan_id' => ['nullable', 'exists:users,id'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.uraian' => ['required', 'string', 'max:255'],
             'items.*.jumlah_diminta' => ['required', 'integer', 'min:1'],
@@ -261,7 +300,9 @@ class PermohonanCreate extends Component
             'catatan_over.required' => 'Catatan over budget wajib diisi karena total pengajuan melebihi sisa plafon.',
             'catatan_over.min' => 'Catatan over budget minimal 10 karakter.',
         ];
-
+        if ($this->isTu) {
+            $rules['user_id'] = ['required', 'exists:users,id'];
+        }
         $this->validate($rules, $messages);
     }
 
@@ -274,7 +315,7 @@ class PermohonanCreate extends Component
                 'no_pengajuan' => 'DRAFT-'.strtoupper(Str::random(10)),
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
-                'user_id' => Auth::id(),
+                'user_id' => ($this->isTu && $this->user_id) ? $this->user_id : Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
                 'program' => $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
@@ -314,7 +355,7 @@ class PermohonanCreate extends Component
                 'no_pengajuan' => 'DRAFT-'.strtoupper(Str::random(10)),
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
-                'user_id' => Auth::id(),
+                'user_id' => ($this->isTu && $this->user_id) ? $this->user_id : Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
                 'program' => $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
@@ -352,11 +393,11 @@ class PermohonanCreate extends Component
         $taId = $activeYear ? $activeYear->id : 0;
 
         // Ambil leaf kode anggaran saja
-        $kodeAnggaranList = KodeAnggaran::where('tahun_anggaran_id', $taId)
+        $rawLeaf = KodeAnggaran::where('tahun_anggaran_id', $taId)
             ->where('is_active', true)
             ->whereDoesntHave('children')
-            ->orderBy('kode', 'asc')
             ->get();
+        $kodeAnggaranList = KodeAnggaran::sortHierarchically($rawLeaf);
 
         $programs = ProgramUtama::where('is_active', true)->orderBy('nama', 'asc')->get();
         $units = Unit::orderBy('nama', 'asc')->get();
@@ -365,16 +406,33 @@ class PermohonanCreate extends Component
 
         $selectedSumberDana = SumberDana::find($this->sumber_dana_id);
         $needsAsnaf = $selectedSumberDana && $selectedSumberDana->butuh_asnaf;
+        $creatorsQuery = User::with(['unit', 'leveling'])
+            ->where('is_active', true);
 
-        $atasanList = User::whereHas('leveling', function ($q) {
-            $q->whereIn('urutan', [2, 3]);
-        })
-            ->where('is_active', true)
-            ->orderByRaw('CASE WHEN unit_id = ? THEN 0 ELSE 1 END', [$this->unit_id ?: 0])
-            ->orderBy('name', 'asc')
-            ->get(['id', 'name', 'jabatan', 'unit_id']);
+        if ($this->creatorLevel === '1') {
+            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', 1));
+        } elseif ($this->creatorLevel === '2') {
+            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', 2));
+        } elseif ($this->creatorLevel === '3') {
+            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3));
+        }
+
+        $creatorCandidates = $creatorsQuery->orderBy('name')->get()->map(function ($u) {
+            $lvlName = $u->leveling?->nama ?? 'Staff';
+            $unitCode = $u->unit?->kode ?? '';
+            $subText = "[{$lvlName}] ".($u->jabatan ?: $u->unit?->nama ?? '').($unitCode ? " ({$unitCode})" : '');
+
+            return [
+                'id' => $u->id,
+                'name' => $u->name,
+                'sub' => $subText,
+            ];
+        });
 
         return view('livewire.permohonan.permohonan-create', [
+            'isTu' => $this->isTu,
+            'creatorCandidates' => $creatorCandidates,
+            'selectedCreatorLevel' => $this->selectedCreatorLevel,
             'programs' => $programs,
             'units' => $units,
             'sumberDanaList' => $sumberDanaList,
@@ -385,7 +443,6 @@ class PermohonanCreate extends Component
             'isOverBudget' => $this->isOverBudget,
             'requiredApprover' => $this->requiredApprover,
             'totalDiminta' => $this->totalDiminta,
-            'atasanList' => $atasanList,
         ]);
     }
 }

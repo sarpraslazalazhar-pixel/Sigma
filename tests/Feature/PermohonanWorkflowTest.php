@@ -8,6 +8,7 @@ use App\Models\Permohonan;
 use App\Models\PermohonanItem;
 use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
+use App\Models\Ump;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\BudgetCalculator;
@@ -29,6 +30,8 @@ class PermohonanWorkflowTest extends TestCase
 
     protected User $financeUser;
 
+    protected User $supervisorUser;
+
     protected TahunAnggaran $ta;
 
     protected Unit $unitKlm;
@@ -49,6 +52,7 @@ class PermohonanWorkflowTest extends TestCase
         $this->managerUser = User::where('username', 'deden.salim')->first();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->first();
         $this->financeUser = User::where('username', 'rochadi.kohar')->first();
+        $this->supervisorUser = User::where('username', 'subakti')->first();
 
         $this->ta = TahunAnggaran::where('status', 'aktif')->first();
         $this->unitKlm = Unit::where('kode', 'UNT-SEK-KLM')->first();
@@ -243,5 +247,177 @@ class PermohonanWorkflowTest extends TestCase
         $rootCalc = $tree->get($rootNode->id);
         $this->assertEquals(10000000, $rootCalc['dana_terikat']);
         $this->assertEquals(90000000, $rootCalc['sisa_tersedia']); // 100jt - 10jt = 90jt
+    }
+
+    public function test_under_2_million_can_be_approved_by_supervisor_and_moves_directly_to_finance(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Operasional Kecil',
+            'nama_kegiatan' => 'Beli Alat Tulis Kantor',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Kertas HVS dan Spidol',
+            'jumlah_diminta' => 1500000, // Rp 1.500.000 (Supervisor <= 2jt)
+        ]);
+
+        $workflow->submit($permohonan);
+        $this->assertEquals(1, $permohonan->fresh()->levelingRequired->urutan);
+
+        // Supervisor menyetujui -> status menjadi 'disetujui_atasan', lalu Kadiv mengetahui
+        $workflow->approve($permohonan, $this->supervisorUser, ['catatan' => 'Disetujui Supervisor']);
+        $this->assertEquals('disetujui_atasan', $permohonan->fresh()->status);
+
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kadiv']);
+        $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
+    }
+
+    public function test_between_2_and_10_million_rejected_for_supervisor_but_approved_by_manager(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Kegiatan Sedang',
+            'nama_kegiatan' => 'Pelatihan Staff',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Honor Pemateri Pelatihan',
+            'jumlah_diminta' => 6000000, // Rp 6.000.000 (Manager <= 10jt)
+        ]);
+
+        $workflow->submit($permohonan);
+        $this->assertEquals(2, $permohonan->fresh()->levelingRequired->urutan);
+
+        // Supervisor mencoba menyetujui -> gagal / exception
+        $this->expectException(\RuntimeException::class);
+        $workflow->approve($permohonan, $this->supervisorUser);
+    }
+
+    public function test_between_2_and_10_million_approved_by_manager_moves_directly_to_finance(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Kegiatan Sedang',
+            'nama_kegiatan' => 'Pelatihan Staff 2',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Honor Pemateri Pelatihan',
+            'jumlah_diminta' => 6000000, // Rp 6.000.000 (Manager <= 10jt)
+        ]);
+
+        $workflow->submit($permohonan);
+        // Manager menyetujui -> status 'disetujui_atasan', lalu Kadiv mengetahui
+        $workflow->approve($permohonan, $this->managerUser, ['catatan' => 'Disetujui Manager Divisi']);
+        $this->assertEquals('disetujui_atasan', $permohonan->fresh()->status);
+
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kadiv']);
+        $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
+    }
+
+    public function test_cairkan_ppd_defaults_pj_to_unit_manager(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id, // TU menginput
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Bantuan',
+            'nama_kegiatan' => 'Penyaluran Bantuan Warga',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        $item = PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Bantuan Warga',
+            'jumlah_diminta' => 5000000,
+        ]);
+
+        $workflow->submit($permohonan);
+        $workflow->approve($permohonan, $this->managerUser);
+        $workflow->approve($permohonan, $this->kadivUser);
+        $workflow->approve($permohonan, $this->financeUser, ['items' => [$item->id => 5000000]]);
+        // Pencairan PPD: PJ otomatis Manajer, bukan staf TU
+        $pencairan = $workflow->cairkan($permohonan, $this->financeUser, [
+            'no_ppd' => 'PPD/2026/TEST-PJ',
+            'tgl_cair' => now()->toDateString(),
+        ]);
+
+        $ump = Ump::where('pencairan_id', $pencairan->id)->firstOrFail();
+        $this->assertEquals($this->managerUser->id, $ump->pj_id);
+        $this->assertNotEquals($this->staffUser->id, $ump->pj_id);
+    }
+
+    public function test_kadiv_created_permohonan_auto_completes_tahap_2(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        // Kadiv membuat permohonan dana
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->kadivUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Strategis Kadiv',
+            'nama_kegiatan' => 'Rakor Pimpinan Lembaga',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        $item = PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Konsumsi & Akomodasi Rakor',
+            'jumlah_diminta' => 8000000,
+        ]);
+
+        // Submit oleh Kadiv
+        $submitted = $workflow->submit($permohonan);
+
+        // Tahap 1 & Tahap 2 otomatis selesai -> status langsung diketahui_kadiv
+        $this->assertEquals('diketahui_kadiv', $submitted->status);
+        $this->assertDatabaseHas('approvals', [
+            'approvable_type' => Permohonan::class,
+            'approvable_id' => $submitted->id,
+            'tahap' => 'kadiv',
+            'keputusan' => 'setuju',
+            'approver_id' => $this->kadivUser->id,
+        ]);
+
+        // Langsung dapat disetujui oleh Bagian Keuangan (Tahap 3) tanpa perlu atasan/kadiv lagi
+        $approvedFinance = $workflow->approve($submitted, $this->financeUser, ['items' => [$item->id => 8000000]]);
+        $this->assertEquals('disetujui_keuangan', $approvedFinance->status);
     }
 }

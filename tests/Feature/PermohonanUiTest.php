@@ -6,11 +6,13 @@ use App\Livewire\Permohonan\PermohonanCreate;
 use App\Livewire\Permohonan\PermohonanDetail;
 use App\Models\Asnaf;
 use App\Models\KodeAnggaran;
+use App\Models\Pencairan;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
 use App\Models\ProgramUtama;
 use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
+use App\Models\Ump;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\PermohonanWorkflow;
@@ -218,7 +220,7 @@ class PermohonanUiTest extends TestCase
         PermohonanItem::create([
             'permohonan_id' => $permohonan->id,
             'uraian' => 'Paket Sembako',
-            'jumlah_diminta' => 5000000,
+            'jumlah_diminta' => 15000000,
         ]);
 
         (new PermohonanWorkflow)->submit($permohonan);
@@ -335,5 +337,107 @@ class PermohonanUiTest extends TestCase
             'total_diminta' => 1500000,
             'status' => 'diajukan',
         ]);
+    }
+
+    public function test_detail_renders_successfully_when_status_is_dicairkan(): void
+    {
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => 'SEK-PMH-2026-0888',
+            'unit_id' => $this->unitSek->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Operasional',
+            'nama_kegiatan' => 'Pengadaan Alat Kantor',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'dicairkan',
+            'total_diminta' => 1500000,
+            'total_disetujui' => 1500000,
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Item Dicairkan',
+            'jumlah_diminta' => 1500000,
+            'jumlah_disetujui' => 1500000,
+        ]);
+        $pencairan = Pencairan::create([
+            'permohonan_id' => $permohonan->id,
+            'no_ppd' => 'PPD/202610/0888',
+            'tgl_cair' => now()->toDateString(),
+            'jumlah' => 1500000,
+            'status' => 'dicairkan',
+        ]);
+
+        Ump::create([
+            'pencairan_id' => $pencairan->id,
+            'tgl_terima' => now()->toDateString(),
+            'tujuan' => $permohonan->nama_kegiatan,
+            'pj_id' => $this->staffUser->id,
+            'jumlah_total' => 1500000,
+            'total_penggunaan' => 0,
+            'saldo' => 1500000,
+            'status' => 'draft',
+            'jatuh_tempo' => now()->addDays(14)->toDateString(),
+        ]);
+
+        $response = $this->actingAs($this->staffUser)->get("/permohonan/{$permohonan->id}");
+        $response->assertStatus(200);
+        $response->assertSee('Cetak Bukti PPD (PDF)');
+        $response->assertSee('Lihat UMP');
+    }
+
+    public function test_tu_can_select_creator_and_kadiv_creator_auto_completes_tahap_2(): void
+    {
+        // User staff TU Sekretariat memiliki is_petugas_input = true
+        $tuUser = $this->staffUser;
+        $this->assertTrue($tuUser->is_petugas_input);
+
+        // 1. TU memilih Pembuat = Kepala Divisi (Kadiv)
+        Livewire::actingAs($tuUser)
+            ->test(PermohonanCreate::class)
+            ->assertSee('Mode Input Atas Nama (Petugas Tata Usaha / Keuangan)')
+            ->set('user_id', $this->kadivUser->id)
+            ->set('program', 'Program Khusus Kadiv')
+            ->set('nama_kegiatan', 'Kegiatan Diusulkan Kadiv')
+            ->set('unit_id', $this->unitSek->id)
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'Item Kadiv')
+            ->set('items.0.jumlah_diminta', '4000000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        // Pembuat tersimpan sebagai Kadiv dan Tahap 1 & 2 otomatis selesai (status: diketahui_kadiv)
+        $pmhKadiv = Permohonan::where('nama_kegiatan', 'Kegiatan Diusulkan Kadiv')->firstOrFail();
+        $this->assertEquals($this->kadivUser->id, $pmhKadiv->user_id);
+        $this->assertEquals('diketahui_kadiv', $pmhKadiv->status);
+        $this->assertDatabaseHas('approvals', [
+            'approvable_type' => Permohonan::class,
+            'approvable_id' => $pmhKadiv->id,
+            'tahap' => 'kadiv',
+            'keputusan' => 'setuju',
+            'approver_id' => $this->kadivUser->id,
+        ]);
+
+        // 2. TU memilih Pembuat = Supervisor
+        Livewire::actingAs($tuUser)
+            ->test(PermohonanCreate::class)
+            ->set('user_id', $this->staffUser->id)
+            ->set('program', 'Program Supervisor')
+            ->set('nama_kegiatan', 'Kegiatan Diusulkan Supervisor')
+            ->set('unit_id', $this->unitSek->id)
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'Item Spv')
+            ->set('items.0.jumlah_diminta', '2000000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $pmhSpv = Permohonan::where('nama_kegiatan', 'Kegiatan Diusulkan Supervisor')->firstOrFail();
+        $this->assertEquals($this->staffUser->id, $pmhSpv->user_id);
+        $this->assertEquals('diajukan', $pmhSpv->status);
     }
 }

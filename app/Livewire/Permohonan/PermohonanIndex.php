@@ -110,18 +110,24 @@ class PermohonanIndex extends Component
                 $q->where('unit_id', $this->unitFilter);
             });
 
-        // Filter per hak akses: staf unit melihat permohonan unitnya atau miliknya
+        // Filter per hak akses: staf unit melihat permohonan semua unit dalam divisi yang sama (misal Sekretariat)
         if ($user && ! in_array($user->role, ['admin', 'keuangan'])) {
-            $query->where(function ($q) use ($user) {
-                if ($user->unit_id) {
-                    $q->where('unit_id', $user->unit_id);
+            $divisiUnitIds = $user->unit?->getSameDivisiUnitIds() ?? ($user->unit_id ? [$user->unit_id] : []);
+            $query->where(function ($q) use ($user, $divisiUnitIds) {
+                if (! empty($divisiUnitIds)) {
+                    $q->whereIn('unit_id', $divisiUnitIds);
                 }
                 $q->orWhere('user_id', $user->id);
             });
         }
 
         $permohonanList = $query->orderBy('id', 'desc')->paginate(15);
-        $units = Unit::orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
+
+        $unitsQuery = Unit::query();
+        if ($user && ! in_array($user->role, ['admin', 'keuangan']) && $user->unit) {
+            $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
+        }
+        $units = $unitsQuery->orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
 
         return view('livewire.permohonan.permohonan-index', [
             'permohonanList' => $permohonanList,

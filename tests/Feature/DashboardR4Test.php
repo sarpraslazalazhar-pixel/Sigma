@@ -100,7 +100,7 @@ class DashboardR4Test extends TestCase
             'atasan_id' => $this->managerUser->id,
             'sumber_dana_id' => $this->sumberDana->id,
             'nama_kegiatan' => 'Kegiatan Dashboard Test',
-            'latar_belakang' => 'Testing Dashboard R4',
+            'latar_belakang' => 'Testing Dashboard',
             'total_diminta' => 10000000,
             'status' => 'draft',
             'tgl_mulai' => now()->toDateString(),
@@ -275,5 +275,43 @@ class DashboardR4Test extends TestCase
         $rRoot = $rRows->firstWhere('kode', '2');
         $this->assertNotNull($rRoot);
         $this->assertEquals(10000000, $rRoot['total']);
+    }
+
+    public function test_pratinjau_data_anggaran_sorts_hierarchically_and_naturally(): void
+    {
+        // Buat pos anggaran dengan nomor multi digit untuk menguji natural sorting (1.1.1, 1.1.2, ..., 1.1.10)
+        $parent = KodeAnggaran::create([
+            'tahun_anggaran_id' => $this->ta->id,
+            'kode' => '8.8',
+            'nama' => 'Pos Parent Test Sorting',
+            'depth' => 2,
+            'plafon' => null,
+            'budget_status' => 'disahkan',
+            'is_active' => true,
+        ]);
+
+        $codes = ['8.8.10', '8.8.1', '8.8.2', '8.8.11', '8.8.3', '8.8.4', '8.8.5'];
+        foreach ($codes as $code) {
+            KodeAnggaran::create([
+                'tahun_anggaran_id' => $this->ta->id,
+                'parent_id' => $parent->id,
+                'kode' => $code,
+                'nama' => "Nama {$code}",
+                'depth' => 3,
+                'plafon' => 1000000,
+                'budget_status' => 'disahkan',
+                'is_active' => true,
+            ]);
+        }
+
+        $component = Livewire::actingAs($this->adminUser)
+            ->test(LaporanMonitoringIndex::class, ['tahunAnggaranId' => $this->ta->id]);
+
+        $rows = collect($component->viewData('monitoringRows'))->pluck('kode')->values()->all();
+        $filteredCodes = array_values(array_filter($rows, fn ($k) => str_starts_with($k, '8.8.')));
+
+        // Urutan alami wajib: 8.8.1, 8.8.2, 8.8.3, 8.8.4, 8.8.5, 8.8.10, 8.8.11
+        $expected = ['8.8.1', '8.8.2', '8.8.3', '8.8.4', '8.8.5', '8.8.10', '8.8.11'];
+        $this->assertSame($expected, $filteredCodes);
     }
 }
