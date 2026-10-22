@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\AlokasiAnggaran;
 use App\Models\KodeAnggaran;
 use App\Models\TahunAnggaran;
 use Illuminate\Database\Seeder;
@@ -28,7 +29,6 @@ class KodeAnggaranSeeder extends Seeder
                 'nama' => 'Penyaluran Dana ZIS & Operasional Amil',
                 'parent_id' => null,
                 'depth' => 1,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Penyaluran program ZISWAF dan hak kelola operasional amil',
                 'is_active' => true,
@@ -42,7 +42,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node2->id,
                 'nama' => 'Penyaluran Dana Zakat',
                 'depth' => 2,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Alokasi program penyaluran 8 asnaf zakat',
                 'is_active' => true,
@@ -55,7 +54,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node2->id,
                 'nama' => 'Penyaluran Dana Infak Kemanusiaan',
                 'depth' => 2,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Bantuan tanggap darurat dan bencana kemanusiaan',
                 'is_active' => true,
@@ -68,7 +66,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node2->id,
                 'nama' => 'Penyaluran Dana Infak Umum',
                 'depth' => 2,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Penyaluran program infak sedekah umum',
                 'is_active' => true,
@@ -81,7 +78,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node2->id,
                 'nama' => 'Penyaluran Dana Amil',
                 'depth' => 2,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Hak kelola operasional dan kepegawaian amil LAZ',
                 'is_active' => true,
@@ -95,7 +91,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node24->id,
                 'nama' => 'Biaya Kepegawaian',
                 'depth' => 3,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Gaji, tunjangan, dan pengembangan SDM amil',
                 'is_active' => true,
@@ -108,7 +103,6 @@ class KodeAnggaranSeeder extends Seeder
                 'parent_id' => $node24->id,
                 'nama' => 'Biaya Utilitas',
                 'depth' => 3,
-                'plafon' => null,
                 'budget_status' => 'disahkan',
                 'deskripsi' => 'Biaya operasional kantor, IT, utilitas, dan sarana kerja',
                 'is_active' => true,
@@ -139,15 +133,26 @@ class KodeAnggaranSeeder extends Seeder
         ];
 
         foreach ($kepegawaianLeaves as $item) {
-            KodeAnggaran::updateOrCreate(
+            $leafNode = KodeAnggaran::updateOrCreate(
                 ['tahun_anggaran_id' => $ta->id, 'kode' => $item['kode']],
                 [
                     'parent_id' => $node241->id,
                     'nama' => $item['nama'],
                     'depth' => 4,
-                    'plafon' => $item['plafon'],
                     'budget_status' => 'disahkan',
                     'is_active' => true,
+                ]
+            );
+
+            AlokasiAnggaran::updateOrCreate(
+                [
+                    'kode_anggaran_id' => $leafNode->id,
+                    'tahun_anggaran_id' => $ta->id,
+                ],
+                [
+                    'plafon_awal' => $item['plafon'],
+                    'plafon_revisi' => null,
+                    'keterangan_revisi' => null,
                 ]
             );
         }
@@ -173,15 +178,26 @@ class KodeAnggaranSeeder extends Seeder
         ];
 
         foreach ($utilitasLeaves as $item) {
-            KodeAnggaran::updateOrCreate(
+            $leafNode = KodeAnggaran::updateOrCreate(
                 ['tahun_anggaran_id' => $ta->id, 'kode' => $item['kode']],
                 [
                     'parent_id' => $node242->id,
                     'nama' => $item['nama'],
                     'depth' => 4,
-                    'plafon' => $item['plafon'],
                     'budget_status' => 'disahkan',
                     'is_active' => true,
+                ]
+            );
+
+            AlokasiAnggaran::updateOrCreate(
+                [
+                    'kode_anggaran_id' => $leafNode->id,
+                    'tahun_anggaran_id' => $ta->id,
+                ],
+                [
+                    'plafon_awal' => $item['plafon'],
+                    'plafon_revisi' => null,
+                    'keterangan_revisi' => null,
                 ]
             );
         }

@@ -27,6 +27,11 @@ class TahunAnggaran extends Model
         return $this->hasMany(KodeAnggaran::class, 'tahun_anggaran_id');
     }
 
+    public function alokasiAnggaran(): HasMany
+    {
+        return $this->hasMany(AlokasiAnggaran::class, 'tahun_anggaran_id');
+    }
+
     public function scopeAktif(Builder $query): Builder
     {
         return $query->where('status', 'aktif');

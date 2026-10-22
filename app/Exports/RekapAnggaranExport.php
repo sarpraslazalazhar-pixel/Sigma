@@ -47,6 +47,8 @@ class RekapAnggaranExport implements FromCollection, ShouldAutoSize, WithColumnF
             return [
                 'kode' => $row['kode'],
                 'nama' => $indent.$row['nama'],
+                'plafon_awal' => $row['plafon_awal'] ?? $row['effective_budget'],
+                'plafon_revisi' => $row['plafon_revisi'] ?? '-',
                 'plafon_rab' => $row['effective_budget'],
                 'dana_terikat' => $row['dana_terikat'],
                 'realisasi' => $row['realisasi'],
@@ -62,7 +64,9 @@ class RekapAnggaranExport implements FromCollection, ShouldAutoSize, WithColumnF
         return [
             'KODE',
             'POS ANGGARAN',
-            'PLAFON RAB',
+            'PLAFON AWAL',
+            'PLAFON REVISI',
+            'PLAFON EFEKTIF',
             'DANA TERIKAT',
             'REALISASI',
             'SISA TERSEDIA',
@@ -91,6 +95,8 @@ class RekapAnggaranExport implements FromCollection, ShouldAutoSize, WithColumnF
             'D' => '#,##0',
             'E' => '#,##0',
             'F' => '#,##0',
+            'G' => '#,##0',
+            'H' => '#,##0',
         ];
     }
 }

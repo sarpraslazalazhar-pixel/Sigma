@@ -3,10 +3,12 @@
 namespace App\Livewire\Permohonan;
 
 use App\Models\Permohonan;
+use App\Models\TahunAnggaran;
 use App\Models\Unit;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -22,6 +24,23 @@ class PermohonanIndex extends Component
     public string $statusFilter = '';
 
     public string $unitFilter = '';
+
+    public ?int $tahunAnggaranId = null;
+
+    public function mount(): void
+    {
+        $this->tahunAnggaranId = (int) session(
+            'tahun_anggaran_id',
+            TahunAnggaran::where('status', 'aktif')->value('id') ?? 0
+        );
+    }
+
+    #[On('tahun-anggaran-changed')]
+    public function onYearChanged(int $tahunAnggaranId): void
+    {
+        $this->tahunAnggaranId = $tahunAnggaranId;
+        $this->resetPage();
+    }
 
     public function updatingSearch(): void
     {
@@ -95,8 +114,10 @@ class PermohonanIndex extends Component
         $user = Auth::user();
 
         $query = Permohonan::with(['unit', 'user', 'kodeAnggaran', 'sumberDana'])
+            ->when($this->tahunAnggaranId, function ($q) {
+                $q->whereHas('kodeAnggaran', fn ($k) => $k->where('tahun_anggaran_id', $this->tahunAnggaranId));
+            })
             ->when($this->search !== '', function ($q) {
-                $term = '%'.trim($this->search).'%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('no_pengajuan', 'like', $term)
                         ->orWhere('nama_kegiatan', 'like', $term)

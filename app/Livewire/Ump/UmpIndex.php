@@ -2,11 +2,13 @@
 
 namespace App\Livewire\Ump;
 
+use App\Models\TahunAnggaran;
 use App\Models\Ump;
 use App\Models\Unit;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -22,6 +24,23 @@ class UmpIndex extends Component
     public string $statusFilter = '';
 
     public string $unitFilter = '';
+
+    public ?int $tahunAnggaranId = null;
+
+    public function mount(): void
+    {
+        $this->tahunAnggaranId = (int) session(
+            'tahun_anggaran_id',
+            TahunAnggaran::where('status', 'aktif')->value('id') ?? 0
+        );
+    }
+
+    #[On('tahun-anggaran-changed')]
+    public function onYearChanged(int $tahunAnggaranId): void
+    {
+        $this->tahunAnggaranId = $tahunAnggaranId;
+        $this->resetPage();
+    }
 
     public function updatingSearch(): void
     {
@@ -87,6 +106,9 @@ class UmpIndex extends Component
         $user = Auth::user();
 
         $query = Ump::with(['pencairan.permohonan.unit', 'pj'])
+            ->when($this->tahunAnggaranId, function ($q) {
+                $q->whereHas('pencairan.permohonan.kodeAnggaran', fn ($k) => $k->where('tahun_anggaran_id', $this->tahunAnggaranId));
+            })
             ->when($this->search !== '', function ($q) {
                 $term = '%'.trim($this->search).'%';
                 $q->where(function ($sub) use ($term) {
@@ -127,7 +149,10 @@ class UmpIndex extends Component
         $units = $unitsQuery->orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
 
         // Scope metrics the same way as listing
-        $metricsBase = Ump::query();
+        $metricsBase = Ump::query()
+            ->when($this->tahunAnggaranId, function ($q) {
+                $q->whereHas('pencairan.permohonan.kodeAnggaran', fn ($k) => $k->where('tahun_anggaran_id', $this->tahunAnggaranId));
+            });
         if ($user && ! in_array($user->role, ['admin', 'keuangan'], true)) {
             $divisiUnitIds = $user->unit?->getSameDivisiUnitIds() ?? ($user->unit_id ? [$user->unit_id] : []);
             $metricsBase->whereHas('pencairan.permohonan', function ($q2) use ($divisiUnitIds) {

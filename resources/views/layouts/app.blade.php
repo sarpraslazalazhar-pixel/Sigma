@@ -277,7 +277,10 @@
                                         </svg>
                                         <span class="truncate">Tahun Anggaran</span>
                                     </span>
-                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">TA 2026 Aktif</span>
+                                    @php
+                                        $sidebarTaAktif = \App\Models\TahunAnggaran::where('status', 'aktif')->first();
+                                    @endphp
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">TA {{ $sidebarTaAktif?->tahun ?? '-' }} Aktif</span>
                                 </a>
 
                                 @can('manage-users')
@@ -437,10 +440,7 @@
                         <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-[#0F2F57] text-xs font-medium border border-blue-100">
                             Mode Input Atas Nama Keuangan
                         </span>
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span>TA 2026</span>
-                        </span>
+                        <livewire:components.year-switcher />
                         <livewire:components.notification-bell />
                     </div>
                 </header>

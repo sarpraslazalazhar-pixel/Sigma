@@ -278,7 +278,16 @@ class PermohonanCreate extends Component
             'tgl_mulai' => ['required', 'date'],
             'tgl_selesai' => ['nullable', 'date', 'after_or_equal:tgl_mulai'],
             'sumber_dana_id' => ['required', 'exists:sumber_dana,id'],
-            'kode_anggaran_id' => ['required', 'exists:kode_anggaran,id'],
+            'kode_anggaran_id' => [
+                'required',
+                'exists:kode_anggaran,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $node = KodeAnggaran::with('tahunAnggaran')->find($value);
+                    if ($node && $node->tahunAnggaran?->status !== 'aktif') {
+                        $fail('Pengajuan permohonan dana hanya dapat dilakukan pada tahun anggaran aktif.');
+                    }
+                },
+            ],
             'items' => ['required', 'array', 'min:1'],
             'items.*.uraian' => ['required', 'string', 'max:255'],
             'items.*.jumlah_diminta' => ['required', 'integer', 'min:1'],

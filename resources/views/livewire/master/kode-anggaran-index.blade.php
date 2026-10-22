@@ -11,7 +11,42 @@
         </div>
 
         {{-- Primary Action Button (Touch target >= 44px) --}}
-        <div class="flex items-center gap-2.5 shrink-0">
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+            <button
+                type="button"
+                wire:click="toggleBatchEditMode"
+                class="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full border {{ $batchEditMode ? 'bg-[#001B3E] text-white border-[#001B3E]' : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700' }} text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            >
+                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>{{ $batchEditMode ? 'Keluar Mode Edit' : 'Mode Edit Plafon' }}</span>
+            </button>
+
+            <button
+                type="button"
+                wire:click="downloadTemplate"
+                class="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                title="Unduh template Excel untuk pengisian alokasi anggaran"
+            >
+                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Unduh Template</span>
+            </button>
+
+            <button
+                type="button"
+                wire:click="openImportModal"
+                class="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                title="Import alokasi anggaran dari file Excel"
+            >
+                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Import Excel</span>
+            </button>
+
             <button
                 type="button"
                 wire:click="openCreateModal()"
@@ -342,7 +377,7 @@
                             <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                                 <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Plafon Budget</span>
                                 <span class="font-bold text-slate-900 tabular-nums mt-0.5 block">
-                                    {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : 'Mengikuti Anak' }}
+                                    {{ ($calc['plafon'] ?? null) !== null ? 'Rp ' . number_format($calc['plafon'], 0, ',', '.') : 'Mengikuti Anak' }}
                                 </span>
                             </div>
 
@@ -353,7 +388,7 @@
                                 </span>
                             </div>
 
-                            @if ($node->plafon !== null && !$calc['is_leaf'])
+                            @if (($calc['plafon'] ?? null) !== null && !$calc['is_leaf'])
                                 <div class="col-span-2 p-2.5 rounded-xl bg-blue-50/70 border border-blue-100">
                                     <span class="text-[10px] font-semibold uppercase tracking-wider text-blue-700 block">Belum Dialokasikan</span>
                                     <span class="font-bold text-[#0F2F57] tabular-nums mt-0.5 block">
@@ -431,9 +466,15 @@
                             <th class="py-3.5 px-4">Kode Pos</th>
                             <th class="py-3.5 px-4">Nama Pos Anggaran</th>
                             <th class="py-3.5 px-3 text-center">Tingkat</th>
-                            <th class="py-3.5 px-4 text-right">Plafon Induk</th>
-                            <th class="py-3.5 px-4 text-right">Total Alokasi Anak</th>
-                            <th class="py-3.5 px-4 text-right">Belum Dialokasikan</th>
+                            @if ($batchEditMode && $prevYear)
+                                <th class="py-3.5 px-3 text-right bg-blue-50/60 text-[#0F2F57]">Plafon TA {{ $prevYear->tahun }}</th>
+                                <th class="py-3.5 px-3 text-right bg-blue-50/60 text-[#0F2F57]">Realisasi TA {{ $prevYear->tahun }}</th>
+                            @endif
+                            <th class="py-3.5 px-4 text-right">{{ $batchEditMode ? 'Plafon Baru (Rp)' : 'Plafon Induk' }}</th>
+                            @if (! $batchEditMode)
+                                <th class="py-3.5 px-4 text-right">Total Alokasi Anak</th>
+                                <th class="py-3.5 px-4 text-right">Belum Dialokasikan</th>
+                            @endif
                             <th class="py-3.5 px-3 text-center">Status</th>
                             <th class="py-3.5 px-4 text-right">Aksi</th>
                         </tr>
@@ -493,22 +534,47 @@
                                         Depth {{ $node->depth }}
                                     </span>
                                 </td>
+                                @if ($batchEditMode && $prevYear)
+                                    @php
+                                        $prevCalc = $prevTreeCalculation->get($node->id);
+                                    @endphp
+                                    <td class="py-3.5 px-3 text-right tabular-nums text-slate-500 whitespace-nowrap bg-blue-50/30">
+                                        {{ ($prevCalc['plafon'] ?? null) !== null ? 'Rp ' . number_format($prevCalc['plafon'], 0, ',', '.') : '-' }}
+                                    </td>
+                                    <td class="py-3.5 px-3 text-right tabular-nums text-slate-500 whitespace-nowrap bg-blue-50/30">
+                                        {{ ($prevCalc['realisasi'] ?? null) !== null ? 'Rp ' . number_format($prevCalc['realisasi'], 0, ',', '.') : '-' }}
+                                    </td>
+                                @endif
 
                                 <td class="py-3.5 px-4 text-right font-semibold tabular-nums text-slate-900 whitespace-nowrap">
-                                    {{ $node->plafon !== null ? 'Rp ' . number_format($node->plafon, 0, ',', '.') : '-' }}
-                                </td>
-
-                                <td class="py-3.5 px-4 text-right tabular-nums text-slate-700 whitespace-nowrap">
-                                    Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
-                                </td>
-
-                                <td class="py-3.5 px-4 text-right tabular-nums font-semibold whitespace-nowrap {{ ($calc['belum_dialokasikan'] ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700' }}">
-                                    @if ($node->plafon !== null && !$calc['is_leaf'])
-                                        Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
+                                    @if ($batchEditMode && $calc['is_leaf'])
+                                        <div class="inline-flex items-center gap-1">
+                                            <span class="text-xs text-slate-400">Rp</span>
+                                            <input
+                                                type="text"
+                                                wire:model.defer="batchEdits.{{ $node->id }}"
+                                                placeholder="{{ number_format($calc['plafon'] ?? 0, 0, ',', '.') }}"
+                                                class="w-36 text-right px-2.5 py-1 text-xs font-bold rounded-lg border border-blue-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 tabular-nums bg-white text-slate-900"
+                                            />
+                                        </div>
                                     @else
-                                        <span class="text-slate-300">-</span>
+                                        {{ ($calc['plafon'] ?? null) !== null ? 'Rp ' . number_format($calc['plafon'], 0, ',', '.') : '-' }}
                                     @endif
                                 </td>
+
+                                @if (! $batchEditMode)
+                                    <td class="py-3.5 px-4 text-right tabular-nums text-slate-700 whitespace-nowrap">
+                                        Rp {{ number_format($calc['total_anak'] ?? 0, 0, ',', '.') }}
+                                    </td>
+
+                                    <td class="py-3.5 px-4 text-right tabular-nums font-semibold whitespace-nowrap {{ ($calc['belum_dialokasikan'] ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700' }}">
+                                        @if (($calc['plafon'] ?? null) !== null && ! $calc['is_leaf'])
+                                            Rp {{ number_format($calc['belum_dialokasikan'] ?? 0, 0, ',', '.') }}
+                                        @else
+                                            <span class="text-slate-300">-</span>
+                                        @endif
+                                    </td>
+                                @endif
 
                                 <td class="py-3.5 px-3 text-center whitespace-nowrap">
                                     <div class="inline-flex flex-col items-center gap-1">
@@ -728,6 +794,27 @@
                         @enderror
                     </div>
 
+                    @php
+                        $modalTa = \App\Models\TahunAnggaran::find($tahun_anggaran_id);
+                    @endphp
+                    @if ($modalTa?->status === 'aktif')
+                        <div>
+                            <label for="form_keterangan_revisi" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Keterangan / Catatan Revisi <span class="text-amber-600 font-normal">(Wajib jika mengubah plafon tahun aktif)</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="form_keterangan_revisi"
+                                wire:model="form_keterangan_revisi"
+                                placeholder="Alasan perubahan alokasi plafon..."
+                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('form_keterangan_revisi') border-red-500 @enderror"
+                            />
+                            @error('form_keterangan_revisi')
+                                <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+
                     {{-- Deskripsi --}}
                     <div>
                         <label for="form_deskripsi" class="block text-xs font-semibold text-slate-700 mb-1">
@@ -817,7 +904,7 @@
                             <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
                                 <span class="text-[10px] font-semibold text-slate-500 uppercase block">Plafon Pos</span>
                                 <span class="font-bold text-slate-900 text-sm tabular-nums mt-1 block">
-                                    {{ $detailNode->plafon !== null ? 'Rp ' . number_format($detailNode->plafon, 0, ',', '.') : 'Mengikuti Anak' }}
+                                    {{ ($detailMetrics['plafon'] ?? null) !== null ? 'Rp ' . number_format($detailMetrics['plafon'], 0, ',', '.') : 'Mengikuti Anak' }}
                                 </span>
                             </div>
 
@@ -904,7 +991,7 @@
                                             </div>
                                             <div class="flex items-center gap-2 shrink-0">
                                                 <span class="font-semibold text-slate-700 tabular-nums">
-                                                    {{ $child->plafon !== null ? 'Rp ' . number_format($child->plafon, 0, ',', '.') : '-' }}
+                                                    {{ $child->getPlafonEfektif($tahun_anggaran_id) ? 'Rp ' . number_format($child->getPlafonEfektif($tahun_anggaran_id), 0, ',', '.') : '-' }}
                                                 </span>
                                                 <button
                                                     type="button"
@@ -985,6 +1072,250 @@
                                 Sahkan Budget
                             </button>
                         @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- STICKY FOOTER BAR FOR BATCH EDIT MODE --}}
+    @if ($batchEditMode)
+        <div class="fixed bottom-0 left-0 right-0 z-40 bg-[#DCE5F6] text-[#001B3E] border-t border-slate-300 shadow-2xl px-6 py-3.5 backdrop-blur-md">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <span class="px-3 py-1 rounded-full text-xs font-bold bg-[#001B3E] text-white">
+                        Mode Edit Plafon
+                    </span>
+                    <span class="text-xs font-semibold text-slate-800">
+                        {{ count($batchEdits) }} pos anggaran diisi
+                    </span>
+                </div>
+
+                @php
+                    $currentTa = \App\Models\TahunAnggaran::find($tahun_anggaran_id);
+                @endphp
+                @if ($currentTa?->status === 'aktif')
+                    <div class="w-full md:w-96">
+                        <input
+                            type="text"
+                            wire:model="batchRevisionNote"
+                            placeholder="Catatan / Alasan Revisi (Wajib untuk Tahun Aktif)..."
+                            class="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 focus:border-blue-600 focus:outline-hidden @error('batchRevisionNote') border-red-500 @enderror"
+                        />
+                        @error('batchRevisionNote')
+                            <p class="text-[11px] text-red-600 font-semibold mt-0.5">{{ $message }}</p>
+                        @enderror
+                    </div>
+                @endif
+
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        wire:click="toggleBatchEditMode"
+                        class="min-h-[40px] px-4 py-2 rounded-full border border-slate-400 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="saveBatchEdits"
+                        class="min-h-[40px] px-5 py-2 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+                    >
+                        Simpan Semua Perubahan
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- MODAL UPLOAD IMPORT EXCEL --}}
+    @if ($showImportModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+            <div
+                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden"
+                @click.outside="$wire.set('showImportModal', false)"
+            >
+                <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-bold text-[#0F2F57]">
+                            Import Alokasi Anggaran (Excel)
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Unggah template XLSX yang telah diisi untuk pratinjau perubahan.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="$set('showImportModal', false)"
+                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form wire:submit="uploadImport" class="p-6 space-y-4">
+                    <div>
+                        <label for="importFile" class="block text-xs font-semibold text-slate-700 mb-1">
+                            Pilih File Excel (.xlsx / .xls) *
+                        </label>
+                        <input
+                            type="file"
+                            id="importFile"
+                            wire:model="importFile"
+                            accept=".xlsx,.xls"
+                            class="w-full text-xs text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 rounded-xl p-2"
+                            required
+                        />
+                        <div wire:loading wire:target="importFile" class="text-xs text-blue-600 mt-1">
+                            Mengunggah berkas...
+                        </div>
+                        @error('importFile')
+                            <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                        <p class="font-semibold text-slate-700">Petunjuk Pengisian:</p>
+                        <p>1. Unduh template resmi melalui tombol "Unduh Template".</p>
+                        <p>2. Isi nominal baru pada kolom <strong>PLAFON BARU</strong> hanya pada baris pos leaf.</p>
+                        <p>3. Format angka dapat berupa angka murni (cth: 50000000) atau format ribuan.</p>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                        <button
+                            type="button"
+                            wire:click="$set('showImportModal', false)"
+                            class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            class="min-h-[44px] px-5 py-2.5 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                        >
+                            <span>Lanjutkan ke Pratinjau Diff</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
+
+    {{-- MODAL PREVIEW DIFF IMPORT --}}
+    @if ($showDiffModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+            <div
+                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
+                @click.outside="$wire.set('showDiffModal', false)"
+            >
+                <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div>
+                        <h2 class="text-base font-bold text-[#0F2F57]">
+                            Pratinjau Perubahan Alokasi (Diff Preview)
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            Periksa perbedaan nominal sebelum menerapkan ke basis data.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="$set('showDiffModal', false)"
+                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-6 overflow-y-auto flex-1 space-y-4">
+                    <div class="rounded-2xl border border-slate-200 overflow-hidden">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                                <tr>
+                                    <th class="py-2.5 px-3">Kode</th>
+                                    <th class="py-2.5 px-3">Nama Akun</th>
+                                    <th class="py-2.5 px-3 text-right">Plafon Lama</th>
+                                    <th class="py-2.5 px-3 text-right">Plafon Baru</th>
+                                    <th class="py-2.5 px-3 text-center">Perubahan</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                @foreach ($importDiff as $item)
+                                    <tr class="hover:bg-slate-50/70">
+                                        <td class="py-2.5 px-3 font-mono font-bold text-slate-900">{{ $item['kode'] }}</td>
+                                        <td class="py-2.5 px-3 text-slate-700">{{ $item['nama'] }}</td>
+                                        <td class="py-2.5 px-3 text-right tabular-nums text-slate-500">
+                                            Rp {{ number_format($item['old_plafon'], 0, ',', '.') }}
+                                        </td>
+                                        <td class="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">
+                                            Rp {{ number_format($item['new_plafon'], 0, ',', '.') }}
+                                        </td>
+                                        <td class="py-2.5 px-3 text-center">
+                                            @if ($item['direction'] === 'up')
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#D0F7E3] text-[#002114]">
+                                                    ↑ {{ $item['change_pct'] }}%
+                                                </span>
+                                            @elseif ($item['direction'] === 'down')
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFDAD6] text-[#410002]">
+                                                    ↓ {{ $item['change_pct'] }}%
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                                                    = Tetap
+                                                </span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @php
+                        $targetYear = \App\Models\TahunAnggaran::find($tahun_anggaran_id);
+                    @endphp
+                    @if ($targetYear?->status === 'aktif')
+                        <div>
+                            <label for="importRevisionNote" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Catatan / Keterangan Revisi <span class="text-amber-600 font-normal">(Wajib untuk tahun aktif)</span> *
+                            </label>
+                            <input
+                                type="text"
+                                id="importRevisionNote"
+                                wire:model="importRevisionNote"
+                                placeholder="Alasan perubahan alokasi melalui import Excel..."
+                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white text-slate-900 focus:border-blue-600 focus:outline-hidden @error('importRevisionNote') border-red-500 @enderror"
+                            />
+                            @error('importRevisionNote')
+                                <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    @endif
+                </div>
+
+                <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+                    <span class="text-xs font-medium text-slate-600">
+                        Total {{ count($importDiff) }} akun akan diperbarui.
+                    </span>
+                    <div class="flex items-center gap-2">
+                        <button
+                            type="button"
+                            wire:click="$set('showDiffModal', false)"
+                            class="min-h-[44px] px-4 py-2 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-white transition-colors cursor-pointer"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="button"
+                            wire:click="applyImport"
+                            class="min-h-[44px] px-5 py-2 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                        >
+                            Terapkan Perubahan
+                        </button>
                     </div>
                 </div>
             </div>

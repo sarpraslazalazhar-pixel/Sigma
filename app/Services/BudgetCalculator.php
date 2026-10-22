@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AlokasiAnggaran;
 use App\Models\KodeAnggaran;
 use App\Models\Permohonan;
 use App\Models\Setting;
@@ -31,6 +32,9 @@ class BudgetCalculator
             ->orderBy('kode', 'asc')
             ->get();
 
+        $alokasiByNode = AlokasiAnggaran::where('tahun_anggaran_id', $tahunAnggaranId)
+            ->get()
+            ->keyBy('kode_anggaran_id');
         $danaTerikatQuery = Permohonan::whereIn('status', ['disetujui_keuangan', 'dicairkan'])
             ->whereHas('kodeAnggaran', fn ($q) => $q->where('tahun_anggaran_id', $tahunAnggaranId));
         if ($unitId) {
@@ -73,9 +77,14 @@ class BudgetCalculator
             $children = $childrenByParent->get($node->id, collect());
             $isLeaf = $children->isEmpty();
 
+            $alokasi = $alokasiByNode->get($node->id);
+            $nodePlafon = $alokasi ? $alokasi->plafon_efektif : null;
+            $plafonAwal = $alokasi?->plafon_awal;
+            $plafonRevisi = $alokasi?->plafon_revisi;
+
             if ($isLeaf) {
                 $totalAnak = 0;
-                $effectiveBudget = $node->plafon ?? 0;
+                $effectiveBudget = $nodePlafon ?? 0;
                 $belumDialokasikan = 0;
                 $danaTerikat = (int) ($danaTerikatByNode->get($node->id) ?? 0);
                 $realisasi = (int) ($realisasiByNode->get($node->id) ?? 0);
@@ -93,14 +102,13 @@ class BudgetCalculator
                     return $calculated->get($child->id)['realisasi'] ?? 0;
                 });
 
-                if ($node->plafon !== null) {
-                    $effectiveBudget = $node->plafon;
-                    $belumDialokasikan = $node->plafon - $totalAnak;
+                if ($nodePlafon !== null) {
+                    $effectiveBudget = $nodePlafon;
+                    $belumDialokasikan = $nodePlafon - $totalAnak;
                 } else {
                     $effectiveBudget = $totalAnak;
                     $belumDialokasikan = 0;
                 }
-
             }
 
             $sisaTersedia = max(0, $effectiveBudget - $realisasi - $danaTerikat);
@@ -125,7 +133,9 @@ class BudgetCalculator
                 'depth' => $node->depth,
                 'parent_id' => $node->parent_id,
                 'is_leaf' => $isLeaf,
-                'plafon' => $node->plafon,
+                'plafon' => $nodePlafon,
+                'plafon_awal' => $plafonAwal,
+                'plafon_revisi' => $plafonRevisi,
                 'total_anak' => $totalAnak,
                 'effective_budget' => $effectiveBudget,
                 'belum_dialokasikan' => $belumDialokasikan,
@@ -241,7 +251,7 @@ class BudgetCalculator
 
             $totalPengeluaran = array_sum($months);
             $treeItem = $treeCalculation->get($node->id);
-            $plafonRab = $treeItem['effective_budget'] ?? ($node->plafon ?? 0);
+            $plafonRab = $treeItem['effective_budget'] ?? ($treeItem['plafon'] ?? 0);
             $sisaAnggaran = max(0, $plafonRab - $totalPengeluaran);
             $persentase = $plafonRab > 0 ? round(($totalPengeluaran / $plafonRab) * 100, 1) : 0;
 

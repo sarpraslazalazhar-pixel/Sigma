@@ -12,6 +12,7 @@ use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -34,6 +35,23 @@ class PencairanIndex extends Component
     public string $sumberDanaFilter = '';
 
     public string $tahunFilter = '';
+
+    public ?int $tahunAnggaranId = null;
+
+    public function mount(): void
+    {
+        $this->tahunAnggaranId = (int) session(
+            'tahun_anggaran_id',
+            TahunAnggaran::where('status', 'aktif')->value('id') ?? 0
+        );
+    }
+
+    #[On('tahun-anggaran-changed')]
+    public function onYearChanged(int $tahunAnggaranId): void
+    {
+        $this->tahunAnggaranId = $tahunAnggaranId;
+        $this->resetPage();
+    }
 
     public string $bulanFilter = '';
 
@@ -155,6 +173,9 @@ class PencairanIndex extends Component
         $query = Pencairan::with(['permohonan.unit', 'permohonan.user', 'ump.pj'])
             ->orderBy('tgl_cair', 'desc');
 
+        if ($this->tahunAnggaranId && $this->tahunFilter === '') {
+            $query->whereHas('permohonan.kodeAnggaran', fn ($k) => $k->where('tahun_anggaran_id', $this->tahunAnggaranId));
+        }
         if (! $isGlobal) {
             $divisiUnitIds = $user?->unit?->getSameDivisiUnitIds() ?? ($user?->unit_id ? [$user->unit_id] : []);
             $query->whereHas('permohonan', function ($q) use ($user, $divisiUnitIds) {

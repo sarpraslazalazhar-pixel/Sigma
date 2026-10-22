@@ -13,6 +13,7 @@ use App\Services\AuditLogger;
 use App\Services\BudgetCalculator;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -38,10 +39,19 @@ class LaporanMonitoringIndex extends Component
     public function mount(): void
     {
         if ($this->tahunAnggaranId === null) {
-            $activeYear = TahunAnggaran::where('status', 'aktif')->first()
-                ?? TahunAnggaran::orderBy('tahun', 'desc')->first();
-            $this->tahunAnggaranId = $activeYear?->id;
+            $this->tahunAnggaranId = (int) session(
+                'tahun_anggaran_id',
+                TahunAnggaran::where('status', 'aktif')->value('id')
+                    ?? TahunAnggaran::orderBy('tahun', 'desc')->value('id')
+                    ?? 0
+            );
         }
+    }
+
+    #[On('tahun-anggaran-changed')]
+    public function onYearChanged(int $tahunAnggaranId): void
+    {
+        $this->tahunAnggaranId = $tahunAnggaranId;
     }
 
     public function exportRekapAnggaran(): BinaryFileResponse

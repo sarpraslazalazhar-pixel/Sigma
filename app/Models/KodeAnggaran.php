@@ -24,11 +24,61 @@ class KodeAnggaran extends Model
         'is_active',
     ];
 
+    public ?int $tempPlafon = null;
+
+    protected static function booted(): void
+    {
+        static::saved(function (self $node) {
+            if ($node->tempPlafon !== null && $node->tahun_anggaran_id) {
+                AlokasiAnggaran::updateOrCreate(
+                    [
+                        'kode_anggaran_id' => $node->id,
+                        'tahun_anggaran_id' => $node->tahun_anggaran_id,
+                    ],
+                    [
+                        'plafon_awal' => (int) $node->tempPlafon,
+                    ]
+                );
+                $node->tempPlafon = null;
+            }
+        });
+    }
+
+    public function getPlafonAttribute(): ?int
+    {
+        $alokasi = $this->alokasi();
+
+        return $alokasi ? $alokasi->plafon_efektif : null;
+    }
+
+    public function setPlafonAttribute($value): void
+    {
+        $val = $value !== null && $value !== '' ? (int) $value : null;
+        if ($this->exists && $this->tahun_anggaran_id) {
+            if ($val !== null) {
+                AlokasiAnggaran::updateOrCreate(
+                    [
+                        'kode_anggaran_id' => $this->id,
+                        'tahun_anggaran_id' => $this->tahun_anggaran_id,
+                    ],
+                    [
+                        'plafon_awal' => $val,
+                    ]
+                );
+            } else {
+                AlokasiAnggaran::where('kode_anggaran_id', $this->id)
+                    ->where('tahun_anggaran_id', $this->tahun_anggaran_id)
+                    ->delete();
+            }
+        } else {
+            $this->tempPlafon = $val;
+        }
+    }
+
     protected function casts(): array
     {
         return [
             'depth' => 'integer',
-            'plafon' => 'integer',
             'is_active' => 'boolean',
         ];
     }
@@ -51,6 +101,25 @@ class KodeAnggaran extends Model
     public function prevYear(): BelongsTo
     {
         return $this->belongsTo(KodeAnggaran::class, 'prev_year_id');
+    }
+
+    public function alokasiAnggaran(): HasMany
+    {
+        return $this->hasMany(AlokasiAnggaran::class, 'kode_anggaran_id');
+    }
+
+    public function alokasi(?int $tahunAnggaranId = null): ?AlokasiAnggaran
+    {
+        $taId = $tahunAnggaranId ?? $this->tahun_anggaran_id;
+
+        return $this->alokasiAnggaran()->where('tahun_anggaran_id', $taId)->first();
+    }
+
+    public function getPlafonEfektif(?int $tahunAnggaranId = null): int
+    {
+        $alokasi = $this->alokasi($tahunAnggaranId);
+
+        return $alokasi ? $alokasi->plafon_efektif : 0;
     }
 
     public function isLeaf(): bool

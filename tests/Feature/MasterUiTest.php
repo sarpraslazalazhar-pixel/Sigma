@@ -105,9 +105,11 @@ class MasterUiTest extends TestCase
             'tahun_anggaran_id' => $ta->id,
             'kode' => '2',
             'nama' => 'Program Baru 2026',
-            'plafon' => 150000000,
             'depth' => 1,
         ]);
+
+        $newNode = KodeAnggaran::where('kode', '2')->where('tahun_anggaran_id', $ta->id)->firstOrFail();
+        $this->assertSame(150000000, $newNode->getPlafonEfektif());
     }
 
     public function test_cannot_exceed_max_depth_kode_anggaran(): void

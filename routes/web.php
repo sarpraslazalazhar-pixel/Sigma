@@ -72,60 +72,82 @@ Route::middleware('auth')->group(function () {
     })->name('logout');
 });
 
-// TODO: Hapus route ini setelah selesai setup di hosting
+// SEMENTARA: Dinonaktifkan otomatis jika ARTISAN_RUNNER_ENABLED=false di .env
 Route::get('/artisan-runner', function () {
-    $secret = request()->query('key');
-    if ($secret !== env('ARTISAN_KEY', 'sigma123')) {
-        abort(403, 'Akses ditolak. Tambahkan parameter ?key=sigma123 pada URL');
+    if (! env('ARTISAN_RUNNER_ENABLED', true)) {
+        abort(404);
     }
+
+    $secret = (string) request()->query('key', '');
+    $expectedKey = (string) env('ARTISAN_KEY', 'sigma123');
+
+    if (! hash_equals($expectedKey, $secret)) {
+        abort(403, 'Akses ditolak.');
+    }
+
+    $allowedCommands = [
+        'migrate' => '1. Run migrate',
+        'migrate:fresh --seed' => '2. Run migrate:fresh --seed',
+        'optimize:clear' => '3. Run optimize:clear (Cache, Config, Route, View)',
+        'storage:link' => '4. Run storage:link',
+        'key:generate' => '5. Run key:generate',
+        'route:list' => '6. View route:list',
+        'config:cache' => '7. Run config:cache',
+        'route:cache' => '8. Run route:cache',
+        'view:cache' => '9. Run view:cache',
+    ];
 
     $cmd = request()->query('cmd');
     if (! $cmd) {
-        return response(<<<'HTML'
+        $encodedKey = urlencode($secret);
+        $buttons = '';
+        foreach ($allowedCommands as $c => $label) {
+            $isDanger = str_contains($c, 'fresh');
+            $class = $isDanger ? 'btn btn-danger' : 'btn';
+            $confirm = $isDanger ? " onclick=\"return confirm('Peringatan: Semua data akan direset. Lanjutkan?')\"" : '';
+            $buttons .= "<a class=\"{$class}\" href=\"?key={$encodedKey}&cmd=".urlencode($c)."\"{$confirm}>{$label}</a>\n";
+        }
+
+        return response(<<<HTML
             <!DOCTYPE html>
             <html lang="id">
             <head>
                 <meta charset="utf-8">
-                <title>Artisan Runner</title>
+                <title>Artisan Runner (Temporary)</title>
                 <style>
                     body { font-family: system-ui, sans-serif; padding: 24px; max-width: 640px; margin: auto; line-height: 1.5; }
                     .btn-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
                     a.btn { display: block; padding: 10px 14px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500; }
                     a.btn-danger { background: #dc2626; }
                     a.btn:hover { opacity: 0.9; }
-                    form { display: flex; gap: 8px; margin-top: 20px; }
-                    input[type="text"] { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; }
-                    button { padding: 8px 16px; background: #16a34a; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+                    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 12px; border-radius: 6px; color: #92400e; font-size: 14px; }
                 </style>
             </head>
             <body>
                 <h2>Temporary Artisan Runner</h2>
-                <p>Klik salah satu aksi atau jalankan perintah manual:</p>
-                <div class="btn-list">
-                    <a class="btn" href="?key=sigma123&cmd=migrate">1. Run migrate</a>
-                    <a class="btn btn-danger" href="?key=sigma123&cmd=migrate:fresh --seed" onclick="return confirm('Peringatan: Semua data tabel akan dihapus dan di-seed ulang. Lanjutkan?')">2. Run migrate:fresh --seed</a>
-                    <a class="btn" href="?key=sigma123&cmd=optimize:clear">3. Run optimize:clear (Cache, Config, Route, View)</a>
-                    <a class="btn" href="?key=sigma123&cmd=storage:link">4. Run storage:link</a>
-                    <a class="btn" href="?key=sigma123&cmd=key:generate">5. Run key:generate</a>
+                <div class="warning">
+                    <strong>Peringatan Keamanan:</strong> Route ini hanya untuk sementara selama setup. Nonaktifkan via <code>ARTISAN_RUNNER_ENABLED=false</code> di <code>.env</code> setelah selesai.
                 </div>
-                <form method="GET">
-                    <input type="hidden" name="key" value="sigma123">
-                    <input type="text" name="cmd" placeholder="Contoh: db:seed atau route:list" required>
-                    <button type="submit">Jalankan</button>
-                </form>
+                <div class="btn-list" style="margin-top: 16px;">
+                    {$buttons}
+                </div>
             </body>
             </html>
         HTML);
     }
 
+    if (! array_key_exists($cmd, $allowedCommands)) {
+        abort(400, 'Perintah tidak diizinkan. Hanya perintah terdaftar yang dapat dieksekusi.');
+    }
+
     try {
-        $destructive = ['migrate', 'migrate:fresh', 'migrate:rollback', 'migrate:reset', 'db:seed'];
-        $baseCmd = explode(' ', trim($cmd))[0];
-        if (in_array($baseCmd, $destructive, true) && ! str_contains($cmd, '--force')) {
-            $cmd .= ' --force';
+        $destructive = ['migrate', 'migrate:fresh', 'migrate:fresh --seed'];
+        $fullCmd = $cmd;
+        if (in_array($cmd, $destructive, true) && ! str_contains($cmd, '--force')) {
+            $fullCmd .= ' --force';
         }
 
-        Artisan::call($cmd);
+        Artisan::call($fullCmd);
         $output = Artisan::output() ?: 'Command dijalankan tanpa output teks.';
 
         return response('<pre style="background:#1e1e1e;color:#4ade80;padding:16px;border-radius:6px;overflow:auto;white-space:pre-wrap;">'
@@ -136,4 +158,4 @@ Route::get('/artisan-runner', function () {
             .e($e->getMessage())
             .'</pre><p><a href="?key='.e($secret).'" style="font-family:system-ui;text-decoration:none;color:#2563eb;">&larr; Kembali ke Menu</a></p>', 500);
     }
-})->withoutMiddleware('web');
+})->middleware('throttle:5,1')->withoutMiddleware('web');

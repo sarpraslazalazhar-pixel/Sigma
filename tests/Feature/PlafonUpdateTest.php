@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Dashboard;
 use App\Livewire\Laporan\LaporanMonitoringIndex;
 use App\Livewire\Master\KodeAnggaranIndex;
+use App\Models\AlokasiAnggaran;
 use App\Models\AuditLog;
 use App\Models\KodeAnggaran;
 use App\Models\Pencairan;
@@ -70,6 +71,7 @@ class PlafonUpdateTest extends TestCase
             ->test(KodeAnggaranIndex::class)
             ->call('openEditModal', $node->id)
             ->set('form_plafon', '60000000')
+            ->set('form_keterangan_revisi', 'Penyesuaian kebutuhan')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSee("Plafon pos anggaran {$node->kode} berhasil diperbarui");
@@ -82,8 +84,10 @@ class PlafonUpdateTest extends TestCase
             ->first();
 
         $this->assertNotNull($log);
-        $this->assertEquals(50000000, $log->before['plafon']);
-        $this->assertEquals(60000000, $log->after['plafon']);
+        $alokasi = AlokasiAnggaran::where('kode_anggaran_id', $node->id)->first();
+        $this->assertNotNull($alokasi);
+        $this->assertSame(60000000, $alokasi->plafon_efektif);
+        $this->assertSame('Penyesuaian kebutuhan', $alokasi->keterangan_revisi);
     }
 
     public function test_plafon_update_below_floor_is_rejected(): void
@@ -159,6 +163,7 @@ class PlafonUpdateTest extends TestCase
             ->test(KodeAnggaranIndex::class)
             ->call('openEditModal', $node->id)
             ->set('form_plafon', '25000000')
+            ->set('form_keterangan_revisi', 'Penyesuaian')
             ->call('save')
             ->assertHasErrors(['form_plafon']);
 
@@ -197,6 +202,7 @@ class PlafonUpdateTest extends TestCase
             ->test(KodeAnggaranIndex::class)
             ->call('openEditModal', $node->id)
             ->set('form_plafon', '30000000')
+            ->set('form_keterangan_revisi', 'Penyesuaian')
             ->call('save')
             ->assertHasNoErrors()
             ->assertSee("Plafon pos anggaran {$node->kode} berhasil diperbarui");
@@ -243,6 +249,7 @@ class PlafonUpdateTest extends TestCase
             ->test(KodeAnggaranIndex::class)
             ->call('openEditModal', $node->id)
             ->set('form_plafon', '50000000')
+            ->set('form_keterangan_revisi', 'Penyesuaian')
             ->call('save')
             ->assertHasErrors(['form_plafon']);
 
@@ -265,6 +272,7 @@ class PlafonUpdateTest extends TestCase
             ->test(KodeAnggaranIndex::class)
             ->call('openEditModal', $node->id)
             ->set('form_plafon', '60000000')
+            ->set('form_keterangan_revisi', 'Penyesuaian')
             ->call('save')
             ->assertHasErrors(['form_plafon']);
 

@@ -6,6 +6,7 @@ use App\Exports\LaporanPengeluaranExport;
 use App\Models\TahunAnggaran;
 use App\Services\BudgetCalculator;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Maatwebsite\Excel\Facades\Excel;
@@ -25,10 +26,18 @@ class LaporanPengeluaranIndex extends Component
 
     public function mount(): void
     {
-        $activeYear = TahunAnggaran::where('status', 'aktif')->first()
-            ?? TahunAnggaran::orderBy('tahun', 'desc')->first();
+        $this->tahun_anggaran_id = (int) session(
+            'tahun_anggaran_id',
+            TahunAnggaran::where('status', 'aktif')->value('id')
+                ?? TahunAnggaran::orderBy('tahun', 'desc')->value('id')
+                ?? 0
+        );
+    }
 
-        $this->tahun_anggaran_id = $activeYear ? $activeYear->id : 0;
+    #[On('tahun-anggaran-changed')]
+    public function onYearChanged(int $tahunAnggaranId): void
+    {
+        $this->tahun_anggaran_id = $tahunAnggaranId;
     }
 
     public function toggleMobileNode(int $id): void
