@@ -405,7 +405,7 @@
             <div class="flex items-center justify-between pb-2 border-b border-blue-100">
                 <div>
                     <h2 class="text-sm font-bold text-[#0F2F57] uppercase tracking-wider">
-                        Persetujuan Bagian Keuangan (Mode Atas Nama / Input Terpusat)
+                        Persetujuan Bagian Keuangan (Pencatatan Fisik / Input Terpusat)
                     </h2>
                     <p class="text-xs text-slate-600 mt-0.5">
                         Masukkan nominal disetujui per baris, nama penanda tangan fisik Keuangan, dan unggah berkas scan form bertanda tangan.

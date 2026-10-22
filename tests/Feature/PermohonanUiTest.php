@@ -273,7 +273,7 @@ class PermohonanUiTest extends TestCase
         // User staff TU Sekretariat memiliki is_petugas_input = true
         Livewire::actingAs($this->staffUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->assertSee('Persetujuan Bagian Keuangan (Mode Atas Nama / Input Terpusat)')
+            ->assertSee('Persetujuan Bagian Keuangan (Pencatatan Fisik / Input Terpusat)')
             ->set('proxySignerName', 'Rochadi Kohar')
             ->set('proxySignerJabatan', 'Manajer Anggaran')
             ->set('proxySignedAt', now()->toDateString())
@@ -396,7 +396,7 @@ class PermohonanUiTest extends TestCase
         // 1. TU memilih Pembuat = Kepala Divisi (Kadiv)
         Livewire::actingAs($tuUser)
             ->test(PermohonanCreate::class)
-            ->assertSee('Mode Input Atas Nama (Petugas Tata Usaha / Keuangan)')
+            ->assertSee('Input Pengajuan oleh Petugas TU')
             ->set('user_id', $this->kadivUser->id)
             ->set('program', 'Program Khusus Kadiv')
             ->set('nama_kegiatan', 'Kegiatan Diusulkan Kadiv')

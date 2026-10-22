@@ -437,9 +437,6 @@
 
                     {{-- Status Chips & Notifications --}}
                     <div class="flex items-center gap-2 sm:gap-3">
-                        <span class="hidden md:inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-[#0F2F57] text-xs font-medium border border-blue-100">
-                            Mode Input Atas Nama Keuangan
-                        </span>
                         <livewire:components.year-switcher />
                         <livewire:components.notification-bell />
                     </div>

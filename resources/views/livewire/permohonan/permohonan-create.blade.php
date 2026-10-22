@@ -51,9 +51,9 @@
                         </span>
                         <div>
                             <h2 class="text-xs font-bold text-[#0F2F57] uppercase tracking-wider">
-                                Mode Input Atas Nama (Petugas Tata Usaha / Keuangan)
+                                Input Pengajuan oleh Petugas TU
                             </h2>
-                            <p class="text-[11px] text-slate-500">Pilih pejabat yang membuat permohonan dana (Supervisor, Manajer, atau Kadiv)</p>
+                            <p class="text-[11px] text-slate-500">Pilih pejabat yang menandatangani permohonan dana (Supervisor, Manajer, atau Kepala Divisi)</p>
                         </div>
                     </div>
                     <span class="text-[11px] text-[#001B3E] bg-[#DCE5F6] px-2.5 py-0.5 rounded-full font-semibold">
@@ -64,7 +64,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label for="creatorLevel" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Filter Jabatan Pembuat
+                            Filter Jabatan Penanda Tangan
                         </label>
                         <select
                             id="creatorLevel"
@@ -80,12 +80,12 @@
 
                     <div class="sm:col-span-2">
                         <label for="user_id" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Pejabat Pembuat Permohonan *
+                            Pejabat Penanda Tangan (Dibuat Oleh) *
                         </label>
                         <x-searchable-select
                             wire:model.live="user_id"
                             :options="$creatorCandidates"
-                            placeholder="Pilih Pejabat Pembuat Permohonan..."
+                            placeholder="Pilih Pejabat Penanda Tangan..."
                             search-placeholder="Ketik nama pejabat atau jabatan..."
                             :nullable="false"
                         />

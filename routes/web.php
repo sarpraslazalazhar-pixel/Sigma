@@ -57,7 +57,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/ump/{id}', UmpDetail::class)->name('ump.detail');
     Route::get('/ump/{id}/cetak-pdf', [UmpPdfController::class, 'cetak'])->name('ump.cetak-pdf');
 
-    // Verifikasi Keuangan (Mode Atas Nama)
+    // Verifikasi Keuangan
     Route::get('/keuangan/verifikasi', VerifikasiKeuanganIndex::class)->middleware('can:verifikasi-keuangan')->name('keuangan.verifikasi');
 
     // Lampiran Download/Stream
