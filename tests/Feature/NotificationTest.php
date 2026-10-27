@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Components\NotificationBell;
+use App\Mail\ReminderNotificationMail;
 use App\Models\KodeAnggaran;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
@@ -20,6 +21,7 @@ use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -56,7 +58,7 @@ class NotificationTest extends TestCase
         $this->staffUser = User::where('username', 'subakti')->first();
         $this->managerUser = User::where('username', 'deden.salim')->first();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->first();
-        $this->financeUser = User::where('username', 'rochadi.kohar')->first();
+        $this->financeUser = User::where('username', 'direktur.keuangan')->first();
         $this->adminUser = User::where('username', 'admin')->first();
 
         $this->ta = TahunAnggaran::where('status', 'aktif')->first();
@@ -121,13 +123,14 @@ class NotificationTest extends TestCase
         $workflow = new PermohonanWorkflow;
         $workflow->submit($permohonan);
 
+        // Tahap 2: pemeriksa tetap adalah Kepala Divisi Sekretariat
         $this->assertDatabaseHas('notifications', [
-            'notifiable_id' => $this->managerUser->id,
+            'notifiable_id' => $this->kadivUser->id,
             'type' => 'dokumen_menunggu_tindakan',
         ]);
 
         $notif = DB::table('notifications')
-            ->where('notifiable_id', $this->managerUser->id)
+            ->where('notifiable_id', $this->kadivUser->id)
             ->where('type', 'dokumen_menunggu_tindakan')
             ->first();
 
@@ -149,7 +152,7 @@ class NotificationTest extends TestCase
         // Coba kirim lagi dengan dedup_key yang sama
         $siklus = 1;
         NotificationService::kirim(
-            $this->managerUser,
+            $this->kadivUser,
             'dokumen_menunggu_tindakan',
             ['test' => 1],
             "tunggu_permohonan_{$permohonan->id}_diajukan_{$siklus}"
@@ -164,17 +167,14 @@ class NotificationTest extends TestCase
         $workflow = new PermohonanWorkflow;
         $workflow->submit($permohonan);
 
-        // Tahap 1: Approve oleh manager
-        $workflow->approve($permohonan, $this->managerUser);
+        // Tahap 2: Diperiksa oleh Kadiv Sekretariat
+        $workflow->approve($permohonan, $this->kadivUser);
 
         // Pengaju dapat notif putusan
         $this->assertDatabaseHas('notifications', [
             'notifiable_id' => $this->staffUser->id,
             'type' => 'dokumen_diputuskan',
         ]);
-
-        // Tahap 2: Approve oleh kadiv
-        $workflow->approve($permohonan, $this->kadivUser);
 
         // Keuangan dapat notif tunggu tindakan
         $this->assertDatabaseHas('notifications', [
@@ -213,7 +213,6 @@ class NotificationTest extends TestCase
         $permohonan = $this->createPermohonanDraft(2000000);
         $workflow = new PermohonanWorkflow;
         $workflow->submit($permohonan);
-        $workflow->approve($permohonan, $this->managerUser);
         $workflow->approve($permohonan, $this->kadivUser);
         $workflow->approve($permohonan, $this->financeUser);
         $pencairan = $workflow->cairkan($permohonan, $this->financeUser, [
@@ -256,6 +255,86 @@ class NotificationTest extends TestCase
         ]);
     }
 
+    public function test_ump_remind_uses_configurable_threshold(): void
+    {
+        Setting::set('ump.tenggat_hari', 14);
+        Setting::set('ump.pengingat_hari', 5);
+
+        $permohonan = $this->createPermohonanDraft(1000000);
+        $workflow = new PermohonanWorkflow;
+        $workflow->submit($permohonan);
+        $workflow->approve($permohonan, $this->kadivUser);
+        $workflow->approve($permohonan, $this->financeUser);
+        $pencairan = $workflow->cairkan($permohonan, $this->financeUser, [
+            'no_ppd' => 'PPD-2026-888',
+            'tgl_cair' => now()->toDateString(),
+        ]);
+
+        $ump = $pencairan->ump;
+        // Jatuh tempo 5 hari lagi (H-5)
+        $ump->jatuh_tempo = Carbon::today()->addDays(5)->toDateString();
+        $ump->save();
+
+        $this->artisan('ump:remind')->assertSuccessful();
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $this->staffUser->id,
+            'type' => 'ump_tenggat',
+            'dedup_key' => "ump_tenggat_{$ump->id}_mendekati",
+        ]);
+    }
+
+    public function test_permohonan_remind_sends_notification_and_is_idempotent(): void
+    {
+        Setting::set('permohonan.pengingat_hari', 3);
+
+        $permohonan = $this->createPermohonanDraft(1500000);
+        $workflow = new PermohonanWorkflow;
+        $workflow->submit($permohonan);
+
+        // Manipulasi updated_at jadi 4 hari lalu
+        $permohonan->timestamps = false;
+        $permohonan->updated_at = Carbon::today()->subDays(4);
+        $permohonan->save();
+        $permohonan->timestamps = true;
+
+        $this->artisan('permohonan:remind')->assertSuccessful();
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $permohonan->atasan_id,
+            'type' => 'permohonan_tertunda',
+            'dedup_key' => "pengingat_permohonan_{$permohonan->id}_diajukan",
+        ]);
+
+        $countBefore = DB::table('notifications')->where('type', 'permohonan_tertunda')->count();
+
+        // Run lagi, harus idempoten (tidak menambah notifikasi)
+        $this->artisan('permohonan:remind')->assertSuccessful();
+        $countAfter = DB::table('notifications')->where('type', 'permohonan_tertunda')->count();
+
+        $this->assertEquals($countBefore, $countAfter);
+    }
+
+    public function test_permohonan_remind_skips_when_disabled(): void
+    {
+        Setting::set('permohonan.pengingat_hari', 0);
+
+        $permohonan = $this->createPermohonanDraft(1500000);
+        $workflow = new PermohonanWorkflow;
+        $workflow->submit($permohonan);
+
+        $permohonan->timestamps = false;
+        $permohonan->updated_at = Carbon::today()->subDays(5);
+        $permohonan->save();
+        $permohonan->timestamps = true;
+
+        $this->artisan('permohonan:remind')->assertSuccessful();
+
+        $this->assertDatabaseMissing('notifications', [
+            'type' => 'permohonan_tertunda',
+        ]);
+    }
+
     public function test_notification_bell_component_renders_and_marks_as_read(): void
     {
         // Kirim 2 notifikasi ke user
@@ -283,5 +362,69 @@ class NotificationTest extends TestCase
             ->assertSet('unreadCount', 0);
 
         $this->assertEquals(0, $this->staffUser->unreadNotifications()->count());
+    }
+
+    public function test_notification_service_sends_email_when_setting_is_active(): void
+    {
+        Mail::fake();
+        Setting::set('notifikasi.email_aktif', 'aktif');
+
+        NotificationService::kirim(
+            $this->staffUser,
+            'permohonan_tertunda',
+            [
+                'judul' => 'Pengingat Permohonan',
+                'pesan' => 'Permohonan tertunda 3 hari',
+                'url' => 'http://localhost/permohonan/1',
+            ],
+            'dedup_email_test_1'
+        );
+
+        Mail::assertSent(ReminderNotificationMail::class, function ($mail) {
+            return $mail->hasTo($this->staffUser->email)
+                && $mail->data['judul'] === 'Pengingat Permohonan';
+        });
+    }
+
+    public function test_notification_service_does_not_send_email_when_setting_is_disabled(): void
+    {
+        Mail::fake();
+        Setting::set('notifikasi.email_aktif', 'nonaktif');
+
+        NotificationService::kirim(
+            $this->staffUser,
+            'permohonan_tertunda',
+            [
+                'judul' => 'Pengingat Permohonan',
+                'pesan' => 'Permohonan tertunda 3 hari',
+                'url' => 'http://localhost/permohonan/1',
+            ],
+            'dedup_email_test_2'
+        );
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_notification_service_does_not_duplicate_email_on_repeated_dedup_key(): void
+    {
+        Mail::fake();
+        Setting::set('notifikasi.email_aktif', 'aktif');
+
+        NotificationService::kirim(
+            $this->staffUser,
+            'permohonan_tertunda',
+            ['judul' => 'Pengingat', 'pesan' => 'Pesan', 'url' => '/test'],
+            'dedup_email_duplicate'
+        );
+
+        // Kirim ulang dengan dedup_key yang sama
+        NotificationService::kirim(
+            $this->staffUser,
+            'permohonan_tertunda',
+            ['judul' => 'Pengingat', 'pesan' => 'Pesan', 'url' => '/test'],
+            'dedup_email_duplicate'
+        );
+
+        Mail::assertSent(ReminderNotificationMail::class, 1);
     }
 }

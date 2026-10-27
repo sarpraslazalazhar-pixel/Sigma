@@ -48,6 +48,7 @@
         nullable: {{ $nullable ? 'true' : 'false' }},
         nullLabel: '{{ $nullLabel }}',
         placeholder: '{{ $placeholder }}',
+        dropUp: false,
 
         get selectedOption() {
             if (this.selected === null || this.selected === '' || this.selected === undefined) {
@@ -61,7 +62,11 @@
                 return this.nullable && this.nullLabel ? this.nullLabel : this.placeholder;
             }
             if (this.selectedOption.sub && this.selectedOption.sub !== '') {
-                return this.selectedOption.sub + ' - ' + this.selectedOption.label;
+                const sub = this.selectedOption.sub;
+                if (sub.length <= 15 && !sub.includes(' ')) {
+                    return sub + ' - ' + this.selectedOption.label;
+                }
+                return this.selectedOption.label + ' — ' + sub;
             }
             return this.selectedOption.label;
         },
@@ -99,6 +104,9 @@
             this.open = !this.open;
             if (this.open) {
                 this.$nextTick(() => {
+                    const rect = this.$el.getBoundingClientRect();
+                    const spaceBelow = window.innerHeight - rect.bottom;
+                    this.dropUp = spaceBelow < 260 && rect.top > 260;
                     this.$refs.searchInput && this.$refs.searchInput.focus();
                 });
             }
@@ -157,7 +165,8 @@
         x-transition:leave="transition ease-in duration-75"
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
-        class="absolute left-0 right-0 mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden"
+        class="absolute left-0 right-0 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden"
+        :class="dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'"
         style="display: none;"
     >
         {{-- Search Input inside Dropdown --}}
@@ -209,24 +218,35 @@
             <template x-for="opt in filteredOptions" :key="opt.value">
                 <div
                     @click="select(opt.value)"
-                    class="px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors flex items-center justify-between gap-2 hover:bg-slate-100"
-                    :class="String(selected) === String(opt.value) ? 'bg-blue-50/80 font-bold text-blue-900' : 'text-slate-700'"
+                    class="px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-slate-100"
+                    :class="String(selected) === String(opt.value) ? 'bg-blue-50/80' : ''"
                 >
-                    <div class="flex items-center gap-2 truncate">
-                        <template x-if="opt.sub && opt.sub !== ''">
-                            <span
-                                class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-[#0F2F57] shrink-0"
-                                x-text="opt.sub"
-                            ></span>
-                        </template>
-                        <span class="truncate" x-text="opt.label"></span>
-                    </div>
+                    <div class="flex items-center justify-between w-full min-w-0 gap-2 py-0.5">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="text-xs truncate font-medium"
+                                    :class="String(selected) === String(opt.value) ? 'text-blue-900 font-bold' : 'text-slate-800'"
+                                    x-text="opt.label"
+                                ></span>
+                                <template x-if="opt.sub && opt.sub.length <= 15 && !opt.sub.includes(' ')">
+                                    <span
+                                        class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-[#0F2F57] shrink-0"
+                                        x-text="opt.sub"
+                                    ></span>
+                                </template>
+                            </div>
+                            <template x-if="opt.sub && (opt.sub.length > 15 || opt.sub.includes(' '))">
+                                <span class="text-[11px] text-slate-500 block truncate mt-0.5" x-text="opt.sub"></span>
+                            </template>
+                        </div>
 
-                    <template x-if="String(selected) === String(opt.value)">
-                        <svg class="w-3.5 h-3.5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                    </template>
+                        <template x-if="String(selected) === String(opt.value)">
+                            <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </template>
+                    </div>
                 </div>
             </template>
 

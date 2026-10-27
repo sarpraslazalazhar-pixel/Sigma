@@ -222,7 +222,7 @@ class PencairanWorkflowTest extends TestCase
     public function test_cairkan_with_custom_pj_id_sets_ump_pj(): void
     {
         $workflow = new PermohonanWorkflow;
-        $customPj = User::where('username', 'manager.humas')->firstOrFail();
+        $customPj = User::where('username', 'sigit.nugroho')->firstOrFail();
 
         $pencairan = $workflow->cairkan($this->permohonan, $this->financeUser, [
             'no_ppd' => 'PPD/KEU/2026/PJ-TEST',

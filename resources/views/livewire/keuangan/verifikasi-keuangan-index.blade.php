@@ -3,10 +3,10 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-[#0F2F57] tracking-tight">
-                Verifikasi Keuangan (Mode Atas Nama)
+                Verifikasi Keuangan
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Antrean dokumen keuangan yang diproses secara retrospektif (Mode Atas Nama) dan memerlukan verifikasi staf Keuangan.
+                Antrean dokumen permohonan, pencairan, dan UMP yang memerlukan verifikasi kelengkapan oleh Bagian Keuangan.
             </p>
         </div>
     </div>
@@ -110,7 +110,7 @@
     {{-- VIEW 1: Mobile Cards (< 1024px) --}}
     <div class="block lg:hidden space-y-3">
         @forelse ($items as $item)
-            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
+            <div wire:key="verif-m-{{ $item['type'] }}-{{ $item['id'] }}" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
                 <div class="flex items-start justify-between gap-2">
                     <div>
                         <span class="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-[#DCE5F6] text-[#001B3E]">
@@ -205,7 +205,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100 text-slate-700">
                     @forelse ($items as $item)
-                        <tr class="hover:bg-slate-50/70 transition-colors">
+                        <tr wire:key="verif-row-{{ $item['type'] }}-{{ $item['id'] }}" class="hover:bg-slate-50/70 transition-colors">
                             <td class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                                 {{ $item['no_dokumen'] }}
                             </td>

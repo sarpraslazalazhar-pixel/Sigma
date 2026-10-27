@@ -143,7 +143,7 @@ class DivisionSecurityAndIntegrityTest extends TestCase
         $sumberDana = SumberDana::firstOrFail();
 
         $userKlm = User::where('username', 'deden.salim')->firstOrFail(); // Unit Kelembagaan (DIV-SEK)
-        $userHum = User::where('username', 'manager.humas')->firstOrFail(); // Unit Humas (DIV-SEK, Sibling)
+        $userHum = User::where('username', 'sigit.nugroho')->firstOrFail(); // Unit Humas (DIV-SEK, Sibling)
         $userOtherDiv = User::where('username', 'manager.program')->firstOrFail(); // Unit Program (DIV-PRG)
 
         $kode = KodeAnggaran::create([

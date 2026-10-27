@@ -10,6 +10,7 @@ use App\Livewire\Keuangan\VerifikasiKeuanganIndex;
 use App\Livewire\Laporan\LaporanMonitoringIndex;
 use App\Livewire\Master\AuditLogIndex;
 use App\Livewire\Master\KodeAnggaranIndex;
+use App\Livewire\Master\PengaturanIndex;
 use App\Livewire\Master\TahunAnggaranIndex;
 use App\Livewire\Master\UnitDivisiIndex;
 use App\Livewire\Master\UserIndex;
@@ -39,6 +40,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/master/unit-divisi', UnitDivisiIndex::class)->name('master.unit-divisi');
     Route::get('/master/users', UserIndex::class)->middleware('can:manage-users')->name('master.users');
     Route::get('/master/audit-logs', AuditLogIndex::class)->middleware('can:view-audit-logs')->name('master.audit-logs');
+    Route::get('/master/pengaturan', PengaturanIndex::class)->middleware('can:manage-master-data')->name('master.pengaturan');
     Route::get('/laporan/pengeluaran-bulanan', LaporanPengeluaranIndex::class)->name('laporan.pengeluaran-bulanan');
     Route::get('/laporan/monitoring', LaporanMonitoringIndex::class)->name('laporan.monitoring');
 
@@ -95,6 +97,8 @@ Route::get('/artisan-runner', function () {
         'config:cache' => '7. Run config:cache',
         'route:cache' => '8. Run route:cache',
         'view:cache' => '9. Run view:cache',
+        'ump:remind' => '10. Run ump:remind (Pengingat UMP)',
+        'permohonan:remind' => '11. Run permohonan:remind (Pengingat Permohonan)',
     ];
 
     $cmd = request()->query('cmd');

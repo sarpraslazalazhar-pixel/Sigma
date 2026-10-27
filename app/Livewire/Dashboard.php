@@ -197,6 +197,13 @@ class Dashboard extends Component
 
         $timestamp = Carbon::now()->timezone('Asia/Jakarta')->format('d/m/Y H:i').' WIB';
 
+        $this->dispatch('chart-updated',
+            labels: $chartLabels,
+            terikat: $chartTerikat,
+            realisasi: $chartRealisasi,
+            budget: $chartBudget,
+        );
+
         return view('livewire.dashboard', [
             'daftarTahun' => $daftarTahun,
             'daftarUnit' => $daftarUnit,
@@ -240,53 +247,62 @@ class Dashboard extends Component
                 }
                 $q->where('atasan_id', $user->id);
 
+                $divisiId = $user->unit?->getDivisiId();
+
                 if ($levelingUrutan >= 3) {
-                    $divisiId = $user->unit?->parent_id ?? $user->unit_id;
                     $q->orWhere(function ($sub) use ($divisiId) {
+                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
                         if ($divisiId) {
                             $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
-                        } else {
-                            $sub->whereRaw('1 = 1');
                         }
                     });
                 } elseif ($levelingUrutan == 2) {
-                    $divisiId = $user->unit?->parent_id ?? $user->unit_id;
                     $q->orWhere(function ($sub) use ($user, $divisiId) {
-                        $sub->where('unit_id', $user->unit_id);
+                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
                         if ($divisiId) {
-                            $sub->orWhereHas('unit', fn ($u) => $u->where('parent_id', $divisiId));
+                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
+                        } else {
+                            $sub->where('unit_id', $user->unit_id);
                         }
-                    });
-                } elseif ($levelingUrutan == 1) {
-                    $q->orWhere(function ($sub) use ($user) {
-                        $sub->where('unit_id', $user->unit_id)
-                            ->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
                     });
                 }
             })->get();
 
-        $pmhKadiv = Permohonan::with(['user', 'unit'])
-            ->where('status', 'disetujui_atasan')
-            ->where(function ($q) use ($user, $levelingUrutan, $isAdmin) {
+        $pmhFinance = Permohonan::with(['user', 'unit', 'levelingRequired'])
+            ->where('status', 'diketahui_kadiv')
+            ->where(function ($q) use ($user, $levelingUrutan, $isFinance, $isAdmin) {
                 if ($isAdmin) {
                     return;
                 }
+
+                $conditions = false;
+
                 if ($levelingUrutan >= 3) {
-                    $divisiId = $user->unit?->parent_id ?? $user->unit_id;
-                    $q->whereHas('unit', fn ($u) => $u->where('parent_id', $divisiId)->orWhere('id', $divisiId));
-                } else {
+                    $divisiId = $user->unit?->getDivisiId();
+                    $q->where(function ($sub) use ($divisiId) {
+                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
+                        if ($divisiId) {
+                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
+                        }
+                    });
+                    $conditions = true;
+                }
+
+                if ($isFinance) {
+                    if ($conditions) {
+                        $q->orWhereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
+                    } else {
+                        $q->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
+                    }
+                    $conditions = true;
+                }
+
+                if (! $conditions) {
                     $q->whereRaw('0 = 1');
                 }
             })->get();
 
-        $pmhFinance = collect();
-        if ($isFinance) {
-            $pmhFinance = Permohonan::with(['user', 'unit'])
-                ->where('status', 'diketahui_kadiv')
-                ->get();
-        }
-
-        $allPmh = $pmhDiajukan->concat($pmhKadiv)->concat($pmhFinance)->unique('id');
+        $allPmh = $pmhDiajukan->concat($pmhFinance)->unique('id');
         foreach ($allPmh as $p) {
             $antrean->push([
                 'jenis' => 'permohonan',
@@ -311,11 +327,22 @@ class Dashboard extends Component
                     return true;
                 }
                 if ($u->status === 'ttd_pj') {
-                    $docDivisiId = $u->pencairan?->permohonan?->unit?->getDivisiId();
-                    $userDivisiId = $user->unit?->getDivisiId();
-                    $sameDivisi = $docDivisiId !== null && $userDivisiId !== null && $docDivisiId === $userDivisiId;
+                    if ((bool) $user->is_petugas_input) {
+                        return true;
+                    }
 
-                    return $sameDivisi && $levelingUrutan >= 2;
+                    $pj = $u->pj ?: $u->pencairan?->permohonan?->user;
+                    if ($pj && $user->id === $pj->id) {
+                        return false;
+                    }
+
+                    $pjDivisiId = $pj?->unit?->getDivisiId() ?? $u->pencairan?->permohonan?->unit?->getDivisiId();
+                    $pjUnitId = $pj?->unit_id ?? $u->pencairan?->permohonan?->unit_id;
+                    $userDivisiId = $user->unit?->getDivisiId();
+                    $sameDivisi = $pjDivisiId !== null && $userDivisiId !== null && $pjDivisiId === $userDivisiId;
+                    $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
+
+                    return ($sameDivisi || $sameUnit) && $levelingUrutan >= 2;
                 }
                 if (in_array($u->status, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
                     return $isFinance;

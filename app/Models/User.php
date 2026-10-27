@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 #[Fillable([
     'name',
@@ -110,6 +111,63 @@ class User extends Authenticatable
     public function isKadiv(): bool
     {
         return ($this->leveling?->urutan ?? 0) >= 3;
+    }
+
+    public function isKadivKeuangan(): bool
+    {
+        return $this->isKeuangan() && $this->isKadiv();
+    }
+
+    /**
+     * Kode unit divisi Sekretariat (pemeriksa tetap Tahap 2).
+     */
+    public const KODE_DIVISI_SEKRETARIAT = 'DIV-SEK';
+
+    /**
+     * Periksa apakah pengguna adalah Kepala Divisi Sekretariat.
+     */
+    public function isKadivSekretariat(): bool
+    {
+        if (! $this->isKadiv()) {
+            return false;
+        }
+
+        $unit = $this->unit;
+        $divisi = $unit?->tipe === 'divisi' ? $unit : $unit?->parent;
+
+        return $divisi?->kode === self::KODE_DIVISI_SEKRETARIAT;
+    }
+
+    /**
+     * Ambil pejabat Kepala Divisi Sekretariat yang aktif (pemeriksa tetap Tahap 2).
+     */
+    public static function getKadivSekretariat(): ?User
+    {
+        return static::query()
+            ->where('is_active', true)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
+            ->whereHas('unit', fn ($q) => $q
+                ->where('kode', self::KODE_DIVISI_SEKRETARIAT)
+                ->orWhereHas('parent', fn ($p) => $p->where('kode', self::KODE_DIVISI_SEKRETARIAT)))
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * Ambil seluruh pejabat berjabatan Kepala Divisi (Leveling >= 3) yang aktif,
+     * diurutkan dengan Kadiv Sekretariat lebih dulu.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, User>
+     */
+    public static function getPejabatKadiv(): Collection
+    {
+        return static::query()
+            ->with(['leveling', 'unit'])
+            ->where('is_active', true)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
+            ->get()
+            ->sortBy(fn (User $u) => [$u->isKadivSekretariat() ? 0 : 1, $u->name])
+            ->values();
     }
 
     public function isManager(): bool

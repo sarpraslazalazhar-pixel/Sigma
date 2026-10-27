@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -56,6 +57,16 @@ class Ump extends Model
     public function items(): HasMany
     {
         return $this->hasMany(UmpItem::class, 'ump_id');
+    }
+
+    public function penerima(): HasMany
+    {
+        return $this->hasMany(UmpPenerima::class, 'ump_id');
+    }
+
+    public function penerimaUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'ump_penerima')->withTimestamps();
     }
 
     public function approvals(): MorphMany

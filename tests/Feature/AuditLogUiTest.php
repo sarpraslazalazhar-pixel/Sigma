@@ -32,7 +32,7 @@ class AuditLogUiTest extends TestCase
 
         $this->adminUser = User::where('username', 'admin')->firstOrFail();
         $this->keuanganUser = User::where('username', 'rochadi.kohar')->firstOrFail();
-        $this->unitUser = User::where('username', 'tu.sekretariat')->firstOrFail();
+        $this->unitUser = User::where('username', 'subakti')->firstOrFail();
     }
 
     public function test_guest_is_redirected_to_login(): void

@@ -293,7 +293,7 @@
         <div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs">
             <div
                 class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden"
-                @click.outside="closeDiffModal"
+                @click.outside="$wire.closeDiffModal()"
             >
                 {{-- Modal Header --}}
                 <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">

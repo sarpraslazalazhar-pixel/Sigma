@@ -16,6 +16,7 @@ use App\Services\PermohonanWorkflow;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 class PermohonanWorkflowTest extends TestCase
@@ -48,11 +49,11 @@ class PermohonanWorkflowTest extends TestCase
             UserSeeder::class,
         ]);
 
-        $this->staffUser = User::where('username', 'tu.sekretariat')->first();
+        $this->staffUser = User::where('username', 'subakti')->first();
         $this->managerUser = User::where('username', 'deden.salim')->first();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->first();
-        $this->financeUser = User::where('username', 'rochadi.kohar')->first();
-        $this->supervisorUser = User::where('username', 'subakti')->first();
+        $this->financeUser = User::where('username', 'direktur.keuangan')->first();
+        $this->supervisorUser = User::where('username', 'anas.priyogi')->first();
 
         $this->ta = TahunAnggaran::where('status', 'aktif')->first();
         $this->unitKlm = Unit::where('kode', 'UNT-SEK-KLM')->first();
@@ -120,7 +121,7 @@ class PermohonanWorkflowTest extends TestCase
         $this->assertEquals('Manager', $lvl->nama);
     }
 
-    public function test_approval_workflow_through_supervision_kadiv_and_keuangan(): void
+    public function test_approval_workflow_through_kadiv_sekretariat_and_keuangan(): void
     {
         $workflow = new PermohonanWorkflow;
 
@@ -143,13 +144,10 @@ class PermohonanWorkflowTest extends TestCase
         ]);
 
         $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $permohonan->fresh()->status);
 
-        // Tahap 1: Disetujui Manager Atasan
-        $workflow->approve($permohonan, $this->managerUser, ['catatan' => 'Disetujui atasan']);
-        $this->assertEquals('disetujui_atasan', $permohonan->fresh()->status);
-
-        // Tahap 2: Diketahui Kepala Divisi
-        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kepala Divisi']);
+        // Tahap 2: Diperiksa Kepala Divisi Sekretariat
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kepala Divisi Sekretariat']);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
 
         // Tahap 3: Disetujui Keuangan
@@ -249,7 +247,7 @@ class PermohonanWorkflowTest extends TestCase
         $this->assertEquals(90000000, $rootCalc['sisa_tersedia']); // 100jt - 10jt = 90jt
     }
 
-    public function test_under_2_million_can_be_approved_by_supervisor_and_moves_directly_to_finance(): void
+    public function test_stage_two_is_reserved_for_manager_or_kadiv(): void
     {
         $workflow = new PermohonanWorkflow;
 
@@ -274,15 +272,21 @@ class PermohonanWorkflowTest extends TestCase
         $workflow->submit($permohonan);
         $this->assertEquals(1, $permohonan->fresh()->levelingRequired->urutan);
 
-        // Supervisor menyetujui -> status menjadi 'disetujui_atasan', lalu Kadiv mengetahui
-        $workflow->approve($permohonan, $this->supervisorUser, ['catatan' => 'Disetujui Supervisor']);
-        $this->assertEquals('disetujui_atasan', $permohonan->fresh()->status);
+        // Supervisor mencoba menyetujui -> tidak berwenang
+        try {
+            $workflow->approve($permohonan, $this->supervisorUser);
+            $this->fail('Supervisor seharusnya tidak berwenang memeriksa tahap diajukan.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('tidak berwenang', $e->getMessage());
+        }
 
-        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kadiv']);
+        $this->assertEquals('diajukan', $permohonan->fresh()->status);
+
+        $workflow->approve($permohonan, $this->managerUser, ['catatan' => 'Disetujui Manajer Unit']);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
     }
 
-    public function test_between_2_and_10_million_rejected_for_supervisor_but_approved_by_manager(): void
+    public function test_between_2_and_10_million_rejected_for_supervisor_but_approved_by_kadiv(): void
     {
         $workflow = new PermohonanWorkflow;
 
@@ -308,11 +312,19 @@ class PermohonanWorkflowTest extends TestCase
         $this->assertEquals(2, $permohonan->fresh()->levelingRequired->urutan);
 
         // Supervisor mencoba menyetujui -> gagal / exception
-        $this->expectException(\RuntimeException::class);
-        $workflow->approve($permohonan, $this->supervisorUser);
+        try {
+            $workflow->approve($permohonan, $this->supervisorUser);
+            $this->fail('Supervisor tidak berwenang menyetujui nominal tingkat Manager.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('tidak berwenang', $e->getMessage());
+        }
+
+        // Kadiv menyetujui -> berhasil
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Disetujui Kadiv']);
+        $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
     }
 
-    public function test_between_2_and_10_million_approved_by_manager_moves_directly_to_finance(): void
+    public function test_diajukan_for_manager_level_requires_kadiv_approval(): void
     {
         $workflow = new PermohonanWorkflow;
 
@@ -335,11 +347,17 @@ class PermohonanWorkflowTest extends TestCase
         ]);
 
         $workflow->submit($permohonan);
-        // Manager menyetujui -> status 'disetujui_atasan', lalu Kadiv mengetahui
-        $workflow->approve($permohonan, $this->managerUser, ['catatan' => 'Disetujui Manager Divisi']);
-        $this->assertEquals('disetujui_atasan', $permohonan->fresh()->status);
+        $this->assertEquals('diajukan', $permohonan->fresh()->status);
 
-        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Diketahui Kadiv']);
+        // Manager mencoba menyetujui urutan 2 di tahap diajukan -> ditolak (butuh Kadiv)
+        try {
+            $workflow->approve($permohonan, $this->managerUser);
+            $this->fail('Manager seharusnya tidak berwenang memeriksa tahap diajukan untuk tingkat Manager.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('tidak berwenang', $e->getMessage());
+        }
+
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Disetujui Kadiv']);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
     }
 
@@ -366,7 +384,6 @@ class PermohonanWorkflowTest extends TestCase
         ]);
 
         $workflow->submit($permohonan);
-        $workflow->approve($permohonan, $this->managerUser);
         $workflow->approve($permohonan, $this->kadivUser);
         $workflow->approve($permohonan, $this->financeUser, ['items' => [$item->id => 5000000]]);
         // Pencairan PPD: PJ otomatis Manajer, bukan staf TU
@@ -400,7 +417,7 @@ class PermohonanWorkflowTest extends TestCase
         $item = PermohonanItem::create([
             'permohonan_id' => $permohonan->id,
             'uraian' => 'Konsumsi & Akomodasi Rakor',
-            'jumlah_diminta' => 8000000,
+            'jumlah_diminta' => 15000000,
         ]);
 
         // Submit oleh Kadiv
@@ -417,7 +434,86 @@ class PermohonanWorkflowTest extends TestCase
         ]);
 
         // Langsung dapat disetujui oleh Bagian Keuangan (Tahap 3) tanpa perlu atasan/kadiv lagi
-        $approvedFinance = $workflow->approve($submitted, $this->financeUser, ['items' => [$item->id => 8000000]]);
+        $approvedFinance = $workflow->approve($submitted, $this->financeUser, ['items' => [$item->id => 15000000]]);
         $this->assertEquals('disetujui_keuangan', $approvedFinance->status);
+    }
+
+    public function test_supervisor_level_approval_chain(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Operasional',
+            'nama_kegiatan' => 'Konsumsi Rapat Bulanan',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        $item = PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Snack dan Minum Rapat',
+            'jumlah_diminta' => 1500000, // Supervisor level (<= 2jt)
+        ]);
+
+        $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $permohonan->fresh()->status);
+        $this->assertEquals(1, $permohonan->fresh()->levelingRequired->urutan);
+
+        // Step 1: Manajer Unit (divisi sama) menyetujui
+        $workflow->approve($permohonan, $this->managerUser, ['catatan' => 'Disetujui Manajer Unit']);
+        $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
+
+        // Step 2: Kadiv Divisi (divisi sama) menyetujui tahap akhir
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Disetujui Kadiv Divisi']);
+        $approved = $permohonan->fresh();
+        $this->assertEquals('disetujui_keuangan', $approved->status);
+        $this->assertEquals(1500000, $approved->total_disetujui);
+        $this->assertEquals(1500000, $item->fresh()->jumlah_disetujui);
+    }
+
+    public function test_manager_level_approval_chain(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Pelatihan',
+            'nama_kegiatan' => 'Workshop IT',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        $item = PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Sewa Tempat & Perlengkapan',
+            'jumlah_diminta' => 6000000, // Manager level (2.1 - 10jt)
+        ]);
+
+        $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $permohonan->fresh()->status);
+        $this->assertEquals(2, $permohonan->fresh()->levelingRequired->urutan);
+
+        // Step 1: Kadiv Divisi menyetujui
+        $workflow->approve($permohonan, $this->kadivUser, ['catatan' => 'Disetujui Kadiv Divisi']);
+        $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
+
+        // Step 2: Kadiv Keuangan menyetujui dengan per-item amounts
+        $workflow->approve($permohonan, $this->financeUser, [
+            'items' => [$item->id => 5500000],
+            'catatan' => 'Disetujui Kadiv Keuangan dengan penyesuaian',
+        ]);
+        $approved = $permohonan->fresh();
+        $this->assertEquals('disetujui_keuangan', $approved->status);
+        $this->assertEquals(5500000, $approved->total_disetujui);
+        $this->assertEquals(5500000, $item->fresh()->jumlah_disetujui);
     }
 }

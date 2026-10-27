@@ -211,14 +211,20 @@ class UmpWorkflowTest extends TestCase
             ->assertSee('Bagian D: Pembulatan Nominal')
             ->assertSee('Rp 5.000.000')
             ->call('tambahBaris')
-            ->assertCount('items', 1)
-            ->set('items.0.tgl', now()->toDateString())
-            ->set('items.0.rincian', 'Sewa kendaraan operasional')
-            ->set('items.0.no_bukti', 'KUIT-001')
-            ->set('items.0.jumlah', 1200000)
+            ->assertCount('itemsByPenerima.pj', 1)
+            ->assertSeeHtml('aria-label="Simpan baris"')
+            ->set('itemsByPenerima.pj.0.tgl', now()->toDateString())
+            ->set('itemsByPenerima.pj.0.rincian', 'Sewa kendaraan operasional')
+            ->set('itemsByPenerima.pj.0.no_bukti', 'KUIT-001')
+            ->set('itemsByPenerima.pj.0.jumlah', 1200000)
             ->call('simpanDraft')
             ->assertHasNoErrors()
-            ->assertSee('Draft UMP tersimpan');
+            ->assertCount('itemsByPenerima.pj', 1)
+            ->assertSee('1 baris')
+            ->assertSee('Rp 1.200.000')
+            ->assertSee('Draft UMP tersimpan')
+            ->assertDontSeeHtml('aria-label="Simpan baris"')
+            ->assertSeeHtml('aria-label="Hapus baris"');
 
         $this->ump->refresh();
         $this->assertSame(1200000, (int) $this->ump->total_penggunaan);
@@ -245,9 +251,9 @@ class UmpWorkflowTest extends TestCase
         Livewire::actingAs($this->pjUser)
             ->test(UmpDetail::class, ['id' => $this->ump->id])
             ->call('tambahBaris')
-            ->set('items.0.tgl', now()->toDateString())
-            ->set('items.0.rincian', 'Pengeluaran melebihi dana')
-            ->set('items.0.jumlah', 7000000)
+            ->set('itemsByPenerima.pj.0.tgl', now()->toDateString())
+            ->set('itemsByPenerima.pj.0.rincian', 'Pengeluaran melebihi dana')
+            ->set('itemsByPenerima.pj.0.jumlah', 7000000)
             ->call('ajukanUMP')
             ->assertHasErrors(['catatanKekurangan' => 'required']);
 
@@ -262,11 +268,11 @@ class UmpWorkflowTest extends TestCase
         Livewire::actingAs($this->pjUser)
             ->test(UmpDetail::class, ['id' => $this->ump->id])
             ->call('tambahBaris')
-            ->set('items.0.tgl', $wrongYear.'-06-15')
-            ->set('items.0.rincian', 'Pengeluaran tahun lalu')
-            ->set('items.0.jumlah', 500000)
+            ->set('itemsByPenerima.pj.0.tgl', $wrongYear.'-06-15')
+            ->set('itemsByPenerima.pj.0.rincian', 'Pengeluaran tahun lalu')
+            ->set('itemsByPenerima.pj.0.jumlah', 500000)
             ->call('simpanDraft')
-            ->assertHasErrors(['items.0.tgl']);
+            ->assertHasErrors(['itemsByPenerima.pj.0.tgl']);
 
         $this->assertSame('draft', $this->ump->fresh()->status);
     }
@@ -278,9 +284,9 @@ class UmpWorkflowTest extends TestCase
         Livewire::actingAs($this->pjUser)
             ->test(UmpDetail::class, ['id' => $this->ump->id])
             ->call('tambahBaris')
-            ->set('items.0.tgl', $ta->tahun.'-06-15')
-            ->set('items.0.rincian', 'Pengeluaran valid')
-            ->set('items.0.jumlah', 500000)
+            ->set('itemsByPenerima.pj.0.tgl', $ta->tahun.'-06-15')
+            ->set('itemsByPenerima.pj.0.rincian', 'Pengeluaran valid')
+            ->set('itemsByPenerima.pj.0.jumlah', 500000)
             ->call('simpanDraft')
             ->assertHasNoErrors();
     }

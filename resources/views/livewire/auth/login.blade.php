@@ -474,7 +474,7 @@
             <h2 class="form-title">Selamat Datang Kembali</h2>
             <p class="form-subtitle">Masuk untuk melanjutkan ke SIGMA.</p>
 
-            <form wire:submit="login" novalidate>
+            <form wire:submit="login" action="#" onsubmit="return false;" novalidate>
               {{-- Username or Email Field --}}
               <div class="field">
                 <label for="login_id" class="field-label">Username atau Email</label>
@@ -583,11 +583,11 @@
                   <button type="button" wire:click="fillDemo('admin')" class="demo-btn">
                     <strong>admin</strong><span>Admin IT</span>
                   </button>
-                  <button type="button" wire:click="fillDemo('koordinator.it')" class="demo-btn">
-                    <strong>koordinator.it</strong><span>Koordinator IT</span>
+                  <button type="button" wire:click="fillDemo('rudiansah')" class="demo-btn">
+                    <strong>rudiansah</strong><span>Koordinator IT</span>
                   </button>
-                  <button type="button" wire:click="fillDemo('manager.humas')" class="demo-btn">
-                    <strong>manager.humas</strong><span>Manager Humas</span>
+                  <button type="button" wire:click="fillDemo('sigit.nugroho')" class="demo-btn">
+                    <strong>sigit.nugroho</strong><span>Manager Humas</span>
                   </button>
                   <button type="button" wire:click="fillDemo('rahmatullah.sidik')" class="demo-btn">
                     <strong>rahmatullah</strong><span>Kadiv / Dirops</span>
@@ -671,7 +671,7 @@
             </svg>
           </button>
           <div x-show="activeFaq === 1" x-cloak class="px-3.5 pb-3.5 pt-1 text-slate-600 leading-relaxed border-t border-slate-200/60 bg-white">
-            Gunakan username resmi kedinasan Anda (misal: koordinator.it, manager.humas, admin) atau email @alazharpeduli.or.id yang telah terdaftar.
+            Gunakan username resmi kedinasan Anda (misal: rudiansah, sigit.nugroho, admin) atau email @alazharpeduli.or.id yang telah terdaftar.
           </div>
         </div>
 

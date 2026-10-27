@@ -99,9 +99,19 @@ class Unit extends Model
             }
         }
 
-        // 3. Fallback: cari manager atau pimpinan di lingkup divisi yang sama (urutan >= 2)
+        // 3. Cari manager di lingkup divisi yang sama (urutan 2, misal Manager Fundraising untuk unit KPw)
         $sameDivisiUnitIds = $this->getSameDivisiUnitIds();
 
+        $divisiManager = User::whereIn('unit_id', $sameDivisiUnitIds)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', 2))
+            ->where('is_active', true)
+            ->first();
+
+        if ($divisiManager) {
+            return $divisiManager;
+        }
+
+        // 4. Fallback: cari pimpinan di lingkup divisi yang sama (urutan >= 2)
         return User::whereIn('unit_id', $sameDivisiUnitIds)
             ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 2))
             ->where('is_active', true)

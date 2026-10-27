@@ -46,7 +46,7 @@ class PermohonanCreate extends Component
 
     public ?int $atasan_id = null;
 
-    // Field khusus Petugas Input / TU: Pejabat Pembuat (Supervisor, Manajer, atau Kadiv)
+    // Khusus Petugas TU / Admin / Keuangan: pejabat pemohon (Supervisor, Manajer, atau Kadiv)
     public ?int $user_id = null;
 
     public string $creatorLevel = '';
@@ -58,7 +58,20 @@ class PermohonanCreate extends Component
     {
         $user = Auth::user();
 
-        $this->user_id = $user?->id;
+        // Petugas TU / Admin / Keuangan memilih pejabat pemohon;
+        // Staff role unit tanpa leveling (urutan < 1 atau null) dibuat atas nama supervisor/manager unitnya;
+        // Pengaju lain dengan leveling membuat atas nama dirinya sendiri.
+        if ($this->isTu) {
+            $this->user_id = null;
+        } elseif ($user && $user->role === 'unit' && (($user->leveling?->urutan ?? 0) < 1)) {
+            $atasan = User::where('unit_id', $user->unit_id)
+                ->whereHas('leveling', fn ($q) => $q->where('urutan', 1))
+                ->where('is_active', true)
+                ->first() ?? Unit::find($user->unit_id)?->getManager();
+            $this->user_id = $atasan?->id ?? $user->id;
+        } else {
+            $this->user_id = $user?->id;
+        }
         $this->unit_id = $user?->unit_id;
         $this->tgl_mulai = now()->toDateString();
 
@@ -131,6 +144,21 @@ class PermohonanCreate extends Component
         }
     }
 
+    /**
+     * Petugas TU / Admin / Keuangan dapat menginput permohonan atas nama pejabat pemohon.
+     */
+    public function getIsTuProperty(): bool
+    {
+        $user = Auth::user();
+
+        return (bool) ($user && ($user->is_petugas_input || $user->role === 'admin' || $user->role === 'keuangan'));
+    }
+
+    public function getAtasNamaUserProperty(): ?User
+    {
+        return $this->user_id ? User::with('leveling', 'unit')->find($this->user_id) : null;
+    }
+
     public function updatedUserId(?int $value): void
     {
         if (! $value) {
@@ -138,41 +166,30 @@ class PermohonanCreate extends Component
         }
 
         $selected = User::with('unit')->find($value);
-        if ($selected && $selected->unit_id) {
+        if ($selected?->unit_id) {
             $this->unit_id = $selected->unit_id;
             $this->updatedUnitId($selected->unit_id);
         }
-    }
-
-    public function getIsTuProperty(): bool
-    {
-        $user = Auth::user();
-
-        return $user && ($user->is_petugas_input || $user->role === 'admin' || $user->role === 'keuangan');
-    }
-
-    public function getSelectedCreatorLevelProperty(): int
-    {
-        $creatorId = ($this->isTu && $this->user_id) ? $this->user_id : Auth::id();
-        $creator = $creatorId ? User::with('leveling')->find($creatorId) : null;
-
-        return $creator?->leveling?->urutan ?? 1;
     }
 
     public function updatedKodeAnggaranId(?int $value): void
     {
         if ($value) {
             $kode = KodeAnggaran::find($value);
-            if ($kode && (str_starts_with($kode->kode, '2.4') || str_contains(strtolower($kode->nama), 'amil'))) {
-                $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
-                if ($zakat) {
-                    $this->sumber_dana_id = $zakat->id;
-                }
-                $asnafAmil = Asnaf::where('nama', 'Amil')->first();
-                if ($asnafAmil) {
-                    foreach ($this->items as $idx => $item) {
-                        if (empty($this->items[$idx]['asnaf_id'])) {
-                            $this->items[$idx]['asnaf_id'] = $asnafAmil->id;
+            if ($kode) {
+                $this->program = $kode->nama;
+
+                if (str_starts_with($kode->kode, '2.4') || str_contains(strtolower($kode->nama), 'amil')) {
+                    $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
+                    if ($zakat) {
+                        $this->sumber_dana_id = $zakat->id;
+                    }
+                    $asnafAmil = Asnaf::where('nama', 'Amil')->first();
+                    if ($asnafAmil) {
+                        foreach ($this->items as $idx => $item) {
+                            if (empty($this->items[$idx]['asnaf_id'])) {
+                                $this->items[$idx]['asnaf_id'] = $asnafAmil->id;
+                            }
                         }
                     }
                 }
@@ -261,6 +278,12 @@ class PermohonanCreate extends Component
 
     protected function validateForm(): void
     {
+        if ($this->kode_anggaran_id && empty($this->program)) {
+            $kode = KodeAnggaran::find($this->kode_anggaran_id);
+            if ($kode) {
+                $this->program = $kode->nama;
+            }
+        }
         foreach ($this->items as $idx => $item) {
             if (isset($item['jumlah_diminta']) && is_string($item['jumlah_diminta'])) {
                 $clean = preg_replace('/\D/', '', $item['jumlah_diminta']);
@@ -297,6 +320,10 @@ class PermohonanCreate extends Component
             $rules['items.*.asnaf_id'] = ['required', 'exists:asnaf,id'];
         }
 
+        if ($this->isTu) {
+            $rules['user_id'] = ['required', 'exists:users,id'];
+        }
+
         if ($this->isOverBudget) {
             $rules['catatan_over'] = ['required', 'string', 'min:10'];
         }
@@ -306,12 +333,10 @@ class PermohonanCreate extends Component
             'items.*.jumlah_diminta.required' => 'Nominal rincian wajib diisi.',
             'items.*.jumlah_diminta.min' => 'Nominal rincian minimal Rp 1.',
             'items.*.asnaf_id.required' => 'Asnaf wajib dipilih untuk sumber dana Zakat.',
+            'user_id.required' => 'Pejabat pemohon wajib dipilih.',
             'catatan_over.required' => 'Catatan over budget wajib diisi karena total pengajuan melebihi sisa plafon.',
             'catatan_over.min' => 'Catatan over budget minimal 10 karakter.',
         ];
-        if ($this->isTu) {
-            $rules['user_id'] = ['required', 'exists:users,id'];
-        }
         $this->validate($rules, $messages);
     }
 
@@ -324,9 +349,9 @@ class PermohonanCreate extends Component
                 'no_pengajuan' => 'DRAFT-'.strtoupper(Str::random(10)),
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
-                'user_id' => ($this->isTu && $this->user_id) ? $this->user_id : Auth::id(),
+                'user_id' => $this->user_id ?: Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
-                'program' => $this->program,
+                'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
                 'tgl_mulai' => $this->tgl_mulai,
                 'tgl_selesai' => $this->tgl_selesai ?: null,
@@ -364,9 +389,9 @@ class PermohonanCreate extends Component
                 'no_pengajuan' => 'DRAFT-'.strtoupper(Str::random(10)),
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
-                'user_id' => ($this->isTu && $this->user_id) ? $this->user_id : Auth::id(),
+                'user_id' => $this->user_id ?: Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
-                'program' => $this->program,
+                'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
                 'tgl_mulai' => $this->tgl_mulai,
                 'tgl_selesai' => $this->tgl_selesai ?: null,
@@ -415,33 +440,20 @@ class PermohonanCreate extends Component
 
         $selectedSumberDana = SumberDana::find($this->sumber_dana_id);
         $needsAsnaf = $selectedSumberDana && $selectedSumberDana->butuh_asnaf;
-        $creatorsQuery = User::with(['unit', 'leveling'])
-            ->where('is_active', true);
 
-        if ($this->creatorLevel === '1') {
-            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', 1));
-        } elseif ($this->creatorLevel === '2') {
-            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', 2));
-        } elseif ($this->creatorLevel === '3') {
-            $creatorsQuery->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3));
-        }
-
-        $creatorCandidates = $creatorsQuery->orderBy('name')->get()->map(function ($u) {
-            $lvlName = $u->leveling?->nama ?? 'Staff';
-            $unitCode = $u->unit?->kode ?? '';
-            $subText = "[{$lvlName}] ".($u->jabatan ?: $u->unit?->nama ?? '').($unitCode ? " ({$unitCode})" : '');
-
-            return [
-                'id' => $u->id,
-                'name' => $u->name,
-                'sub' => $subText,
-            ];
-        });
+        // Pejabat pemohon (Tahap 1): Supervisor, Manajer, atau Kadiv.
+        $creatorCandidates = User::with(['unit', 'leveling'])
+            ->where('is_active', true)
+            ->when($this->creatorLevel !== '', function ($q) {
+                $this->creatorLevel === '3'
+                    ? $q->whereHas('leveling', fn ($l) => $l->where('urutan', '>=', 3))
+                    : $q->whereHas('leveling', fn ($l) => $l->where('urutan', (int) $this->creatorLevel));
+            }, fn ($q) => $q->whereHas('leveling', fn ($l) => $l->where('urutan', '<=', 3)))
+            ->get()
+            ->sortBy(fn (User $u) => [$u->leveling?->urutan ?? 9, $u->name])
+            ->values();
 
         return view('livewire.permohonan.permohonan-create', [
-            'isTu' => $this->isTu,
-            'creatorCandidates' => $creatorCandidates,
-            'selectedCreatorLevel' => $this->selectedCreatorLevel,
             'programs' => $programs,
             'units' => $units,
             'sumberDanaList' => $sumberDanaList,
@@ -452,6 +464,8 @@ class PermohonanCreate extends Component
             'isOverBudget' => $this->isOverBudget,
             'requiredApprover' => $this->requiredApprover,
             'totalDiminta' => $this->totalDiminta,
+            'isTu' => $this->isTu,
+            'creatorCandidates' => $creatorCandidates,
         ]);
     }
 }

@@ -281,8 +281,11 @@ class MasterDataSeeder extends Seeder
             'pembulatan.kelipatan' => 1000,
             'pembulatan.arah' => 'terdekat',
             'ump.tenggat_hari' => 14,
+            'ump.pengingat_hari' => 3,
+            'permohonan.pengingat_hari' => 3,
             'keuangan.mode' => 'atas_nama',
             'kode.max_depth' => 4,
+            'notifikasi.email_aktif' => 'nonaktif',
         ];
 
         foreach ($settings as $key => $val) {

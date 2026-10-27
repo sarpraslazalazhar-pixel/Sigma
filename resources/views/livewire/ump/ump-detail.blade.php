@@ -180,153 +180,315 @@
 
     {{-- BAGIAN B: PENGGUNAAN DANA --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-100">
+        <div class="pb-2 border-b border-slate-100">
             <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Bagian B: Penggunaan Dana
             </h2>
-            @if ($isEditable)
-                <button
-                    type="button"
-                    wire:click="tambahBaris"
-                    class="min-h-[40px] px-4 py-2 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span>Tambah Baris Pengeluaran</span>
-                </button>
-            @endif
+            <p class="text-[11px] text-slate-400 mt-1">
+                Setiap penerima dana mengisi baris pengeluarannya masing-masing; bukti transfer/transaksi diunggah per baris.
+            </p>
         </div>
 
-        {{-- Mobile cards --}}
-        <div class="block lg:hidden space-y-3">
-            @foreach ($items as $i => $row)
-                <div class="rounded-2xl border border-slate-200 p-4 space-y-3 bg-slate-50/60">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[11px] font-bold text-slate-500 uppercase">Baris {{ $i + 1 }}</span>
-                        @if ($isEditable)
-                            <button type="button" wire:click="hapusBaris({{ $i }})" class="text-xs font-semibold text-red-600 hover:underline cursor-pointer">
-                                Hapus Baris
-                            </button>
-                        @endif
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Tanggal Pengeluaran *</label>
-                        <input type="date" wire:model="items.{{ $i }}.tgl" {{ $isEditable ? '' : 'disabled' }}
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white @error('items.' . $i . '.tgl') border-red-500 @enderror" />
-                        @error('items.' . $i . '.tgl') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Rincian Pengeluaran *</label>
-                        <input type="text" wire:model="items.{{ $i }}.rincian" placeholder="Contoh: Transport tim ke lokasi" {{ $isEditable ? '' : 'disabled' }}
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white @error('items.' . $i . '.rincian') border-red-500 @enderror" />
-                        @error('items.' . $i . '.rincian') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">No Bukti (transfer, nota, kuitansi)</label>
-                        <input type="text" wire:model="items.{{ $i }}.no_bukti" placeholder="Opsional" {{ $isEditable ? '' : 'disabled' }}
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white" />
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Jumlah (Rp) *</label>
-                        <input type="text" inputmode="numeric" wire:ignore
-                            value="{{ number_format((int) ($row['jumlah'] ?? 0), 0, ',', '.') }}"
-                            {{ $isEditable ? '' : 'disabled' }}
-                            x-on:input="
-                                const raw = $event.target.value.replace(/\D/g, '');
-                                $event.target.value = raw ? Number(raw).toLocaleString('id-ID') : '';
-                                $wire.set('items.{{ $i }}.jumlah', raw === '' ? 0 : Number(raw));
-                            "
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white text-right tabular-nums font-semibold @error('items.' . $i . '.jumlah') border-red-500 @enderror" />
-                        @error('items.' . $i . '.jumlah') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
-                    </div>
-                </div>
-            @endforeach
-            @if (count($items) === 0)
-                <div class="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">
-                    Belum ada baris pengeluaran. Klik "Tambah Baris Pengeluaran".
-                </div>
-            @endif
-        </div>
+        @php
+            $currentUser = auth()->user();
+            $canManagePenerima = $isEditable && $currentUser && (
+                $ump->pj_id === $currentUser->id
+                || $currentUser->is_petugas_input
+                || $currentUser->role === 'admin'
+                || $currentUser->isKeuangan()
+            );
+        @endphp
 
-        {{-- Desktop table --}}
-        <div class="hidden lg:block overflow-x-auto">
-            <table class="w-full text-left text-xs">
-                <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
-                    <tr>
-                        <th class="py-3 px-3 w-12">No</th>
-                        <th class="py-3 px-3">Tanggal Pengeluaran</th>
-                        <th class="py-3 px-3">Rincian Pengeluaran</th>
-                        <th class="py-3 px-3">No Bukti</th>
-                        <th class="py-3 px-3 text-right">Jumlah</th>
-                        <th class="py-3 px-3 text-center w-24">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @forelse ($items as $i => $row)
-                        <tr class="align-top">
-                            <td class="py-3 px-3 font-bold text-slate-500">{{ $i + 1 }}</td>
-                            <td class="py-3 px-3">
-                                <input type="date" wire:model="items.{{ $i }}.tgl" {{ $isEditable ? '' : 'disabled' }}
-                                    class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white @error('items.' . $i . '.tgl') border-red-500 @enderror" />
-                                @error('items.' . $i . '.tgl') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
-                            </td>
-                            <td class="py-3 px-3">
-                                <input type="text" wire:model="items.{{ $i }}.rincian" placeholder="Rincian pengeluaran" {{ $isEditable ? '' : 'disabled' }}
-                                    class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white @error('items.' . $i . '.rincian') border-red-500 @enderror" />
-                                @error('items.' . $i . '.rincian') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
-                            </td>
-                            <td class="py-3 px-3">
-                                <input type="text" wire:model="items.{{ $i }}.no_bukti" placeholder="transfer / nota / kuitansi" {{ $isEditable ? '' : 'disabled' }}
-                                    class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white" />
-                            </td>
-                            <td class="py-3 px-3">
+        @if ($canManagePenerima)
+            <div class="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-3">
+                <div>
+                    <span class="text-xs font-bold text-[#0F2F57]">Penerima Dana UMP</span>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                        Pilih siapa saja yang menerima bagian dana dari PPD ini; masing-masing dapat mengisi Penggunaan Dana secara mandiri.
+                    </p>
+                </div>
+                <div x-data="{ search: '' }" class="space-y-2">
+                    <input
+                        type="text"
+                        x-model="search"
+                        placeholder="Cari nama atau jabatan..."
+                        class="w-full min-h-[40px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
+                    />
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-60 overflow-y-auto pr-1">
+                        @forelse ($penerimaCandidates as $cand)
+                            <label
+                                x-show="!search || @js(strtolower($cand['name'].' '.$cand['sub'])).includes(search.toLowerCase())"
+                                class="flex items-start gap-2.5 px-2.5 py-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-[#1E60D5] transition-colors"
+                            >
+                                <input
+                                    type="checkbox"
+                                    wire:model="selectedPenerimaIds"
+                                    value="{{ $cand['id'] }}"
+                                    class="mt-0.5 w-4 h-4 rounded border-slate-300 text-[#1E60D5] focus:ring-[#1E60D5]"
+                                />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-xs font-medium text-slate-800 truncate">{{ $cand['name'] }}</span>
+                                    @if ($cand['sub'])
+                                        <span class="block text-[11px] text-slate-500 truncate">{{ $cand['sub'] }}</span>
+                                    @endif
+                                </span>
+                            </label>
+                        @empty
+                            <div class="col-span-full py-3 text-center text-xs text-slate-400">
+                                Tidak ada pengguna pada divisi ini.
+                            </div>
+                        @endforelse
+                    </div>
+                    <div class="flex items-center justify-between gap-3 pt-1">
+                        <span class="text-[11px] text-slate-500">{{ count($selectedPenerimaIds) }} penerima dipilih</span>
+                        <button
+                            type="button"
+                            wire:click="syncPenerima"
+                            wire:loading.attr="disabled"
+                            class="min-h-[40px] px-4 py-2 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                            Simpan Penerima
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @php
+            $sections = collect([
+                ['key' => 'pj', 'label' => $ump->pj?->name ?? 'Penanggung Jawab', 'sub' => 'Penanggung Jawab UMP'],
+            ]);
+            foreach ($ump->penerima->sortBy(fn ($penerimaRow) => $penerimaRow->user?->name ?? '') as $penerimaRow) {
+                $sections->push([
+                    'key' => (string) $penerimaRow->id,
+                    'label' => $penerimaRow->user?->name ?? 'Penerima',
+                    'sub' => $penerimaRow->user?->jabatan ?? 'Penerima Dana',
+                ]);
+            }
+        @endphp
+
+        @foreach ($sections as $section)
+            @php
+                $rows = $itemsByPenerima[$section['key']] ?? [];
+                $sectionEditable = $this->canEditSection($section['key']);
+                $sectionTotal = (int) collect($rows)->sum('jumlah');
+            @endphp
+            <div class="rounded-2xl border border-slate-200" wire:key="ump-section-{{ $section['key'] }}">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 rounded-t-2xl">
+                    <div class="min-w-0">
+                        <span class="text-xs font-bold text-slate-800">{{ $section['label'] }}</span>
+                        <span class="text-[11px] text-slate-500 ml-1.5">{{ $section['sub'] }}</span>
+                        <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-600">{{ count($rows) }} baris</span>
+                    </div>
+                    @if ($sectionEditable)
+                        <button
+                            type="button"
+                            wire:click="tambahBaris('{{ $section['key'] }}')"
+                            class="min-h-[38px] px-3.5 py-1.5 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer inline-flex items-center gap-1.5 shrink-0"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>Tambah Baris</span>
+                        </button>
+                    @endif
+                </div>
+
+                {{-- Mobile cards --}}
+                <div class="block lg:hidden space-y-3 p-3">
+                    @forelse ($rows as $i => $row)
+                        @php $itemModel = $row['id'] ? $ump->items->firstWhere('id', $row['id']) : null; @endphp
+                        <div class="rounded-2xl border border-slate-200 p-4 space-y-3 bg-slate-50/60" wire:key="m-{{ $section['key'] }}-{{ $i }}-{{ $row['id'] ?? 'new' }}">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-bold text-slate-500 uppercase">Baris {{ $i + 1 }}</span>
+                                @if ($sectionEditable)
+                                    <div class="inline-flex items-center gap-1.5">
+                                        @if (empty($row['id']))
+                                            <button
+                                                type="button"
+                                                wire:click="simpanDraft"
+                                                wire:loading.attr="disabled"
+                                                title="Simpan baris (Draft)"
+                                                aria-label="Simpan baris"
+                                                class="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                            >
+                                                <svg wire:loading.remove wire:target="simpanDraft" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <svg wire:loading wire:target="simpanDraft" class="animate-spin w-3.5 h-3.5 text-emerald-700" fill="none" viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        <button
+                                            type="button"
+                                            wire:click="hapusBaris('{{ $section['key'] }}', {{ $i }})"
+                                            wire:loading.attr="disabled"
+                                            title="Hapus baris"
+                                            aria-label="Hapus baris"
+                                            class="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tanggal Pengeluaran *</label>
+                                <input type="date" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.tgl" {{ $sectionEditable ? '' : 'disabled' }}
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.tgl') border-red-500 @enderror" />
+                                @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.tgl') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Rincian Pengeluaran *</label>
+                                <input type="text" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.rincian" placeholder="Contoh: Transport tim ke lokasi" {{ $sectionEditable ? '' : 'disabled' }}
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.rincian') border-red-500 @enderror" />
+                                @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.rincian') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">No Bukti (transfer, nota, kuitansi)</label>
+                                <input type="text" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.no_bukti" placeholder="Opsional" {{ $sectionEditable ? '' : 'disabled' }}
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Jumlah (Rp) *</label>
                                 <input type="text" inputmode="numeric" wire:ignore
                                     value="{{ number_format((int) ($row['jumlah'] ?? 0), 0, ',', '.') }}"
-                                    {{ $isEditable ? '' : 'disabled' }}
+                                    {{ $sectionEditable ? '' : 'disabled' }}
                                     x-on:input="
                                         const raw = $event.target.value.replace(/\D/g, '');
                                         $event.target.value = raw ? Number(raw).toLocaleString('id-ID') : '';
-                                        $wire.set('items.{{ $i }}.jumlah', raw === '' ? 0 : Number(raw));
+                                        $wire.set('itemsByPenerima.{{ $section['key'] }}.{{ $i }}.jumlah', raw === '' ? 0 : Number(raw));
                                     "
-                                    class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white text-right tabular-nums font-semibold @error('items.' . $i . '.jumlah') border-red-500 @enderror" />
-                                @error('items.' . $i . '.jumlah') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
-                            </td>
-                            <td class="py-3 px-3 text-center">
-                                @if ($isEditable)
-                                    <button
-                                        type="button"
-                                        wire:click="hapusBaris({{ $i }})"
-                                        class="min-h-[36px] px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-[11px] font-semibold hover:bg-red-50 transition-colors cursor-pointer"
-                                    >
-                                        Hapus
-                                    </button>
-                                @endif
-                            </td>
-                        </tr>
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white text-right tabular-nums font-semibold @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.jumlah') border-red-500 @enderror" />
+                                @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.jumlah') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <span class="block text-xs font-semibold text-slate-700 mb-1">Bukti Transfer / Transaksi</span>
+                                @include('livewire.ump.partials.item-bukti', ['section' => $section, 'row' => $row, 'itemModel' => $itemModel, 'sectionEditable' => $sectionEditable])
+                            </div>
+                        </div>
                     @empty
-                        <tr>
-                            <td colspan="6" class="py-6 text-center text-slate-500 text-xs">
-                                Belum ada baris pengeluaran. Klik "Tambah Baris Pengeluaran".
-                            </td>
-                        </tr>
+                        <div class="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">
+                            Belum ada baris pengeluaran{{ $sectionEditable ? '. Klik "Tambah Baris".' : '.' }}
+                        </div>
                     @endforelse
-                </tbody>
-                <tfoot>
-                    <tr class="bg-slate-100 border-t-2 border-slate-300">
-                        <td colspan="4" class="py-3 px-3 text-right font-bold text-slate-700 uppercase">
-                            Total Penggunaan Dana:
-                        </td>
-                        <td class="py-3 px-3 text-right font-bold text-[#0F2F57] tabular-nums">
-                            Rp {{ number_format($totalPenggunaan, 0, ',', '.') }}
-                        </td>
-                        <td></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
+                </div>
 
-        <div class="flex items-center justify-between gap-3 rounded-xl bg-slate-100 border border-slate-200 px-4 py-3 text-xs lg:hidden">
+                {{-- Desktop table --}}
+                <div class="hidden lg:block overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                            <tr>
+                                <th class="py-3 px-3 w-12">No</th>
+                                <th class="py-3 px-3">Tanggal Pengeluaran</th>
+                                <th class="py-3 px-3">Rincian Pengeluaran</th>
+                                <th class="py-3 px-3">No Bukti</th>
+                                <th class="py-3 px-3 text-right">Jumlah</th>
+                                <th class="py-3 px-3 w-44">Bukti Transaksi</th>
+                                <th class="py-3 px-3 text-center w-28">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($rows as $i => $row)
+                                @php $itemModel = $row['id'] ? $ump->items->firstWhere('id', $row['id']) : null; @endphp
+                                <tr class="align-top" wire:key="d-{{ $section['key'] }}-{{ $i }}-{{ $row['id'] ?? 'new' }}">
+                                    <td class="py-3 px-3 font-bold text-slate-500">{{ $i + 1 }}</td>
+                                    <td class="py-3 px-3">
+                                        <input type="date" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.tgl" {{ $sectionEditable ? '' : 'disabled' }}
+                                            class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.tgl') border-red-500 @enderror" />
+                                        @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.tgl') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
+                                    </td>
+                                    <td class="py-3 px-3">
+                                        <input type="text" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.rincian" placeholder="Rincian pengeluaran" {{ $sectionEditable ? '' : 'disabled' }}
+                                            class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.rincian') border-red-500 @enderror" />
+                                        @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.rincian') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
+                                    </td>
+                                    <td class="py-3 px-3">
+                                        <input type="text" wire:model="itemsByPenerima.{{ $section['key'] }}.{{ $i }}.no_bukti" placeholder="transfer / nota / kuitansi" {{ $sectionEditable ? '' : 'disabled' }}
+                                            class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white" />
+                                    </td>
+                                    <td class="py-3 px-3">
+                                        <input type="text" inputmode="numeric" wire:ignore
+                                            value="{{ number_format((int) ($row['jumlah'] ?? 0), 0, ',', '.') }}"
+                                            {{ $sectionEditable ? '' : 'disabled' }}
+                                            x-on:input="
+                                                const raw = $event.target.value.replace(/\D/g, '');
+                                                $event.target.value = raw ? Number(raw).toLocaleString('id-ID') : '';
+                                                $wire.set('itemsByPenerima.{{ $section['key'] }}.{{ $i }}.jumlah', raw === '' ? 0 : Number(raw));
+                                            "
+                                            class="w-full min-h-[40px] rounded-lg border border-slate-300 text-xs px-2.5 py-1.5 bg-white text-right tabular-nums font-semibold @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.jumlah') border-red-500 @enderror" />
+                                        @error('itemsByPenerima.' . $section['key'] . '.' . $i . '.jumlah') <p class="text-[11px] text-red-600 mt-1">{{ $message }}</p> @enderror
+                                    </td>
+                                    <td class="py-3 px-3">
+                                        @include('livewire.ump.partials.item-bukti', ['section' => $section, 'row' => $row, 'itemModel' => $itemModel, 'sectionEditable' => $sectionEditable])
+                                    </td>
+                                    <td class="py-3 px-3 text-center">
+                                        @if ($sectionEditable)
+                                            <div class="inline-flex items-center justify-center gap-1.5">
+                                                @if (empty($row['id']))
+                                                    <button
+                                                        type="button"
+                                                        wire:click="simpanDraft"
+                                                        wire:loading.attr="disabled"
+                                                        title="Simpan baris (Draft)"
+                                                        aria-label="Simpan baris"
+                                                        class="w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                                    >
+                                                        <svg wire:loading.remove wire:target="simpanDraft" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        <svg wire:loading wire:target="simpanDraft" class="animate-spin w-3.5 h-3.5 text-emerald-700" fill="none" viewBox="0 0 24 24">
+                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                                        </svg>
+                                                    </button>
+                                                @endif
+                                                <button
+                                                    type="button"
+                                                    wire:click="hapusBaris('{{ $section['key'] }}', {{ $i }})"
+                                                    wire:loading.attr="disabled"
+                                                    title="Hapus baris"
+                                                    aria-label="Hapus baris"
+                                                    class="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+                                                >
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="py-6 text-center text-slate-500 text-xs">
+                                        Belum ada baris pengeluaran{{ $sectionEditable ? '. Klik "Tambah Baris".' : '.' }}
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-slate-100 border-t-2 border-slate-300">
+                                <td colspan="4" class="py-3 px-3 text-right font-bold text-slate-700 uppercase">
+                                    Subtotal {{ $section['label'] }}:
+                                </td>
+                                <td class="py-3 px-3 text-right font-bold text-[#0F2F57] tabular-nums">
+                                    Rp {{ number_format($sectionTotal, 0, ',', '.') }}
+                                </td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        @endforeach
+
+        <div class="flex items-center justify-between gap-3 rounded-xl bg-slate-100 border border-slate-200 px-4 py-3 text-xs">
             <span class="font-bold text-slate-700 uppercase">Total Penggunaan Dana</span>
             <span class="font-bold text-[#0F2F57] tabular-nums">Rp {{ number_format($totalPenggunaan, 0, ',', '.') }}</span>
         </div>
@@ -362,6 +524,20 @@
             @endif
         </div>
     </div>
+
+    {{-- SOFT WARNING: penerima belum mengisi --}}
+    @if ($isEditable && ! empty($incompletePenerimaNames))
+        <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+            <svg class="w-4 h-4 shrink-0 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <span>
+                Penerima dana berikut belum mengisi baris penggunaan:
+                <span class="font-semibold">{{ implode(', ', $incompletePenerimaNames) }}</span>.
+                UMP tetap dapat diajukan, tetapi pastikan laporan tiap penerima sudah lengkap.
+            </span>
+        </div>
+    @endif
 
     {{-- BAGIAN C: SALDO / DEFISIT --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-3">
@@ -426,14 +602,14 @@
     {{-- STEPPER TIMELINE PERSETUJUAN UMP (FR-UMP-4) --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
-            Alur Tanda Tangan Berjenjang (PJ - Kadiv - Manager Keuangan - Kepala Keuangan - Selesai)
+            Alur Tanda Tangan Berjenjang (PJ - Diperiksa Oleh - Manager Keuangan - Kepala Keuangan - Selesai)
         </h2>
 
         <div class="flex flex-col lg:flex-row lg:items-start gap-3">
             @php
                 $steps = [
                     ['label' => 'Tanda Tangan PJ', 'sub' => 'Penanggung Jawab'],
-                    ['label' => 'Tanda Tangan Kadiv', 'sub' => 'Kepala Divisi / Dirops'],
+                    ['label' => 'Diperiksa Oleh', 'sub' => 'Kadiv / Manager PJ / TU'],
                     ['label' => 'TTD Manager Keuangan', 'sub' => 'Treasury'],
                     ['label' => 'TTD Kepala Keuangan', 'sub' => 'Kepala Divisi Keuangan'],
                     ['label' => 'Selesai', 'sub' => 'Realisasi dicatat'],
@@ -543,8 +719,9 @@
                 x-transition:leave="transition-all duration-200 ease-m3-emphasized-accel"
                 x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                 x-transition:leave-end="opacity-0 scale-95 translate-y-3"
-                @click.outside="closeApprovalModal"
+                @click.outside="$wire.closeApprovalModal()"
             >
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 class="text-base font-bold text-[#0F2F57]">
                         @if ($approvalAction === 'setuju')
                             Konfirmasi Persetujuan UMP
@@ -561,7 +738,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="submitApproval" class="p-6 space-y-4">
+                <form wire:submit="submitApproval" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <p class="text-xs text-slate-600">
                         @if ($approvalAction === 'setuju')
                             Persetujuan dicatat dengan nama dan jabatan Anda pada tahap berjalan.
@@ -621,6 +798,7 @@
                                 <span>Memproses...</span>
                             </span>
                         </button>
+                    </div>
                 </form>
             </div>
         </div>

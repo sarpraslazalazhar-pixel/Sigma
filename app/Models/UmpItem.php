@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class UmpItem extends Model
 {
@@ -11,6 +12,7 @@ class UmpItem extends Model
 
     protected $fillable = [
         'ump_id',
+        'penerima_id',
         'tgl',
         'rincian',
         'no_bukti',
@@ -28,5 +30,15 @@ class UmpItem extends Model
     public function ump(): BelongsTo
     {
         return $this->belongsTo(Ump::class, 'ump_id');
+    }
+
+    public function penerimaPivot(): BelongsTo
+    {
+        return $this->belongsTo(UmpPenerima::class, 'penerima_id');
+    }
+
+    public function lampiran(): MorphMany
+    {
+        return $this->morphMany(Lampiran::class, 'attachable');
     }
 }

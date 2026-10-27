@@ -262,4 +262,75 @@ class UmpApprovalAndRealizationTest extends TestCase
 
         (new UmpWorkflow)->requestRevision($this->ump, $this->kadivUser, 'alasan tes');
     }
+
+    public function test_diperiksa_oleh_can_be_approved_by_tu_staff(): void
+    {
+        $this->submitUmp();
+        $this->assertSame('ttd_pj', $this->ump->fresh()->status);
+
+        $tuUser = User::where('username', 'subakti')->firstOrFail();
+        $this->assertTrue((bool) $tuUser->is_petugas_input);
+
+        (new UmpWorkflow)->approve($this->ump, $tuUser, ['catatan' => 'Diperiksa oleh TU']);
+
+        $this->assertSame('ttd_manager_keuangan', $this->ump->fresh()->status);
+    }
+
+    public function test_diperiksa_oleh_can_be_approved_by_manager_pj(): void
+    {
+        // Buat UMP dengan staf sebagai PJ (bukan manager)
+        $staffUser = User::where('username', 'subakti')->firstOrFail();
+        $this->ump->pj_id = $staffUser->id;
+        $this->ump->save();
+
+        $workflow = new UmpWorkflow;
+        $workflow->saveItems($this->ump, [
+            ['tgl' => now()->toDateString(), 'rincian' => 'Pengeluaran staf', 'jumlah' => 1000000],
+        ]);
+        $workflow->submitByPj($this->ump, $staffUser, '');
+        $this->assertSame('ttd_pj', $this->ump->fresh()->status);
+
+        // Manager dari unit PJ (deden.salim) menyetujui tahap Diperiksa Oleh
+        $workflow->approve($this->ump, $this->pjUser, ['catatan' => 'Diperiksa Manager Unit']);
+
+        $this->assertSame('ttd_manager_keuangan', $this->ump->fresh()->status);
+    }
+
+    public function test_diperiksa_oleh_cannot_be_approved_by_finance_user(): void
+    {
+        $this->submitUmp();
+        $this->assertSame('ttd_pj', $this->ump->fresh()->status);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Diperiksa Oleh');
+
+        // Keuangan biasa tidak boleh memeriksa tahap Diperiksa Oleh unit
+        (new UmpWorkflow)->approve($this->ump, $this->financeUser, []);
+    }
+
+    public function test_diperiksa_oleh_cannot_be_approved_by_pj_themselves(): void
+    {
+        $this->submitUmp();
+        $this->assertSame('ttd_pj', $this->ump->fresh()->status);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Diperiksa Oleh');
+
+        // PJ tidak boleh memeriksa dokumennya sendiri
+        (new UmpWorkflow)->approve($this->ump, $this->pjUser, []);
+    }
+
+    public function test_diperiksa_oleh_cannot_be_approved_by_other_division(): void
+    {
+        $this->submitUmp();
+        $this->assertSame('ttd_pj', $this->ump->fresh()->status);
+
+        // User dari divisi lain (DIV-FND)
+        $otherDivManager = User::where('username', 'manager.fundraising.int')->firstOrFail();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Diperiksa Oleh');
+
+        (new UmpWorkflow)->approve($this->ump, $otherDivManager, []);
+    }
 }

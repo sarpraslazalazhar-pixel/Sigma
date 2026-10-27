@@ -1,9 +1,10 @@
-<div class="relative" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
+<div class="relative shrink-0" x-data="{ open: false }" @click.outside="open = false" @keydown.escape.window="open = false">
     <button
         type="button"
         @click="open = !open"
-        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-2xs transition-all cursor-pointer min-h-[36px]"
+        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-xs font-semibold text-slate-800 dark:text-slate-100 shadow-2xs transition-all cursor-pointer whitespace-nowrap min-h-[36px]"
         aria-haspopup="true"
+        aria-label="Tahun Anggaran {{ $selectedYear?->tahun ?? 'belum dipilih' }}{{ $selectedYear ? ', '.ucfirst($selectedYear->status) : '' }}"
         :aria-expanded="open"
     >
         <span class="inline-flex items-center gap-1.5">
@@ -15,15 +16,15 @@
 
         @if ($selectedYear)
             @if ($selectedYear->status === 'aktif')
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+                <span class="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                     Aktif
                 </span>
             @elseif ($selectedYear->status === 'draft')
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
+                <span class="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
                     Draft
                 </span>
             @else
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+                <span class="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
                     Ditutup
                 </span>
             @endif
@@ -55,7 +56,7 @@
                     type="button"
                     wire:click="switchYear({{ $year->id }})"
                     @click="open = false"
-                    class="w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer {{ $year->id === $selectedYearId ? 'bg-blue-50/60 dark:bg-blue-950/30 text-[#0F2F57] dark:text-blue-300 font-semibold' : 'text-slate-700 dark:text-slate-200' }}"
+                    class="w-full text-left px-3 py-3 sm:py-2 text-xs flex items-center justify-between transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 cursor-pointer {{ $year->id === $selectedYearId ? 'bg-blue-50/60 dark:bg-blue-950/30 text-[#0F2F57] dark:text-blue-300 font-semibold' : 'text-slate-700 dark:text-slate-200' }}"
                 >
                     <span class="inline-flex items-center gap-2">
                         @if ($year->id === $selectedYearId)

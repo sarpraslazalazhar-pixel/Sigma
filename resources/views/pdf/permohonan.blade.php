@@ -257,7 +257,7 @@
                     <tr>
                         <td class="meta-label">PROGRAM</td>
                         <td class="meta-colon">:</td>
-                        <td class="meta-val">{{ strtoupper($permohonan->program) }}</td>
+                        <td class="meta-val">{{ strtoupper($permohonan->kodeAnggaran?->nama ?? $permohonan->program) }}</td>
                     </tr>
                     <tr>
                         <td class="meta-label">NAMA KEGIATAN</td>
@@ -290,10 +290,7 @@
                         <td class="meta-label" style="width: 120px;">MATA ANGGARAN</td>
                         <td class="meta-colon">:</td>
                         <td class="meta-val font-bold">
-                            {{ $permohonan->kodeAnggaran?->kode }}<br>
-                            <span style="font-weight: normal; font-size: 8pt; color: #475569;">
-                                {{ $permohonan->kodeAnggaran?->nama }}
-                            </span>
+                            {{ $permohonan->kodeAnggaran?->kode ?? '-' }}
                         </td>
                     </tr>
                     <tr>
@@ -368,12 +365,12 @@
         <tr>
             {{-- Kiri: Diperiksa Oleh --}}
             <td class="sig-box">
-                <div class="sig-header">DIPERIKSA OLEH (KEPALA DIVISI)</div>
+                <div class="sig-header">DIPERIKSA OLEH (KEPALA DIVISI SEKRETARIAT)</div>
                 <div class="sig-name">
                     {{ $signerAtasan ? $signerAtasan->signer_name : '................................................' }}
                 </div>
                 <div class="sig-role">
-                    {{ $signerAtasan ? $signerAtasan->signer_jabatan : 'Kepala Divisi / Dirops' }}
+                    {{ $signerAtasan ? $signerAtasan->signer_jabatan : 'Kepala Divisi Sekretariat' }}
                 </div>
                 <div class="sig-date">
                     Tgl: {{ $signerAtasan && $signerAtasan->signed_at ? \Carbon\Carbon::parse($signerAtasan->signed_at)->format('d/m/Y') : '......................' }}

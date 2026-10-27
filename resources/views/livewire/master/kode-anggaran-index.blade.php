@@ -256,9 +256,7 @@
                         Filter Aktif (Semua Hasil Terbuka)
                     </span>
                 @else
-                    <span class="text-slate-400 text-[11px] hidden sm:inline">
-                        • Klik panah (<span class="text-[#1E60D5] font-bold">▶</span> / <span class="text-[#1E60D5] font-bold">▼</span>) untuk buka-tutup cabang kode
-                    </span>
+                    
                 @endif
             </div>
 
@@ -693,7 +691,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="save" class="p-6 space-y-4">
+                <form wire:submit="save" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     {{-- Parent Code Selector (if create) --}}
                     @if (!$editingId)
                         <div>
@@ -1051,7 +1049,7 @@
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                                 </svg>
-                                <span>+ Tambah Anak</span>
+                                <span>Tambah Anak</span>
                             </button>
                         @endif
 
@@ -1155,7 +1153,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="uploadImport" class="p-6 space-y-4">
+                <form wire:submit="uploadImport" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <div>
                         <label for="importFile" class="block text-xs font-semibold text-slate-700 mb-1">
                             Pilih File Excel (.xlsx / .xls) *

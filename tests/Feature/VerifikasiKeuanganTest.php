@@ -99,7 +99,7 @@ class VerifikasiKeuanganTest extends TestCase
         $this->actingAs($this->keuanganUser)
             ->get(route('keuangan.verifikasi'))
             ->assertStatus(200)
-            ->assertSee('Verifikasi Keuangan (Mode Atas Nama)')
+            ->assertSee('Verifikasi Keuangan')
             ->assertSee('PMH-VER-001')
             ->assertSee('PPD-VER-001');
     }
@@ -107,6 +107,15 @@ class VerifikasiKeuanganTest extends TestCase
     public function test_verifikasi_page_renders_for_admin_role(): void
     {
         $this->actingAs($this->adminUser)
+            ->get(route('keuangan.verifikasi'))
+            ->assertStatus(200);
+    }
+
+    public function test_verifikasi_page_renders_for_petugas_input(): void
+    {
+        $tuUser = User::where('role', 'unit')->where('is_petugas_input', true)->firstOrFail();
+
+        $this->actingAs($tuUser)
             ->get(route('keuangan.verifikasi'))
             ->assertStatus(200);
     }

@@ -67,7 +67,9 @@ class RbacTest extends TestCase
         $this->assertTrue($this->managerKlm->isManager());
         $this->assertFalse($this->managerKlm->isKadiv());
 
-        $this->assertTrue($this->staffKlm->isSupervisor());
+        $supervisorKlm = User::where('username', 'anas.priyogi')->firstOrFail();
+        $this->assertTrue($supervisorKlm->isSupervisor());
+        $this->assertFalse($this->staffKlm->isSupervisor());
     }
 
     public function test_division_access_helper(): void

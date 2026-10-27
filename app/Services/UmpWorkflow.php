@@ -60,6 +60,7 @@ class UmpWorkflow
                     'rincian' => $row['rincian'],
                     'no_bukti' => $row['no_bukti'] ?? null,
                     'jumlah' => $jumlah,
+                    'penerima_id' => ! empty($row['penerima_id']) ? (int) $row['penerima_id'] : null,
                 ];
 
                 if (! empty($row['id'])) {
@@ -178,11 +179,21 @@ class UmpWorkflow
                 $tahap = 'ttd_kadiv';
                 $nextStatus = 'ttd_manager_keuangan';
 
-                $docDivisiId = $locked->pencairan?->permohonan?->unit?->getDivisiId();
+                $isTu = $isPetugasInput || $approver->role === 'admin';
+                $pj = $locked->pj ?: $locked->pencairan?->permohonan?->user;
+                $pjDivisiId = $pj?->unit?->getDivisiId() ?? $locked->pencairan?->permohonan?->unit?->getDivisiId();
+                $pjUnitId = $pj?->unit_id ?? $locked->pencairan?->permohonan?->unit_id;
+
                 $approverDivisiId = $approver->unit?->getDivisiId();
-                $sameDivisi = $docDivisiId !== null && $approverDivisiId !== null && $docDivisiId === $approverDivisiId;
-                if (! ($sameDivisi && ($approver->leveling?->urutan ?? 0) >= 2) && ! $isFinanceRole && $approver->role !== 'admin') {
-                    throw new RuntimeException('Tahap ini memerlukan persetujuan Kepala Divisi / Direksi pemohon.');
+                $sameDivisi = $pjDivisiId !== null && $approverDivisiId !== null && $pjDivisiId === $approverDivisiId;
+                $sameUnit = $pjUnitId !== null && $approver->unit_id !== null && $pjUnitId === $approver->unit_id;
+                $urutan = $approver->leveling?->urutan ?? 0;
+
+                $isPj = $pj && $approver->id === $pj->id;
+                $isKadivOrManager = ! $isPj && ($sameDivisi || $sameUnit) && $urutan >= 2;
+
+                if (! $isTu && ! $isKadivOrManager) {
+                    throw new RuntimeException('Tahap "Diperiksa Oleh" hanya dapat diperiksa oleh TU, Kepala Divisi PJ, atau Manager PJ.');
                 }
             } elseif ($locked->status === 'ttd_manager_keuangan') {
                 $tahap = 'ttd_manager_keuangan';

@@ -11,6 +11,7 @@ use App\Models\Permohonan;
 use App\Models\Setting;
 use App\Models\TahunAnggaran;
 use App\Models\Ump;
+use App\Models\UmpPenerima;
 use App\Models\Unit;
 use App\Models\User;
 use Carbon\Carbon;
@@ -97,21 +98,36 @@ class PermohonanWorkflow
             }
 
             $before = $locked->toArray();
-            $creatorLevelingUrutan = $locked->user?->leveling ? $locked->user->leveling->urutan : 1;
             $currentCycle = (int) $locked->approvals()->max('siklus') ?: 1;
             if ($locked->status === 'perlu_perbaikan') {
                 $currentCycle++;
             }
 
-            // Jika pembuat adalah Kepala Divisi / Direktur (urutan >= 3): Otomatis Tahap 1 & 2 Selesai!
-            if ($creatorLevelingUrutan >= 3) {
-                $locked->status = 'diketahui_kadiv';
-                $locked->submitted_at = now();
-                $locked->save();
+            $levelingUrutan = $levelingRequired?->urutan ?? 1;
 
-                (new AuditLogger)->log('permohonan.submitted', $locked, $before, $locked->fresh()->toArray());
+            // Pengecualian: pemohon adalah Kepala Divisi sendiri dan leveling required urutan >= 3
+            // -> Tahap 1 & 2 otomatis selesai, dokumen langsung menunggu Keuangan.
+            $autoSkipTahap2 = (bool) ($locked->user?->isKadiv() && $levelingUrutan >= 3);
 
-                // Catat approval otomatis atas nama Kepala Divisi pembuat
+            if (! $autoSkipTahap2) {
+                if ($levelingUrutan <= 1) {
+                    $nextApprover = Unit::find($locked->unit_id)?->getManager();
+                } else {
+                    $nextApprover = $this->getKadivDivisi($locked);
+                }
+                if ($nextApprover) {
+                    $locked->atasan_id = $nextApprover->id;
+                }
+            }
+
+            $locked->status = $autoSkipTahap2 ? 'diketahui_kadiv' : 'diajukan';
+            $locked->submitted_at = now();
+            $locked->save();
+
+            (new AuditLogger)->log('permohonan.submitted', $locked, $before, $locked->fresh()->toArray());
+
+            if ($autoSkipTahap2) {
+                // Catat pemeriksaan Tahap 2 otomatis atas nama Kepala Divisi pembuat.
                 Approval::create([
                     'approvable_type' => Permohonan::class,
                     'approvable_id' => $locked->id,
@@ -122,99 +138,123 @@ class PermohonanWorkflow
                     'signer_name' => $locked->user->name,
                     'signer_jabatan' => $locked->user->jabatan ?? 'Kepala Divisi',
                     'signed_at' => now(),
-                    'catatan' => 'Dibuat langsung oleh Kepala Divisi (Tahap 1 & 2 selesai otomatis)',
+                    'recorded_by' => Auth::id() ?? $locked->user_id,
+                    'catatan' => 'Dibuat langsung oleh Kepala Divisi (Tahap 1 & 2 selesai otomatis).',
                 ]);
 
-                // Notifikasi langsung ke Bagian Keuangan untuk persetujuan Tahap 3
-                $financeUsers = User::where(function ($q) {
-                    $q->where('role', 'keuangan')->orWhere('is_petugas_input', true);
-                })->where('is_active', true)->get();
-
-                foreach ($financeUsers as $finUser) {
-                    NotificationService::kirim(
-                        $finUser,
-                        'dokumen_menunggu_tindakan',
-                        [
-                            'judul' => 'Permohonan Dana Baru dari Kadiv Menunggu Persetujuan Keuangan',
-                            'pesan' => "Permohonan dana {$locked->no_pengajuan} dibuat langsung oleh Kadiv {$locked->user?->name}. Tahap 2 selesai dan menunggu persetujuan Keuangan.",
-                            'url' => route('permohonan.detail', $locked->id),
-                            'jenis' => 'permohonan',
-                            'entity_id' => $locked->id,
-                        ],
-                        "tunggu_permohonan_{$locked->id}_kadiv_submitted_{$currentCycle}_{$finUser->id}"
-                    );
-                }
-
-                return $locked;
-            }
-
-            $locked->status = 'diajukan';
-            $locked->submitted_at = now();
-            $locked->save();
-            (new AuditLogger)->log('permohonan.submitted', $locked, $before, $locked->fresh()->toArray());
-
-            $currentCycle = (int) $locked->approvals()->max('siklus') ?: 1;
-            if ($locked->atasan) {
-                NotificationService::kirim(
-                    $locked->atasan,
-                    'dokumen_menunggu_tindakan',
-                    [
-                        'judul' => 'Permohonan Dana Baru Memerlukan Persetujuan',
-                        'pesan' => "Permohonan dana {$locked->no_pengajuan} dari {$locked->user?->name} memerlukan persetujuan Anda.",
-                        'url' => route('permohonan.detail', $locked->id),
-                        'jenis' => 'permohonan',
-                        'entity_id' => $locked->id,
-                    ],
-                    "tunggu_permohonan_{$locked->id}_diajukan_{$currentCycle}"
-                );
+                $this->notifyKeuangan($locked, $currentCycle);
             } else {
-                $requiredUrutan = $levelingRequired?->urutan ?? 1;
-                $unitId = $locked->unit_id;
-                $parentDivisiId = $locked->unit?->parent_id;
-
-                $approvers = User::where(function ($q) use ($unitId, $parentDivisiId) {
-                    $q->where('unit_id', $unitId);
-                    if ($parentDivisiId) {
-                        $q->orWhere('unit_id', $parentDivisiId);
-                    }
-                })
-                    ->whereHas('leveling', function ($q) use ($requiredUrutan) {
-                        if ($requiredUrutan <= 1) {
-                            $q->where('urutan', '>=', 1);
-                        } else {
-                            $q->where('urutan', '>=', 2);
-                        }
-                    })
-                    ->where('is_active', true)
-                    ->where('id', '!=', $locked->user_id)
-                    ->get();
-
-                if ($requiredUrutan >= 3 && $approvers->where('leveling.urutan', '>=', 3)->isEmpty()) {
-                    $kadivs = User::whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
-                        ->where('is_active', true)
-                        ->where('id', '!=', $locked->user_id)
-                        ->get();
-                    $approvers = $approvers->merge($kadivs)->unique('id');
-                }
-
-                foreach ($approvers as $approver) {
-                    NotificationService::kirim(
-                        $approver,
-                        'dokumen_menunggu_tindakan',
-                        [
-                            'judul' => 'Permohonan Dana Baru Memerlukan Persetujuan',
-                            'pesan' => "Permohonan dana {$locked->no_pengajuan} dari {$locked->user?->name} memerlukan persetujuan Anda.",
-                            'url' => route('permohonan.detail', $locked->id),
-                            'jenis' => 'permohonan',
-                            'entity_id' => $locked->id,
-                        ],
-                        "tunggu_permohonan_{$locked->id}_diajukan_{$currentCycle}_{$approver->id}"
-                    );
-                }
+                $this->notifyNextApprover($locked, $currentCycle);
             }
 
             return $locked;
         });
+    }
+
+    /**
+     * Dapatkan Kepala Divisi dari unit permohonan dana.
+     */
+    public function getKadivDivisi(Permohonan $permohonan): ?User
+    {
+        $divisiId = Unit::find($permohonan->unit_id)?->getDivisiId();
+        if (! $divisiId) {
+            return null;
+        }
+
+        return User::where('is_active', true)
+            ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
+            ->where(fn ($q) => $q->where('unit_id', $divisiId)
+                ->orWhereHas('unit', fn ($u) => $u->where('parent_id', $divisiId)))
+            ->first();
+    }
+
+    /**
+     * Notifikasi ke approver berikutnya berdasarkan leveling required.
+     */
+    public function notifyNextApprover(Permohonan $permohonan, int $siklus): void
+    {
+        $urutan = $permohonan->levelingRequired?->urutan ?? 1;
+
+        if ($urutan <= 1) {
+            $approver = Unit::find($permohonan->unit_id)?->getManager();
+            $title = 'Permohonan Dana Menunggu Pemeriksaan Manajer Unit';
+        } else {
+            $approver = $this->getKadivDivisi($permohonan);
+            $title = 'Permohonan Dana Menunggu Pemeriksaan Kadiv Divisi';
+        }
+
+        if (! $approver) {
+            return;
+        }
+
+        NotificationService::kirim(
+            $approver,
+            'dokumen_menunggu_tindakan',
+            [
+                'judul' => $title,
+                'pesan' => "Permohonan dana {$permohonan->no_pengajuan} dari {$permohonan->user?->name} menunggu pemeriksaan Anda.",
+                'url' => route('permohonan.detail', $permohonan->id),
+                'jenis' => 'permohonan',
+                'entity_id' => $permohonan->id,
+            ],
+            "tunggu_permohonan_{$permohonan->id}_diajukan_{$siklus}"
+        );
+    }
+
+    /**
+     * Notifikasi ke Kepala Divisi (tahap akhir Supervisor-level).
+     */
+    public function notifyKadivDivisi(Permohonan $permohonan, int $siklus): void
+    {
+        $kadiv = $this->getKadivDivisi($permohonan);
+        if (! $kadiv) {
+            return;
+        }
+
+        NotificationService::kirim(
+            $kadiv,
+            'dokumen_menunggu_tindakan',
+            [
+                'judul' => 'Permohonan Dana Menunggu Persetujuan Akhir Kadiv',
+                'pesan' => "Permohonan dana {$permohonan->no_pengajuan} dari {$permohonan->user?->name} menunggu persetujuan akhir Anda.",
+                'url' => route('permohonan.detail', $permohonan->id),
+                'jenis' => 'permohonan',
+                'entity_id' => $permohonan->id,
+            ],
+            "tunggu_permohonan_{$permohonan->id}_kadiv_{$siklus}"
+        );
+    }
+
+    /**
+     * Notifikasi ke Bagian Keuangan / Kadiv Keuangan (penyetuju Tahap 3).
+     */
+    public function notifyKeuangan(Permohonan $permohonan, int $siklus): void
+    {
+        $keuanganUsers = User::where('is_active', true)
+            ->where(function ($q) {
+                $q->where(fn ($sub) => $sub->where('role', 'keuangan')->whereHas('leveling', fn ($l) => $l->where('urutan', '>=', 3)))
+                    ->orWhere('role', 'admin');
+            })
+            ->get();
+
+        if ($keuanganUsers->isEmpty()) {
+            $keuanganUsers = User::whereIn('role', ['keuangan', 'admin'])->where('is_active', true)->get();
+        }
+
+        foreach ($keuanganUsers as $keu) {
+            NotificationService::kirim(
+                $keu,
+                'dokumen_menunggu_tindakan',
+                [
+                    'judul' => 'Permohonan Dana Menunggu Verifikasi Kadiv Keuangan',
+                    'pesan' => "Permohonan dana {$permohonan->no_pengajuan} siap diverifikasi oleh Kadiv Keuangan.",
+                    'url' => route('permohonan.detail', $permohonan->id),
+                    'jenis' => 'permohonan',
+                    'entity_id' => $permohonan->id,
+                ],
+                "tunggu_permohonan_{$permohonan->id}_keuangan_{$siklus}"
+            );
+        }
     }
 
     /**
@@ -225,8 +265,9 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan, $approver, $data) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            // Approver tidak boleh pengaju sendiri kecuali mode khusus
-            if ($locked->user_id === $approver->id && $approver->role !== 'admin') {
+            $isTuRecorder = (bool) $approver->is_petugas_input || $approver->role === 'admin' || $approver->role === 'keuangan';
+            $recordsOnBehalf = $isTuRecorder && ! empty($data['signer_name']);
+            if ($locked->user_id === $approver->id && $approver->role !== 'admin' && ! $recordsOnBehalf) {
                 throw new RuntimeException('Pengaju tidak dapat menyetujui permohonannya sendiri.');
             }
 
@@ -235,81 +276,86 @@ class PermohonanWorkflow
                 $currentCycle++;
             }
 
-            $approverLevelingUrutan = $approver->leveling ? $approver->leveling->urutan : 0;
-            $requiredLevelingUrutan = $locked->levelingRequired ? $locked->levelingRequired->urutan : 1;
-
             $statusAwal = $locked->status;
             $tahap = '';
             $nextStatus = '';
+            $docDivisiId = Unit::find($locked->unit_id)?->getDivisiId();
+            $levelingUrutan = $locked->levelingRequired?->urutan ?? 1;
 
             if ($statusAwal === 'diajukan') {
-                $tahap = 'atasan';
-
-                $isDesignatedAtasan = $locked->atasan_id && $locked->atasan_id === $approver->id;
-                $isSameUnitOrDivisi = ($locked->unit_id === $approver->unit_id) || ($locked->unit?->parent_id === $approver->unit_id);
-                $isSameUnitSupervisor = $isSameUnitOrDivisi && ($approverLevelingUrutan >= 1) && ($requiredLevelingUrutan <= 1);
-                $isSameUnitManager = $isSameUnitOrDivisi && ($approverLevelingUrutan >= 2);
-                $isKadivOrHigher = $approverLevelingUrutan >= 3;
-                $isAdmin = $approver->role === 'admin';
-
-                if (! $isDesignatedAtasan && ! $isSameUnitSupervisor && ! $isSameUnitManager && ! $isKadivOrHigher && ! $isAdmin) {
-                    if ($approverLevelingUrutan == 1 && $requiredLevelingUrutan > 1) {
-                        throw new RuntimeException("Nominal permohonan ini memerlukan persetujuan minimal Manager (Leveling {$requiredLevelingUrutan}).");
-                    }
-                    throw new RuntimeException('Anda tidak memiliki wewenang untuk menyetujui permohonan pada tahap ini.');
-                }
-
-                // Cek leveling pengaju
-                $creatorLevelingUrutan = $locked->user?->leveling ? $locked->user->leveling->urutan : 1;
-
-                // Jika approver langsung Kepala Divisi (urutan >= 3) atau pengaju adalah Manager (urutan >= 2)
-                if ($approverLevelingUrutan >= 3 || $creatorLevelingUrutan >= 2) {
-                    $nextStatus = 'diketahui_kadiv';
-                } else {
-                    $nextStatus = 'disetujui_atasan';
-                }
-            } elseif ($statusAwal === 'disetujui_atasan') {
                 $tahap = 'kadiv';
 
-                if ($approverLevelingUrutan < 3 && $approver->role !== 'admin') {
-                    throw new RuntimeException('Tahap ini memerlukan persetujuan Kepala Divisi (Leveling 3).');
+                if ($levelingUrutan <= 1) {
+                    // Supervisor level: Manajer unit or higher in same division
+                    $canApprove = ($approver->isManager() || $approver->isKadiv())
+                        && $approver->canAccessDivision($docDivisiId);
+                } else {
+                    // Manager/Kadiv level: Kadiv in same division
+                    $canApprove = $approver->isKadiv()
+                        && $approver->canAccessDivision($docDivisiId);
+                }
+
+                if (! $canApprove && ! $recordsOnBehalf && $approver->role !== 'admin') {
+                    throw new RuntimeException('Anda tidak berwenang menyetujui permohonan ini pada tahap saat ini.');
                 }
 
                 $nextStatus = 'diketahui_kadiv';
             } elseif ($statusAwal === 'diketahui_kadiv') {
                 $tahap = 'keuangan';
 
-                $isFinanceRole = $approver->role === 'keuangan';
-                $isPetugasInputKeuangan = (bool) $approver->is_petugas_input;
+                if ($levelingUrutan <= 1) {
+                    // Supervisor level: final approver = Kadiv Divisi (same division)
+                    $canApprove = $approver->isKadiv() && $approver->canAccessDivision($docDivisiId);
+                    if (! $canApprove && ! $recordsOnBehalf && $approver->role !== 'admin') {
+                        throw new RuntimeException('Hanya Kepala Divisi yang berwenang pada tahap akhir permohonan ini.');
+                    }
 
-                if (! $isFinanceRole && ! $isPetugasInputKeuangan && $approver->role !== 'admin') {
-                    throw new RuntimeException('Hanya Bagian Keuangan yang berwenang memberikan persetujuan pencairan.');
+                    // Auto-approve full amount
+                    $locked->total_disetujui = $locked->total_diminta;
+                    foreach ($locked->items as $item) {
+                        $item->jumlah_disetujui = $item->jumlah_diminta;
+                        $item->save();
+                    }
+                    $nextStatus = 'disetujui_keuangan';
+                } else {
+                    // Manager/Kadiv level: final approver = Kadiv Keuangan
+                    $isKadivKeuangan = $approver->isKadivKeuangan();
+                    if (! $isKadivKeuangan && ! $recordsOnBehalf && $approver->role !== 'admin') {
+                        throw new RuntimeException('Hanya Kadiv Keuangan yang berwenang memberikan persetujuan akhir.');
+                    }
+
+                    // Isi jumlah disetujui per item
+                    $itemApprovals = $data['items'] ?? [];
+                    $totalDisetujui = 0;
+
+                    foreach ($locked->items as $item) {
+                        $nominalSetuju = isset($itemApprovals[$item->id])
+                            ? (int) $itemApprovals[$item->id]
+                            : (int) $item->jumlah_diminta;
+
+                        $item->jumlah_disetujui = $nominalSetuju;
+                        $item->save();
+                        $totalDisetujui += $nominalSetuju;
+                    }
+
+                    $locked->total_disetujui = $totalDisetujui;
+                    $nextStatus = 'disetujui_keuangan'; // Dana resmi TERIKAT
                 }
-
-                // Isi jumlah disetujui per item
-                $itemApprovals = $data['items'] ?? [];
-                $totalDisetujui = 0;
-
-                foreach ($locked->items as $item) {
-                    $nominalSetuju = isset($itemApprovals[$item->id])
-                        ? (int) $itemApprovals[$item->id]
-                        : (int) $item->jumlah_diminta;
-
-                    $item->jumlah_disetujui = $nominalSetuju;
-                    $item->save();
-                    $totalDisetujui += $nominalSetuju;
-                }
-
-                $locked->total_disetujui = $totalDisetujui;
-                $nextStatus = 'disetujui_keuangan'; // Dana resmi TERIKAT
             } else {
                 throw new RuntimeException("Permohonan dengan status {$statusAwal} tidak dalam antrean persetujuan.");
             }
 
-            // Simpan record Approval
             $signerName = $data['signer_name'] ?? $approver->name;
             $signerJabatan = $data['signer_jabatan'] ?? ($approver->jabatan ?? ucfirst($approver->role));
             $catatan = $data['catatan'] ?? null;
+            $selectedSigner = ! empty($data['signer_user_id'])
+                ? User::where('is_active', true)->find($data['signer_user_id'])
+                : null;
+            if ($selectedSigner) {
+                $signerName = $selectedSigner->name;
+                $signerJabatan = $data['signer_jabatan'] ?: ($selectedSigner->jabatan ?? $signerJabatan);
+            }
+            $signedAt = ! empty($data['signed_at']) ? Carbon::parse($data['signed_at']) : now();
 
             Approval::create([
                 'approvable_type' => Permohonan::class,
@@ -317,10 +363,10 @@ class PermohonanWorkflow
                 'siklus' => $currentCycle,
                 'tahap' => $tahap,
                 'keputusan' => 'setuju',
-                'approver_id' => $approver->id,
+                'approver_id' => $selectedSigner?->id ?? $approver->id,
                 'signer_name' => $signerName,
                 'signer_jabatan' => $signerJabatan,
-                'signed_at' => now(),
+                'signed_at' => $signedAt,
                 'recorded_by' => Auth::id() ?? $approver->id,
                 'catatan' => $catatan,
             ]);
@@ -347,20 +393,10 @@ class PermohonanWorkflow
             }
 
             if ($nextStatus === 'diketahui_kadiv') {
-                $keuanganUsers = User::whereIn('role', ['keuangan', 'admin'])->where('is_active', true)->get();
-                foreach ($keuanganUsers as $keu) {
-                    NotificationService::kirim(
-                        $keu,
-                        'dokumen_menunggu_tindakan',
-                        [
-                            'judul' => 'Permohonan Dana Menunggu Verifikasi Keuangan',
-                            'pesan' => "Permohonan dana {$locked->no_pengajuan} siap diverifikasi oleh Keuangan.",
-                            'url' => route('permohonan.detail', $locked->id),
-                            'jenis' => 'permohonan',
-                            'entity_id' => $locked->id,
-                        ],
-                        "tunggu_permohonan_{$locked->id}_keuangan_{$currentCycle}"
-                    );
+                if ($levelingUrutan <= 1) {
+                    $this->notifyKadivDivisi($locked, $currentCycle);
+                } else {
+                    $this->notifyKeuangan($locked, $currentCycle);
                 }
             }
 
@@ -402,7 +438,7 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan, $user, $alasan) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            if (! in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
+            if (! in_array($locked->status, ['diajukan', 'diketahui_kadiv'], true)) {
                 throw new RuntimeException('Hanya dokumen dalam proses persetujuan yang dapat diminta perbaikan.');
             }
 
@@ -440,7 +476,7 @@ class PermohonanWorkflow
         return DB::transaction(function () use ($permohonan, $user, $alasan) {
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
-            if (! in_array($locked->status, ['diajukan', 'disetujui_atasan', 'diketahui_kadiv'])) {
+            if (! in_array($locked->status, ['diajukan', 'diketahui_kadiv'], true)) {
                 throw new RuntimeException('Dokumen tidak dalam status yang dapat ditolak.');
             }
 
@@ -575,6 +611,28 @@ class PermohonanWorkflow
             ]);
 
             (new AuditLogger)->log('permohonan.cairkan', $locked, $before, $locked->fresh()->toArray());
+
+            $penerimaIds = array_values(array_unique(array_map('intval', $data['penerima_ids'] ?? [])));
+            foreach ($penerimaIds as $penerimaUserId) {
+                $penerima = UmpPenerima::firstOrCreate([
+                    'ump_id' => $ump->id,
+                    'user_id' => $penerimaUserId,
+                ]);
+
+                $penerimaUser = User::find($penerimaUserId);
+                if ($penerimaUser && $penerima->wasRecentlyCreated) {
+                    NotificationService::kirim(
+                        $penerimaUser,
+                        'dokumen_diputuskan',
+                        [
+                            'judul' => 'Anda Ditunjuk sebagai Penerima Dana UMP',
+                            'pesan' => "Anda ditunjuk untuk melaporkan penggunaan dana pada UMP {$pencairan->no_ppd}.",
+                            'url' => route('ump.detail', $ump->id),
+                        ],
+                        "ump_penerima_{$ump->id}_{$penerimaUserId}"
+                    );
+                }
+            }
 
             if ($locked->user) {
                 NotificationService::kirim(

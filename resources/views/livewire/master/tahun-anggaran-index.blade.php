@@ -205,7 +205,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="saveYear" class="p-6 space-y-4">
+                <form wire:submit="saveYear" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <div>
                         <label for="form_tahun" class="block text-xs font-semibold text-slate-700 mb-1">
                             Tahun (4 Digit) *
@@ -289,7 +289,7 @@
                         </button>
                     </div>
 
-                    <form wire:submit="generateRolloverPreview" class="flex flex-col flex-1 overflow-hidden">
+                    <form wire:submit="generateRolloverPreview" action="#" onsubmit="return false;" class="flex flex-col flex-1 overflow-hidden">
                         <div class="p-6 overflow-y-auto space-y-4 flex-1">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>

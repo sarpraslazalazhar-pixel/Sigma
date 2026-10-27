@@ -41,7 +41,8 @@
 
     {{-- Form Utama --}}
     <div class="space-y-6">
-        {{-- KHUSUS PETUGAS TU / INPUT TERPUSAT: Pilihan Pembuat (Supervisor, Manajer, atau Kadiv) --}}
+
+        {{-- KHUSUS PETUGAS TU / ADMIN / KEUANGAN: Pilih pejabat pemohon --}}
         @if ($isTu)
             <div class="bg-blue-50/60 border border-blue-200 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-2xs">
                 <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-blue-100">
@@ -51,42 +52,41 @@
                         </span>
                         <div>
                             <h2 class="text-xs font-bold text-[#0F2F57] uppercase tracking-wider">
-                                Input Pengajuan oleh Petugas TU
+                                Pengajuan oleh Petugas TU
                             </h2>
-                            <p class="text-[11px] text-slate-500">Pilih pejabat yang menandatangani permohonan dana (Supervisor, Manajer, atau Kepala Divisi)</p>
+                            <p class="text-[11px] text-slate-500">
+                                Pilih pejabat yang mengajukan / meminta permohonan dana (Supervisor, Manajer, atau Kepala Divisi)
+                            </p>
                         </div>
                     </div>
-                    <span class="text-[11px] text-[#001B3E] bg-[#DCE5F6] px-2.5 py-0.5 rounded-full font-semibold">
-                        Input Terpusat
-                    </span>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label for="creatorLevel" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Filter Jabatan Penanda Tangan
+                            Filter Jabatan Pemohon
                         </label>
                         <select
                             id="creatorLevel"
                             wire:model.live="creatorLevel"
                             class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
                         >
-                            <option value="">Semua Jabatan (Supervisor / Manajer / Kadiv)</option>
-                            <option value="1">Supervisor / Koordinator (Tahap 1, 2, 3)</option>
-                            <option value="2">Manajer Unit (Tahap 2, 3)</option>
-                            <option value="3">Kepala Divisi (Kadiv) - Otomatis Selesai Tahap 2</option>
+                            <option value="">Semua</option>
+                            <option value="1">Supervisor</option>
+                            <option value="2">Manajer</option>
+                            <option value="3">Kadiv</option>
                         </select>
                     </div>
 
                     <div class="sm:col-span-2">
                         <label for="user_id" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Pejabat Penanda Tangan (Dibuat Oleh) *
+                            Pejabat Pemohon (Dibuat Oleh) *
                         </label>
                         <x-searchable-select
                             wire:model.live="user_id"
                             :options="$creatorCandidates"
-                            placeholder="Pilih Pejabat Penanda Tangan..."
-                            search-placeholder="Ketik nama pejabat atau jabatan..."
+                            placeholder="Pilih Pejabat Pemohon..."
+                            search-placeholder="Cari nama pejabat atau jabatan..."
                             :nullable="false"
                         />
                         @error('user_id')
@@ -94,15 +94,17 @@
                         @enderror
                     </div>
                 </div>
+            </div>
+        @endif
 
-                @if ($selectedCreatorLevel >= 3)
-                    <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-                        <svg class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span><strong>Pembuat adalah Kepala Divisi:</strong> Dokumen otomatis menyelesaikan <strong>Tahap 1 &amp; Tahap 2 (Diketahui Kadiv)</strong> saat diajukan, langsung masuk ke antrean persetujuan Bagian Keuangan.</span>
-                    </div>
-                @endif
+        @if (!$isTu && $this->atasNamaUser && $this->atasNamaUser->id !== auth()->id())
+            <div class="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 flex items-center gap-3 text-xs text-amber-900 shadow-2xs">
+                <svg class="w-5 h-5 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                    Pengajuan ini dibuat atas nama atasan: <strong>{{ $this->atasNamaUser->name }}</strong> ({{ $this->atasNamaUser->jabatan ?? $this->atasNamaUser->leveling?->nama ?? 'Supervisor Unit' }}).
+                </span>
             </div>
         @endif
 
@@ -113,25 +115,20 @@
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {{-- Program --}}
+                {{-- Program (Nama Mata Anggaran) --}}
                 <div>
                     <label for="program" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Program *
+                        Program (Nama Mata Anggaran) *
                     </label>
                     <input
                         type="text"
                         id="program"
                         wire:model="program"
-                        list="program-list"
-                        placeholder="Ketik nama program (contoh: Operasional Kesekretariatan, Dakwah, dll)"
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3.5 py-2.5 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('program') border-red-500 @enderror"
+                        readonly
+                        placeholder="Otomatis dari nama kode anggaran yang dipilih"
+                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3.5 py-2.5 bg-slate-50 cursor-default focus:border-[#1E60D5] focus:outline-hidden @error('program') border-red-500 @enderror"
                         required
                     />
-                    <datalist id="program-list">
-                        @foreach ($programs as $prog)
-                            <option value="{{ $prog->nama }}"></option>
-                        @endforeach
-                    </datalist>
                     @error('program')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
@@ -478,7 +475,7 @@
                     <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    <span>+ Tambah Baris</span>
+                    <span>Tambah Baris</span>
                 </button>
             </div>
 
@@ -489,7 +486,7 @@
             {{-- Table View for Desktop & Mobile Cards --}}
             <div class="space-y-3">
                 @foreach ($items as $index => $row)
-                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                    <div wire:key="create-item-{{ $index }}" class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-bold text-slate-600">
                                 Baris #{{ $index + 1 }}
@@ -597,7 +594,7 @@
                         <span>Tingkat {{ $requiredApprover?->nama ?? 'Supervisor' }} (Leveling {{ $requiredApprover?->urutan ?? 1 }})</span>
                     </span>
                     <p class="text-[11px] text-slate-400 mt-0.5">
-                        Diperiksa oleh: <strong>Kepala Divisi (Kadiv)</strong> &bull; Disetujui oleh: <strong>Bagian Keuangan</strong>
+                        Tahap 1 (Pemohon): Supervisor, Manajer, atau Kadiv (dapat diinput oleh TU) &bull; Tahap 2 (Pemeriksa): Kepala Divisi Sekretariat &bull; Tahap 3 (Penyetuju): Bagian Keuangan
                     </p>
                 </div>
 

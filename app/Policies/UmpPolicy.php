@@ -36,6 +36,10 @@ class UmpPolicy
             return true;
         }
 
+        if ($ump->penerima()->where('user_id', $user->id)->exists()) {
+            return true;
+        }
+
         $docDivisiId = $ump->pencairan?->permohonan?->unit?->getDivisiId();
 
         return $user->canAccessDivision($docDivisiId);
@@ -54,6 +58,10 @@ class UmpPolicy
             return true;
         }
 
+        if ($ump->penerima()->where('user_id', $user->id)->exists()) {
+            return true;
+        }
+
         $docDivisiId = $ump->pencairan?->permohonan?->unit?->getDivisiId();
 
         return $user->canAccessDivision($docDivisiId);
@@ -65,11 +73,25 @@ class UmpPolicy
     public function approve(User $user, Ump $ump): bool
     {
         $status = $ump->status;
-
         if ($status === 'ttd_pj') {
-            $docDivisiId = $ump->pencairan?->permohonan?->unit?->getDivisiId();
+            if ($user->isAdmin() || (bool) $user->is_petugas_input) {
+                return true;
+            }
 
-            return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
+            $pj = $ump->pj ?: $ump->pencairan?->permohonan?->user;
+            if ($pj && $user->id === $pj->id) {
+                return false;
+            }
+
+            $pjDivisiId = $pj?->unit?->getDivisiId() ?? $ump->pencairan?->permohonan?->unit?->getDivisiId();
+            $pjUnitId = $pj?->unit_id ?? $ump->pencairan?->permohonan?->unit_id;
+
+            $userDivisiId = $user->unit?->getDivisiId();
+            $sameDivisi = $pjDivisiId !== null && $userDivisiId !== null && $pjDivisiId === $userDivisiId;
+            $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
+            $urutan = $user->leveling?->urutan ?? 0;
+
+            return ($sameDivisi || $sameUnit) && $urutan >= 2;
         }
 
         if (in_array($status, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {

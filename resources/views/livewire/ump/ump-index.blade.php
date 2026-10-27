@@ -68,7 +68,7 @@
                     <option value="">Semua Status</option>
                     <option value="draft">Draft</option>
                     <option value="perlu_perbaikan">Perlu Perbaikan</option>
-                    <option value="ttd_pj">Menunggu TTD Kadiv</option>
+                    <option value="ttd_pj">Menunggu Diperiksa</option>
                     <option value="ttd_manager_keuangan">Menunggu TTD Mgr Keuangan</option>
                     <option value="ttd_kepala_keuangan">Menunggu TTD Kepala Keuangan</option>
                     <option value="dibatalkan">Dibatalkan</option>
@@ -174,19 +174,19 @@
     </div>
 
     {{-- VIEW 2: DESKTOP TABLE (>= 1024px) --}}
-    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-        <table class="w-full text-left text-xs">
+    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-x-auto">
+        <table class="w-full min-w-[1000px] text-left text-xs">
             <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                 <tr>
-                    <th class="py-3.5 px-4">No. PPD</th>
-                    <th class="py-3.5 px-4">Tujuan & PJ</th>
-                    <th class="py-3.5 px-4">Unit / Divisi</th>
-                    <th class="py-3.5 px-4">Jatuh Tempo</th>
-                    <th class="py-3.5 px-4 text-right">Dana Diterima</th>
-                    <th class="py-3.5 px-4 text-right">Realisasi</th>
-                    <th class="py-3.5 px-4 text-right">Saldo</th>
-                    <th class="py-3.5 px-4 text-center">Status</th>
-                    <th class="py-3.5 px-4 text-right">Aksi</th>
+                    <th class="py-3.5 px-3">No. PPD</th>
+                    <th class="py-3.5 px-3">Tujuan & PJ</th>
+                    <th class="py-3.5 px-3">Unit / Divisi</th>
+                    <th class="py-3.5 px-3">Jatuh Tempo</th>
+                    <th class="py-3.5 px-3 text-right">Dana Diterima</th>
+                    <th class="py-3.5 px-3 text-right">Realisasi</th>
+                    <th class="py-3.5 px-3 text-right">Saldo</th>
+                    <th class="py-3.5 px-3 text-center">Status</th>
+                    <th class="py-3.5 px-3 text-right sticky right-0 z-20 bg-slate-50 border-l border-slate-200">Aksi</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -195,14 +195,14 @@
                         $badge = $this->getStatusBadge($item->status);
                         $permohonan = $item->pencairan?->permohonan;
                     @endphp
-                    <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-900">
+                    <tr class="group hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-3 whitespace-nowrap font-mono font-bold text-slate-900">
                             {{ $item->pencairan?->no_ppd ?? '-' }}
                             <span class="block text-[11px] font-sans font-normal text-slate-400">
                                 {{ $item->tgl_terima?->format('d/m/Y') }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 max-w-[240px]">
+                        <td class="py-3.5 px-3 max-w-[200px] 2xl:max-w-[260px]">
                             <span class="font-semibold text-slate-900 block truncate" title="{{ $item->tujuan }}">
                                 {{ $item->tujuan }}
                             </span>
@@ -210,19 +210,19 @@
                                 PJ: {{ $item->pj?->name ?? '-' }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td class="py-3.5 px-3">
                             {{ $permohonan?->unit?->nama ?? '-' }}
                         </td>
-                        <td class="py-3.5 px-4 whitespace-nowrap tabular-nums {{ $item->jatuh_tempo && $item->status !== 'selesai' && now()->gt($item->jatuh_tempo) ? 'text-red-600 font-semibold' : 'text-slate-600' }}">
+                        <td class="py-3.5 px-3 whitespace-nowrap tabular-nums {{ $item->jatuh_tempo && $item->status !== 'selesai' && now()->gt($item->jatuh_tempo) ? 'text-red-600 font-semibold' : 'text-slate-600' }}">
                             {{ $item->jatuh_tempo ? $item->jatuh_tempo->format('d/m/Y') : '-' }}
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap font-bold text-slate-900 tabular-nums">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap font-bold text-slate-900 tabular-nums">
                             Rp {{ number_format($item->jumlah_total, 0, ',', '.') }}
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap font-semibold text-emerald-700 tabular-nums">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap font-semibold text-emerald-700 tabular-nums">
                             Rp {{ number_format($item->total_penggunaan, 0, ',', '.') }}
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap font-semibold tabular-nums {{ $item->saldo < 0 ? 'text-red-600' : 'text-slate-900' }}">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap font-semibold tabular-nums {{ $item->saldo < 0 ? 'text-red-600' : 'text-slate-900' }}">
                             Rp {{ number_format($item->saldo, 0, ',', '.') }}
                             @if ($item->kekurangan > 0)
                                 <span class="block text-[11px] font-bold text-red-600">
@@ -230,12 +230,12 @@
                                 </span>
                             @endif
                         </td>
-                        <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
                             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border {{ $badge['class'] }}">
                                 {{ $badge['label'] }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 border-l border-slate-100">
                             <a
                                 href="{{ route('ump.detail', $item->id) }}"
                                 wire:navigate
@@ -250,7 +250,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="py-8 px-4 text-center text-slate-500 text-xs">
+                        <td colspan="9" class="py-8 px-3 text-center text-slate-500 text-xs">
                             Tidak ada UMP yang sesuai kriteria pencarian.
                         </td>
                     </tr>

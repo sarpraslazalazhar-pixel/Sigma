@@ -14,6 +14,7 @@ class UmpPdfController extends Controller
             'pencairan.permohonan.unit',
             'pj',
             'items',
+            'penerima.user',
             'approvals',
             'lampiran',
         ])->findOrFail($id);

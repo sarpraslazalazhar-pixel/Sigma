@@ -91,6 +91,8 @@
             </div>
 
             <select
+                id="bulan-filter"
+                aria-label="Filter bulan"
                 wire:model.live="selectedMonth"
                 class="min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-700 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden shrink-0"
             >
@@ -101,6 +103,25 @@
             </select>
         </div>
     </div>
+
+    @php
+        $isMonthFiltered = $selectedMonth !== null;
+        $visibleMonths = $isMonthFiltered ? [$selectedMonth => $monthNames[$selectedMonth]] : $monthNames;
+        $highlightMonth = ($selectedYear && (int) $selectedYear->tahun === (int) now()->year) ? (int) now()->month : null;
+        $tableWidthClass = $isMonthFiltered ? 'w-full table-fixed' : 'w-[1888px] table-fixed';
+
+        $headKode = $isMonthFiltered ? '' : 'sticky left-0 z-30';
+        $headKeterangan = $isMonthFiltered ? '' : 'sticky left-[96px] z-30 border-r border-white/10 shadow-[6px_0_8px_-6px_rgba(0,0,0,0.45)]';
+        $headTotal = $isMonthFiltered ? '' : 'sticky right-[168px] z-30 border-l border-white/10 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.45)]';
+        $headSisa = $isMonthFiltered ? '' : 'sticky right-[56px] z-30';
+        $headSerapan = $isMonthFiltered ? '' : 'sticky right-0 z-30';
+
+        $bodyKode = $isMonthFiltered ? '' : 'sticky left-0 z-10';
+        $bodyKeterangan = $isMonthFiltered ? '' : 'sticky left-[96px] z-10 border-r shadow-[6px_0_8px_-6px_rgba(15,47,87,0.25)]';
+        $bodyTotal = $isMonthFiltered ? '' : 'sticky right-[168px] z-10 border-l shadow-[-6px_0_8px_-6px_rgba(15,47,87,0.25)]';
+        $bodySisa = $isMonthFiltered ? '' : 'sticky right-[56px] z-10';
+        $bodySerapan = $isMonthFiltered ? '' : 'sticky right-0 z-10';
+    @endphp
 
     {{-- VIEW 1: MOBILE-FIRST (< 1024px) --}}
     <div class="block lg:hidden space-y-3">
@@ -162,7 +183,7 @@
                     wire:click="toggleMobileNode({{ $row['id'] }})"
                     class="w-full min-h-[44px] flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-xs font-semibold text-slate-700 transition-colors"
                 >
-                    <span>Rincian Bulanan (Jan - Des)</span>
+                    <span>Rincian Bulanan {{ $isMonthFiltered ? $monthNames[$selectedMonth] : '(Jan - Des)' }}</span>
                     <svg class="w-4 h-4 transform transition-transform {{ $isExpanded ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
@@ -192,69 +213,257 @@
     </div>
 
     {{-- VIEW 2: DESKTOP (Horizontal Scroll Container Terisolasi, >= 1024px) --}}
-    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-        <div class="overflow-x-auto max-w-full">
-            <table class="w-full text-left text-xs whitespace-nowrap">
+    <div
+        class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs"
+        x-data="{
+            isScrollable: {{ ! $isMonthFiltered ? 'true' : 'false' }},
+            isDown: false,
+            isDragging: false,
+            startX: 0,
+            scrollLeft: 0,
+            canScrollLeft: false,
+            canScrollRight: true,
+            init() {
+                if (!this.isScrollable) return;
+                this.$nextTick(() => {
+                    this.updateScrollState();
+                });
+                const container = this.$refs.matrixContainer;
+                if (container) {
+                    container.addEventListener('scroll', () => this.updateScrollState(), { passive: true });
+                    window.addEventListener('resize', () => this.updateScrollState(), { passive: true });
+                }
+            },
+            updateScrollState() {
+                const el = this.$refs.matrixContainer;
+                if (!el) return;
+                this.canScrollLeft = el.scrollLeft > 10;
+                this.canScrollRight = el.scrollLeft < (el.scrollWidth - el.clientWidth - 10);
+            },
+            scrollBy(amount) {
+                const el = this.$refs.matrixContainer;
+                if (!el) return;
+                el.scrollBy({ left: amount, behavior: 'smooth' });
+            },
+            scrollToStart() {
+                const el = this.$refs.matrixContainer;
+                if (!el) return;
+                el.scrollTo({ left: 0, behavior: 'smooth' });
+            },
+            scrollToEnd() {
+                const el = this.$refs.matrixContainer;
+                if (!el) return;
+                el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
+            },
+            startDrag(e) {
+                if (!this.isScrollable || e.button !== 0) return;
+                this.isDown = true;
+                this.isDragging = false;
+                this.startX = e.pageX;
+                const el = this.$refs.matrixContainer;
+                this.scrollLeft = el.scrollLeft;
+            },
+            doDrag(e) {
+                if (!this.isDown || !this.isScrollable) return;
+                const walk = e.pageX - this.startX;
+                if (Math.abs(walk) > 3) {
+                    this.isDragging = true;
+                    e.preventDefault();
+                    const el = this.$refs.matrixContainer;
+                    el.scrollLeft = this.scrollLeft - walk;
+                }
+            },
+            stopDrag() {
+                if (!this.isDown) return;
+                this.isDown = false;
+                setTimeout(() => {
+                    this.isDragging = false;
+                }, 50);
+            }
+        }"
+        @mouseup.window="stopDrag()"
+        @mousemove.window="doDrag($event)"
+    >
+        @if (! $isMonthFiltered)
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-2.5 border-b border-slate-200 bg-slate-50/80 text-xs text-slate-600">
+                <div class="flex items-center gap-2.5">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[#DCE5F6] text-[#0F2F57] shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                    </span>
+                    <p class="text-[11px] sm:text-xs text-slate-600 font-medium">
+                        <span class="font-semibold text-slate-900">Geser Matriks:</span>
+                        Klik &amp; seret kursor mouse untuk menggeser bulan, atau gunakan tombol navigasi. Kolom kode &amp; ringkasan tetap terkunci.
+                    </p>
+                </div>
+
+                {{-- Tombol Navigasi Geser Horizontal --}}
+                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                    <button
+                        type="button"
+                        @click="scrollToStart()"
+                        :disabled="!canScrollLeft"
+                        :class="!canScrollLeft ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-2xs cursor-pointer'"
+                        class="min-h-[30px] px-2.5 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+                        title="Geser ke awal (Januari)"
+                        aria-label="Geser ke awal Januari"
+                    >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                        </svg>
+                        <span>Awal</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="scrollBy(-320)"
+                        :disabled="!canScrollLeft"
+                        :class="!canScrollLeft ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-2xs cursor-pointer'"
+                        class="min-h-[30px] px-2.5 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+                        title="Geser ke kiri"
+                        aria-label="Geser ke kiri"
+                    >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        <span>Kiri</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="scrollBy(320)"
+                        :disabled="!canScrollRight"
+                        :class="!canScrollRight ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-2xs cursor-pointer'"
+                        class="min-h-[30px] px-2.5 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+                        title="Geser ke kanan"
+                        aria-label="Geser ke kanan"
+                    >
+                        <span>Kanan</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+
+                    <button
+                        type="button"
+                        @click="scrollToEnd()"
+                        :disabled="!canScrollRight"
+                        :class="!canScrollRight ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-2xs cursor-pointer'"
+                        class="min-h-[30px] px-2.5 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors"
+                        title="Geser ke akhir (Desember)"
+                        aria-label="Geser ke akhir Desember"
+                    >
+                        <span>Akhir</span>
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        @endif
+
+        <div
+            x-ref="matrixContainer"
+            @mousedown="startDrag($event)"
+            class="overflow-x-auto max-w-full focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1E60D5] [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400 [&::-webkit-scrollbar-thumb]:rounded-full transition-[cursor]"
+            :class="{
+                'cursor-grab': isScrollable && !isDragging,
+                'cursor-grabbing select-none [&_*]:select-none': isDragging
+            }"
+            tabindex="0"
+            role="region"
+            aria-label="Matriks laporan pengeluaran bulanan"
+        >
+            <table
+                class="{{ $tableWidthClass }} text-left text-xs whitespace-nowrap"
+                :class="isScrollable ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''"
+            >
+                <colgroup>
+                    @if ($isMonthFiltered)
+                        <col class="w-[88px]">
+                        <col>
+                        <col class="w-[100px]">
+                        <col class="w-[100px]">
+                        <col class="w-[100px]">
+                        <col class="w-[100px]">
+                        <col class="w-[56px]">
+                    @else
+                        <col class="w-[96px]">
+                        <col class="w-[200px]">
+                        <col class="w-[112px]">
+                        @foreach ($visibleMonths as $mNum => $mName)
+                            <col class="w-[100px]">
+                        @endforeach
+                        <col class="w-[112px]">
+                        <col class="w-[112px]">
+                        <col class="w-[56px]">
+                    @endif
+                </colgroup>
                 <thead class="bg-[#0F2F57] text-white font-semibold uppercase tracking-wider text-[11px]">
                     <tr>
-                        <th class="py-3 px-4 sticky left-0 z-20 bg-[#0F2F57]">Kode Pos</th>
-                        <th class="py-3 px-4 sticky left-28 z-20 bg-[#0F2F57]">Keterangan Pos Anggaran</th>
-                        <th class="py-3 px-4 text-right bg-[#0F2F57]">RAB {{ $selectedYear ? $selectedYear->tahun : '2026' }}</th>
-                        @foreach ($monthNames as $mNum => $mName)
-                            <th class="py-3 px-3 text-right bg-[#0F2F57]">{{ strtoupper(substr($mName, 0, 3)) }}</th>
+                        <th scope="col" class="py-3 px-2 text-left bg-[#0F2F57] {{ $headKode }}">Kode Pos</th>
+                        <th scope="col" class="py-3 px-3 text-left bg-[#0F2F57] truncate {{ $headKeterangan }}" title="Keterangan Pos Anggaran">Keterangan Pos Anggaran</th>
+                        <th scope="col" class="py-3 px-2 text-right bg-[#0F2F57] text-[10px] tracking-normal">RAB {{ $selectedYear ? $selectedYear->tahun : '2026' }} (Rp)</th>
+                        @foreach ($visibleMonths as $mNum => $mName)
+                            <th scope="col" class="py-3 px-2 text-right {{ $highlightMonth === $mNum ? 'bg-[#1E60D5]' : 'bg-[#0F2F57]' }}">
+                                {{ $isMonthFiltered ? strtoupper($mName) : strtoupper(substr($mName, 0, 3)) }}
+                            </th>
                         @endforeach
-                        <th class="py-3 px-4 text-right bg-[#0F2F57]">Total</th>
-                        <th class="py-3 px-4 text-right bg-[#0F2F57]">Sisa</th>
-                        <th class="py-3 px-3 text-center bg-[#0F2F57]">Serapan</th>
+                        <th scope="col" class="py-3 px-2 text-right bg-[#0F2F57] {{ $headTotal }}">Total (Rp)</th>
+                        <th scope="col" class="py-3 px-2 text-right bg-[#0F2F57] {{ $headSisa }}">Sisa (Rp)</th>
+                        <th scope="col" class="py-3 px-1 text-center bg-[#0F2F57] text-[10px] tracking-normal {{ $headSerapan }}">Serapan</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse ($reportData as $row)
                         @php
                             $paddingLeft = ($row['depth'] - 1) * 16;
+                            $rowBg = $row['depth'] === 1 ? 'bg-slate-50 group-hover:bg-slate-100' : 'bg-white group-hover:bg-slate-50';
+                            $summaryCellBg = $row['depth'] === 1 ? 'bg-slate-100 group-hover:bg-slate-200/70' : 'bg-slate-50 group-hover:bg-slate-100';
                         @endphp
-                        <tr class="hover:bg-slate-50/80 transition-colors {{ $row['depth'] === 1 ? 'font-bold bg-slate-50/40' : '' }}">
+                        <tr class="group transition-colors {{ $row['depth'] === 1 ? 'font-bold' : '' }}">
                             {{-- Sticky Column 1: Kode --}}
-                            <td class="py-3 px-4 font-mono sticky left-0 z-10 bg-white group-hover:bg-slate-50">
+                            <td class="py-3 px-2 font-mono {{ $bodyKode }} {{ $rowBg }}">
                                 <span class="px-2 py-0.5 rounded-md bg-[#DCE5F6] text-[#001B3E] font-bold text-[11px]">
                                     {{ $row['kode'] }}
                                 </span>
                             </td>
 
                             {{-- Sticky Column 2: Nama --}}
-                            <td class="py-3 px-4 sticky left-28 z-10 bg-white group-hover:bg-slate-50 max-w-xs truncate">
-                                <span style="margin-left: {{ $paddingLeft }}px" class="inline-flex items-center gap-1.5">
+                            <td class="py-3 px-3 overflow-hidden {{ $bodyKeterangan }} {{ $rowBg }}" title="{{ $row['nama'] }}">
+                                <span class="flex min-w-0 items-center gap-1.5" style="padding-left: {{ $paddingLeft }}px">
                                     @if ($row['depth'] > 1)
-                                        <span class="text-slate-300">└</span>
+                                        <span class="text-slate-300 shrink-0">└</span>
                                     @endif
-                                    <span class="text-slate-900 truncate">{{ $row['nama'] }}</span>
+                                    <span class="truncate min-w-0 text-slate-900">{{ $row['nama'] }}</span>
                                 </span>
                             </td>
 
                             {{-- Plafon RAB --}}
-                            <td class="py-3 px-4 text-right font-semibold tabular-nums text-slate-900">
-                                Rp {{ number_format($row['plafon_rab'], 0, ',', '.') }}
+                            <td class="py-3 px-2 text-right font-semibold tabular-nums text-slate-900 {{ $rowBg }}">
+                                {{ number_format($row['plafon_rab'], 0, ',', '.') }}
                             </td>
 
-                            {{-- 12 Bulan --}}
-                            @foreach ($monthNames as $mNum => $mName)
-                                <td class="py-3 px-3 text-right tabular-nums text-slate-600">
+                            {{-- Bulan (terfilter / 12 bulan) --}}
+                            @foreach ($visibleMonths as $mNum => $mName)
+                                <td class="py-3 px-2 text-right tabular-nums text-slate-600 {{ $highlightMonth === $mNum ? 'bg-[#DCE5F6] group-hover:bg-[#D3DFF4]' : $rowBg }}">
                                     {{ $row['months'][$mNum] > 0 ? number_format($row['months'][$mNum], 0, ',', '.') : '-' }}
                                 </td>
                             @endforeach
 
                             {{-- Total Realisasi --}}
-                            <td class="py-3 px-4 text-right font-bold tabular-nums text-slate-900 bg-slate-50/50">
-                                Rp {{ number_format($row['total_pengeluaran'], 0, ',', '.') }}
+                            <td class="py-3 px-2 text-right font-bold tabular-nums text-slate-900 {{ $bodyTotal }} {{ $summaryCellBg }}">
+                                {{ number_format($row['total_pengeluaran'], 0, ',', '.') }}
                             </td>
 
                             {{-- Sisa --}}
-                            <td class="py-3 px-4 text-right font-semibold tabular-nums text-slate-800">
-                                Rp {{ number_format($row['sisa_anggaran'], 0, ',', '.') }}
+                            <td class="py-3 px-2 text-right font-semibold tabular-nums text-slate-800 {{ $bodySisa }} {{ $summaryCellBg }}">
+                                {{ number_format($row['sisa_anggaran'], 0, ',', '.') }}
                             </td>
 
                             {{-- % Penyerapan --}}
-                            <td class="py-3 px-3 text-center">
+                            <td class="py-3 px-1 text-center {{ $bodySerapan }} {{ $summaryCellBg }}">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold {{ $row['persentase_penyerapan'] >= 80 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800' }}">
                                     {{ $row['persentase_penyerapan'] }}%
                                 </span>
@@ -262,7 +471,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="18" class="py-8 text-center text-slate-500">
+                            <td colspan="{{ 6 + count($visibleMonths) }}" class="py-8 text-center text-slate-500">
                                 Tidak ada data pos anggaran yang ditemukan.
                             </td>
                         </tr>

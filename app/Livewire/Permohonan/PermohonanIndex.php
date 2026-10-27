@@ -71,15 +71,11 @@ class PermohonanIndex extends Component
                 'class' => 'bg-slate-100 text-slate-700 border-slate-200',
             ],
             'diajukan' => [
-                'label' => 'Menunggu Atasan',
+                'label' => 'Menunggu Persetujuan',
                 'class' => 'bg-blue-50 text-blue-700 border-blue-200',
             ],
-            'disetujui_atasan' => [
-                'label' => 'Menunggu Kadiv',
-                'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
-            ],
             'diketahui_kadiv' => [
-                'label' => 'Menunggu Keuangan',
+                'label' => 'Menunggu Persetujuan Akhir',
                 'class' => 'bg-purple-50 text-purple-700 border-purple-200',
             ],
             'disetujui_keuangan' => [

@@ -75,7 +75,7 @@ class UmpIndex extends Component
                 'class' => 'bg-amber-50 text-amber-800 border-amber-200',
             ],
             'ttd_pj' => [
-                'label' => 'Menunggu TTD Kadiv',
+                'label' => 'Menunggu Diperiksa',
                 'class' => 'bg-blue-50 text-blue-700 border-blue-200',
             ],
             'ttd_manager_keuangan' => [

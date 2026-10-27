@@ -1,4 +1,4 @@
-<div class="space-y-6 sm:space-y-8" x-data="dashboardChart()" x-init="initChart()">
+<div class="space-y-6 sm:space-y-8">
     {{-- Header & Timestamp --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -44,7 +44,7 @@
                 <label class="block text-[11px] font-semibold text-slate-600 mb-1">Tahun Anggaran</label>
                 <select
                     wire:model.live="tahunAnggaranId"
-                    class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    class="w-full text-xs rounded-xl border border-slate-300 bg-white min-h-[44px] py-2.5 px-3 text-slate-800 focus:border-[#1E60D5] focus:outline-hidden"
                 >
                     @foreach ($daftarTahun as $ta)
                         <option value="{{ $ta->id }}">TA {{ $ta->tahun }} ({{ ucfirst($ta->status) }})</option>
@@ -57,7 +57,7 @@
                 <label class="block text-[11px] font-semibold text-slate-600 mb-1">Bulan s.d.</label>
                 <select
                     wire:model.live="bulanSd"
-                    class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    class="w-full text-xs rounded-xl border border-slate-300 bg-white min-h-[44px] py-2.5 px-3 text-slate-800 focus:border-[#1E60D5] focus:outline-hidden"
                 >
                     <option value="1">Januari</option>
                     <option value="2">Februari</option>
@@ -543,99 +543,93 @@
     </div>
 
     {{-- Chart.js CDN script --}}
+    @assets
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script>
-        function dashboardChart() {
-            return {
-                chart: null,
-                initChart() {
-                    const canvas = document.getElementById('budgetChart');
-                    if (!canvas) return;
+@endassets
 
-                    const labels = @json($chartLabels);
-                    const terikatData = @json($chartTerikat);
-                    const realisasiData = @json($chartRealisasi);
-                    const budgetData = @json($chartBudget);
+@script
+<script>
+    let chart = null;
 
-                    if (this.chart) {
-                        this.chart.destroy();
-                    }
+    const renderChart = (d) => {
+        const canvas = document.getElementById('budgetChart');
+        if (!canvas) return;
 
-                    const datasets = [
-                        {
-                            label: 'Realisasi UMP',
-                            data: realisasiData,
-                            backgroundColor: '#059669',
-                            borderRadius: 6,
-                            order: 3,
+        if (chart) chart.destroy();
+
+        chart = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    {
+                        label: 'Realisasi UMP',
+                        data: d.realisasi,
+                        backgroundColor: '#059669',
+                        borderRadius: 6,
+                        order: 3,
+                    },
+                    {
+                        label: 'Dana Terikat',
+                        data: d.terikat,
+                        backgroundColor: '#D97706',
+                        borderRadius: 6,
+                        order: 4,
+                    },
+                    {
+                        label: 'Total Budget Disahkan',
+                        data: d.budget,
+                        type: 'line',
+                        borderColor: '#0F2F57',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 3,
+                        pointBackgroundColor: '#0F2F57',
+                        fill: false,
+                        order: 1,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) =>
+                                (ctx.dataset.label || '') + ': Rp ' +
+                                new Intl.NumberFormat('id-ID').format(ctx.parsed.y || 0),
                         },
-                        {
-                            label: 'Dana Terikat',
-                            data: terikatData,
-                            backgroundColor: '#D97706',
-                            borderRadius: 6,
-                            order: 4,
-                        },
-                        {
-                            label: 'Total Budget Disahkan',
-                            data: budgetData,
-                            type: 'line',
-                            borderColor: '#0F2F57',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 3,
-                            pointBackgroundColor: '#0F2F57',
-                            fill: false,
-                            order: 1,
-                        }
-                    ];
-
-
-                    this.chart = new Chart(canvas, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: datasets
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const label = context.dataset.label || '';
-                                            const val = context.parsed.y || 0;
-                                            return label + ': Rp ' + new Intl.NumberFormat('id-ID').format(val);
-                                        }
-                                    }
-                                }
+                    },
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: (v) => {
+                                if (v >= 1000000000) return (v / 1000000000) + ' M';
+                                if (v >= 1000000) return (v / 1000000) + ' Jt';
+                                return v;
                             },
-                            scales: {
-                                x: {
-                                    grid: { display: false }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        callback: function(value) {
-                                            if (value >= 1000000000) return (value / 1000000000) + ' M';
-                                            if (value >= 1000000) return (value / 1000000) + ' Jt';
-                                            return value;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
+                        },
+                    },
+                },
+            },
+        });
+    };
 
-                    // React to Livewire updates
-                    Livewire.hook('morph.updated', ({ el, component }) => {
-                        // Chart update handled by Alpine re-evaluation
-                    });
-                }
-            };
-        }
-    </script>
+    // Render pertama kali
+    renderChart({
+        labels: @js($chartLabels),
+        terikat: @js($chartTerikat),
+        realisasi: @js($chartRealisasi),
+        budget: @js($chartBudget),
+    });
+
+    // Update saat filter berubah
+    $wire.on('chart-updated', (d) => renderChart(d));
+</script>
+@endscript
 </div>

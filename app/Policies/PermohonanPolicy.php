@@ -38,7 +38,7 @@ class PermohonanPolicy
      */
     public function view(User $user, Permohonan $permohonan): bool
     {
-        if ($user->isKeuangan() || $permohonan->user_id === $user->id) {
+        if ($user->isKeuangan() || $user->isKadivSekretariat() || $user->is_petugas_input || $permohonan->user_id === $user->id) {
             return true;
         }
 
@@ -73,7 +73,7 @@ class PermohonanPolicy
     {
         $isOwner = $permohonan->user_id === $user->id;
 
-        return $isOwner && in_array($permohonan->status, ['draft', 'diajukan', 'disetujui_atasan', 'diketahui_kadiv', 'perlu_perbaikan'], true);
+        return $isOwner && in_array($permohonan->status, ['draft', 'diajukan', 'diketahui_kadiv', 'perlu_perbaikan'], true);
     }
 
     /**
@@ -84,24 +84,45 @@ class PermohonanPolicy
         if ($permohonan->user_id === $user->id) {
             return false;
         }
+        if ($permohonan->status !== 'diajukan') {
+            return false;
+        }
 
-        $isKadiv = $user->isKadiv();
-        $sameDivisi = $user->canAccessDivision($permohonan->unit?->getDivisiId());
+        $docDivisiId = $permohonan->unit?->getDivisiId();
+        $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
 
-        return $isKadiv && $sameDivisi && in_array($permohonan->status, ['diajukan', 'disetujui_atasan'], true);
+        if ($levelingUrutan <= 1) {
+            return ($user->isManager() || $user->isKadiv())
+                && $user->canAccessDivision($docDivisiId);
+        }
+
+        return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
     }
 
     /**
-     * Menyetujui dokumen pada Tahap 3 (Bagian Keuangan).
+     * Menyetujui dokumen pada Tahap 3 (Bagian Keuangan / Kadiv Divisi untuk Supervisor level).
      */
     public function approveKeuangan(User $user, Permohonan $permohonan): bool
     {
-        $isFinanceRole = $user->isKeuangan();
+        if ($permohonan->status !== 'diketahui_kadiv') {
+            return false;
+        }
+
+        $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
+
+        if ($levelingUrutan <= 1) {
+            // Supervisor level: Kadiv Divisi (same division)
+            $docDivisiId = $permohonan->unit?->getDivisiId();
+
+            return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
+        }
+
+        // Manager/Kadiv level: Kadiv Keuangan or petugas input
+        $isKadivKeuangan = $user->isKadivKeuangan();
         $isPetugasInput = (bool) $user->is_petugas_input;
         $modeAtasNama = Setting::get('keuangan.mode', 'atas_nama') === 'atas_nama';
 
-        return ($isFinanceRole || ($isPetugasInput && $modeAtasNama))
-            && $permohonan->status === 'diketahui_kadiv';
+        return $isKadivKeuangan || ($isPetugasInput && $modeAtasNama);
     }
 
     /**

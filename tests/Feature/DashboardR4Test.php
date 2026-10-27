@@ -60,7 +60,7 @@ class DashboardR4Test extends TestCase
         $this->staffUser = User::where('username', 'subakti')->first();
         $this->managerUser = User::where('username', 'deden.salim')->first();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->first();
-        $this->financeUser = User::where('username', 'rochadi.kohar')->first();
+        $this->financeUser = User::where('username', 'direktur.keuangan')->first();
         $this->adminUser = User::where('username', 'admin')->first();
 
         $this->ta = TahunAnggaran::where('status', 'aktif')->first();
@@ -118,7 +118,6 @@ class DashboardR4Test extends TestCase
 
         $pWorkflow = new PermohonanWorkflow;
         $pWorkflow->submit($permohonan);
-        $pWorkflow->approve($permohonan, $this->managerUser);
         $pWorkflow->approve($permohonan, $this->kadivUser);
         $pWorkflow->approve($permohonan, $this->financeUser);
         $pencairan = $pWorkflow->cairkan($permohonan, $this->financeUser, [
@@ -193,7 +192,7 @@ class DashboardR4Test extends TestCase
             'sumber_dana_id' => $this->sumberDana->id,
             'nama_kegiatan' => 'Antrean Permohonan Test',
             'latar_belakang' => 'Testing Antrean',
-            'total_diminta' => 5000000,
+            'total_diminta' => 1500000,
             'status' => 'draft',
             'tgl_mulai' => now()->toDateString(),
             'tgl_selesai' => now()->addDays(2)->toDateString(),
@@ -204,8 +203,8 @@ class DashboardR4Test extends TestCase
             'uraian' => 'Item 1',
             'volume' => 1,
             'satuan' => 'Paket',
-            'harga_satuan' => 5000000,
-            'jumlah_diminta' => 5000000,
+            'harga_satuan' => 1500000,
+            'jumlah_diminta' => 1500000,
         ]);
 
         (new PermohonanWorkflow)->submit($permohonan);

@@ -111,9 +111,9 @@
             </div>
 
             <div>
-                <span class="text-slate-400 block text-[11px]">Program Utama</span>
+                <span class="text-slate-400 block text-[11px]">Program</span>
                 <span class="font-semibold text-slate-800 block mt-0.5">
-                    {{ $permohonan->program }}
+                    {{ $permohonan->kodeAnggaran?->nama ?? $permohonan->program }}
                 </span>
             </div>
 
@@ -132,9 +132,9 @@
             </div>
 
             <div>
-                <span class="text-slate-400 block text-[11px]">Pos Anggaran (Mata Anggaran)</span>
+                <span class="text-slate-400 block text-[11px]">Mata Anggaran</span>
                 <span class="font-mono font-semibold text-slate-800 block mt-0.5">
-                    {{ $permohonan->kodeAnggaran?->kode }} - {{ $permohonan->kodeAnggaran?->nama }}
+                    {{ $permohonan->kodeAnggaran?->kode ?? '-' }}
                 </span>
             </div>
 
@@ -182,6 +182,25 @@
             $signerPemeriksa = $approvalsByTahap->get('kadiv') ?? $approvalsByTahap->get('atasan');
             $creatorLeveling = $permohonan->user?->leveling?->nama ?? ($permohonan->user?->jabatan ?? 'Pemohon');
 
+            $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
+
+            if ($levelingUrutan <= 1) {
+                $step2Title = 'Pemeriksaan (Manajer Unit)';
+                $step2Role = 'Pemeriksa: Manajer Unit';
+                $step3Title = 'Persetujuan (Kadiv Divisi)';
+                $step3Role = 'Penyetuju: Kepala Divisi';
+            } elseif ($levelingUrutan == 2) {
+                $step2Title = 'Pemeriksaan (Kadiv Divisi)';
+                $step2Role = 'Pemeriksa: Kepala Divisi';
+                $step3Title = 'Persetujuan (Kadiv Keuangan)';
+                $step3Role = 'Penyetuju: Kadiv Keuangan';
+            } else {
+                $step2Title = 'Pemeriksaan (Kadiv Divisi)';
+                $step2Role = 'Pemeriksa: Kepala Divisi' . ($permohonan->user?->isKadiv() ? ' (Auto-skip)' : '');
+                $step3Title = 'Persetujuan (Kadiv Keuangan)';
+                $step3Role = 'Penyetuju: Kadiv Keuangan';
+            }
+
             $steps = [
                 [
                     'key' => 'pengajuan',
@@ -194,8 +213,8 @@
                 ],
                 [
                     'key' => 'kadiv',
-                    'title' => 'Pemeriksaan (Kadiv)',
-                    'role' => 'Pemeriksa: Kepala Divisi / Dirops',
+                    'title' => $step2Title,
+                    'role' => $step2Role,
                     'done' => in_array($permohonan->status, ['diketahui_kadiv', 'disetujui_keuangan', 'dicairkan']),
                     'date' => $signerPemeriksa?->signed_at,
                     'signer' => $signerPemeriksa?->signer_name,
@@ -203,8 +222,8 @@
                 ],
                 [
                     'key' => 'keuangan',
-                    'title' => 'Persetujuan (Keuangan)',
-                    'role' => 'Penyetuju: Bagian Keuangan / Treasury',
+                    'title' => $step3Title,
+                    'role' => $step3Role,
                     'done' => in_array($permohonan->status, ['disetujui_keuangan', 'dicairkan']),
                     'date' => $approvalsByTahap->get('keuangan')?->signed_at,
                     'signer' => $approvalsByTahap->get('keuangan')?->signer_name,
@@ -345,7 +364,7 @@
                             </span>
                         </div>
                         <a
-                            href="{{ asset('storage/' . $lamp->path) }}"
+                            href="{{ route('lampiran.show', $lamp->id) }}"
                             target="_blank"
                             class="min-h-[36px] px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold inline-flex items-center gap-1 shrink-0"
                         >
@@ -363,10 +382,10 @@
             <div class="flex items-center justify-between pb-2 border-b border-blue-100">
                 <div>
                     <h2 class="text-sm font-bold text-[#0F2F57] uppercase tracking-wider">
-                        Panel Aksi Pemeriksaan Dokumen (Kepala Divisi / Dirops)
+                        Panel Aksi Pemeriksaan Dokumen (Kepala Divisi Sekretariat)
                     </h2>
                     <p class="text-xs text-slate-600 mt-0.5">
-                        Sebagai Kepala Divisi (Pemeriksa Dokumen), Anda dapat menyetujui dokumen ini agar diteruskan ke Bagian Keuangan, atau meminta perbaikan jika terdapat rincian yang perlu direvisi.
+                        Sebagai Kepala Divisi Sekretariat (Pemeriksa Dokumen), Anda dapat menyetujui dokumen ini agar diteruskan ke Bagian Keuangan, atau meminta perbaikan jika terdapat rincian yang perlu direvisi.
                     </p>
                 </div>
                 <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">
@@ -399,20 +418,26 @@
         </div>
     @endif
 
-    {{-- SECTION 6: MODE INPUT ATAS NAMA KEUANGAN (FR-PRX) --}}
+    {{-- SECTION 6: MODE INPUT ATAS NAMA PERSETUJUAN AKHIR (KADIV / KEUANGAN) --}}
     @if ($canProxyFinanceApprove)
+        @php
+            $isSupervisorLevel = ($permohonan->levelingRequired?->urutan ?? 1) <= 1;
+            $stageKadivLabel = $isSupervisorLevel ? 'Kepala Divisi' : 'Kadiv Keuangan';
+        @endphp
         <div class="bg-white rounded-2xl border-2 border-blue-200 p-5 shadow-xs space-y-4">
             <div class="flex items-center justify-between pb-2 border-b border-blue-100">
                 <div>
                     <h2 class="text-sm font-bold text-[#0F2F57] uppercase tracking-wider">
-                        Persetujuan Bagian Keuangan (Pencatatan Fisik / Input Terpusat)
+                        Persetujuan Akhir {{ $stageKadivLabel }} (Pencatatan Fisik / Input Terpusat)
                     </h2>
                     <p class="text-xs text-slate-600 mt-0.5">
-                        Masukkan nominal disetujui per baris, nama penanda tangan fisik Keuangan, dan unggah berkas scan form bertanda tangan.
+                        {{ $isSupervisorLevel
+                            ? 'Konfirmasi persetujuan akhir Kepala Divisi, catat nama penanda tangan fisik, dan wajib unggah berkas scan form bertanda tangan.'
+                            : 'Masukkan nominal disetujui per baris, nama penanda tangan fisik Kadiv Keuangan, dan wajib unggah berkas scan form bertanda tangan.' }}
                     </p>
                 </div>
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800">
-                    FR-PRX Keuangan
+                    FR-PRX {{ $stageKadivLabel }}
                 </span>
             </div>
 
@@ -433,7 +458,7 @@
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 @foreach ($permohonan->items as $item)
-                                    <tr>
+                                    <tr wire:key="item-row-{{ $item->id }}">
                                         <td class="py-2.5 px-3 font-medium text-slate-800">
                                             {{ $item->uraian }}
                                         </td>
@@ -478,11 +503,26 @@
                     </div>
                 </div>
 
+                {{-- Preset Opsi Cepat Penanda Tangan --}}
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">
+                        Pilihan Cepat Penanda Tangan ({{ $stageKadivLabel }})
+                    </label>
+                    <select wire:model.live="financeSignerPreset" class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white mb-3">
+                        @foreach ($finalSignerCandidates as $cand)
+                            <option value="{{ $cand['name'] }}|{{ $cand['jabatan'] }}">
+                                {{ $cand['name'] }} - {{ $cand['jabatan'] }}
+                            </option>
+                        @endforeach
+                        <option value="manual">Ketik Manual...</option>
+                    </select>
+                </div>
+
                 {{-- Signer Info & Date --}}
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label for="proxySignerName" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Nama Penanda Tangan Keuangan *
+                            Nama Penanda Tangan ({{ $stageKadivLabel }}) *
                         </label>
                         <input
                             type="text"
@@ -532,7 +572,7 @@
                 {{-- Upload Scan Dokumen Fisik --}}
                 <div>
                     <label for="proxyScanFile" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Unggah Scan Dokumen Fisik Bertanda Tangan (PDF / Gambar)
+                        Unggah Scan Dokumen Fisik Bertanda Tangan (PDF / Gambar) *
                     </label>
                     <input
                         type="file"
@@ -540,15 +580,15 @@
                         wire:model="proxyScanFile"
                         accept=".pdf,.jpg,.jpeg,.png"
                         class="w-full text-xs text-slate-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200"
+                        required
                     />
                     <p class="text-[11px] text-slate-400 mt-1">
-                        Format didukung: PDF, JPG, PNG (Maksimal 10 MB).
+                        <strong class="text-red-600">* Wajib diunggah sebagai bukti fisik persetujuan.</strong> Format didukung: PDF, JPG, PNG (Maksimal 10 MB).
                     </p>
                     @error('proxyScanFile')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                        <p class="text-xs text-red-600 mt-1 font-semibold">{{ $message }}</p>
                     @enderror
                 </div>
-
                 {{-- Catatan Opsional --}}
                 <div>
                     <label for="proxyNotes" class="block text-xs font-semibold text-slate-700 mb-1">
@@ -666,7 +706,7 @@
     {{-- MODAL PENCAIRAN DANA PPD --}}
     @if ($showCairkanModal)
         <div
-            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs transition-opacity duration-300 ease-m3-standard"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto transition-opacity duration-300 ease-m3-standard"
             x-transition:enter="transition-opacity duration-300 ease-m3-standard"
             x-transition:enter-start="opacity-0"
             x-transition:enter-end="opacity-100"
@@ -675,14 +715,14 @@
             x-transition:leave-end="opacity-0"
         >
             <div
-                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden transition-all duration-300 ease-m3-emphasized-decel"
+                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-lg w-full overflow-visible transition-all duration-300 ease-m3-emphasized-decel"
                 x-transition:enter="transition-all duration-300 ease-m3-emphasized-decel"
                 x-transition:enter-start="opacity-0 scale-95 translate-y-3"
                 x-transition:enter-end="opacity-100 scale-100 translate-y-0"
                 x-transition:leave="transition-all duration-200 ease-m3-emphasized-accel"
                 x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                 x-transition:leave-end="opacity-0 scale-95 translate-y-3"
-                @click.outside="closeCairkanModal"
+                @click.outside="$wire.closeCairkanModal()"
             >
                 <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div>
@@ -702,7 +742,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="submitCairkan" class="p-6 space-y-4">
+                <form wire:submit="submitCairkan" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <div class="bg-blue-50/50 border border-blue-100 rounded-xl p-3 text-xs text-slate-600">
                         <span class="font-semibold text-slate-800">Total Nominal Disetujui:</span>
                         <span class="font-bold text-emerald-700 ml-1">Rp {{ number_format($permohonan->total_disetujui, 0, ',', '.') }}</span>
@@ -753,9 +793,80 @@
                             :nullable="false"
                         />
                         <p class="text-[11px] text-slate-400 mt-1">
-                            Sesuai ketentuan, Penanggung Jawab dana pencairan PPD adalah Manager divisi / unit terkait.
+                            Manager unit terkait tampil paling atas dan terpilih otomatis; Anda dapat memilih
+                            pejabat lain (Manager/Kadiv) dari seluruh unit dan divisi.
                         </p>
                         @error('pjId')
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">
+                            Penerima Dana (opsional, boleh lebih dari satu)
+                        </label>
+                        <div x-data="{ search: '', open: false }" class="relative">
+                            <button
+                                type="button"
+                                @click="open = !open"
+                                class="w-full text-left rounded-xl border border-slate-300 bg-white min-h-[44px] py-2.5 px-3 text-xs flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50 transition-colors"
+                                :aria-expanded="open"
+                            >
+                                <span class="truncate" :class="$wire.penerimaIds.length > 0 ? 'text-slate-900 font-medium' : 'text-slate-500'"
+                                    x-text="$wire.penerimaIds.length > 0
+                                        ? $wire.penerimaIds.length + ' orang dipilih'
+                                        : 'Pilih penerima dana...'"></span>
+                                <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform" :class="open ? 'rotate-180' : ''"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            <div
+                                x-show="open"
+                                x-cloak
+                                @click.outside="open = false"
+                                class="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden"
+                            >
+                                <div class="p-2 border-b border-slate-100 bg-slate-50/80">
+                                    <input
+                                        type="text"
+                                        x-model="search"
+                                        placeholder="Cari nama atau jabatan..."
+                                        class="w-full text-xs rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-hidden"
+                                    />
+                                </div>
+                                <div class="max-h-56 overflow-y-auto divide-y divide-slate-50 p-1">
+                                    @forelse ($penerimaCandidates as $cand)
+                                        <label
+                                            x-show="!search || @js(strtolower($cand['name'].' '.$cand['sub'])).includes(search.toLowerCase())"
+                                            class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                value="{{ $cand['id'] }}"
+                                                wire:model="penerimaIds"
+                                                class="w-4 h-4 rounded border-slate-300 text-[#1E60D5] focus:ring-[#1E60D5]"
+                                            />
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-xs font-medium text-slate-800 truncate">{{ $cand['name'] }}</span>
+                                                @if ($cand['sub'])
+                                                    <span class="block text-[11px] text-slate-500 truncate">{{ $cand['sub'] }}</span>
+                                                @endif
+                                            </span>
+                                        </label>
+                                    @empty
+                                        <div class="py-4 px-3 text-center text-xs text-slate-400">
+                                            Tidak ada pengguna pada divisi ini.
+                                        </div>
+                                    @endforelse
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">
+                            Penerima yang dipilih dapat mengisi baris Penggunaan Dana pada UMP secara mandiri (masing-masing bisa mengisi beberapa baris).
+                        </p>
+                        @error('penerimaIds.*')
                             <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                         @enderror
                     </div>
@@ -797,14 +908,14 @@
             x-transition:leave-end="opacity-0"
         >
             <div
-                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden transition-all duration-300 ease-m3-emphasized-decel"
+                class="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md sm:max-w-lg w-full overflow-hidden transition-all duration-300 ease-m3-emphasized-decel"
                 x-transition:enter="transition-all duration-300 ease-m3-emphasized-decel"
                 x-transition:enter-start="opacity-0 scale-95 translate-y-3"
                 x-transition:enter-end="opacity-100 scale-100 translate-y-0"
                 x-transition:leave="transition-all duration-200 ease-m3-emphasized-accel"
                 x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                 x-transition:leave-end="opacity-0 scale-95 translate-y-3"
-                @click.outside="closeActionModal"
+                @click.outside="$wire.closeActionModal()"
             >
                 <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 class="text-base font-bold text-[#0F2F57]">
@@ -829,7 +940,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="submitAction" class="p-6 space-y-4">
+                <form wire:submit="submitAction" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <p class="text-xs text-slate-600">
                         @if ($actionType === 'setuju')
                             Apakah Anda yakin menyetujui permohonan dana ini untuk diteruskan ke tahap selanjutnya?
@@ -842,6 +953,75 @@
                         @endif
                     </p>
 
+                    @if ($actionType === 'setuju')
+                        <div class="space-y-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                            <div>
+                                <label for="pemeriksaId" class="block text-xs font-semibold text-slate-700 mb-1">
+                                    Pilih Pejabat Pemeriksa
+                                </label>
+                                <select
+                                    id="pemeriksaId"
+                                    wire:model.live="pemeriksaId"
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
+                                >
+                                    <option value="">-- Pilih Pejabat / Manual --</option>
+                                    @foreach ($pemeriksaCandidates as $candidate)
+                                        <option value="{{ $candidate['id'] }}">
+                                            {{ $candidate['name'] }} ({{ $candidate['sub'] ?? 'Pejabat' }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="pemeriksaName" class="block text-xs font-semibold text-slate-700 mb-1">
+                                    Nama Penanda Tangan Pemeriksa *
+                                </label>
+                                <input
+                                    type="text"
+                                    id="pemeriksaName"
+                                    wire:model="pemeriksaName"
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('pemeriksaName') border-red-500 @enderror"
+                                    required
+                                />
+                                @error('pemeriksaName')
+                                    <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label for="pemeriksaJabatan" class="block text-xs font-semibold text-slate-700 mb-1">
+                                    Jabatan Penanda Tangan Pemeriksa *
+                                </label>
+                                <input
+                                    type="text"
+                                    id="pemeriksaJabatan"
+                                    wire:model="pemeriksaJabatan"
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('pemeriksaJabatan') border-red-500 @enderror"
+                                    required
+                                />
+                                @error('pemeriksaJabatan')
+                                    <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div>
+                                <label for="pemeriksaSignedAt" class="block text-xs font-semibold text-slate-700 mb-1">
+                                    Tanggal Pemeriksaan *
+                                </label>
+                                <input
+                                    type="date"
+                                    id="pemeriksaSignedAt"
+                                    wire:model="pemeriksaSignedAt"
+                                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('pemeriksaSignedAt') border-red-500 @enderror"
+                                    required
+                                />
+                                @error('pemeriksaSignedAt')
+                                    <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+                    @endif
                     <div>
                         <label for="actionNotes" class="block text-xs font-semibold text-slate-700 mb-1">
                             Catatan / Alasan {{ $actionType === 'setuju' ? '(Opsional)' : '*' }}

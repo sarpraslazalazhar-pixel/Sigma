@@ -7,6 +7,7 @@ use App\Models\Permohonan;
 use App\Models\Ump;
 use App\Services\AuditLogger;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -23,6 +24,11 @@ class VerifikasiKeuanganIndex extends Component
     public string $filterJenis = 'semua';
 
     public string $filterStatus = 'belum';
+
+    public function mount(): void
+    {
+        abort_unless(Gate::allows('verifikasi-keuangan'), 403);
+    }
 
     public function updatingSearch(): void
     {
@@ -41,7 +47,7 @@ class VerifikasiKeuanganIndex extends Component
 
     public function verifikasi(string $type, int $id): void
     {
-        abort_unless(in_array(Auth::user()?->role, ['admin', 'keuangan']), 403);
+        abort_unless(Gate::allows('verifikasi-keuangan'), 403);
 
         $entity = match ($type) {
             'permohonan' => Permohonan::findOrFail($id),
@@ -63,7 +69,7 @@ class VerifikasiKeuanganIndex extends Component
 
     public function batalVerifikasi(string $type, int $id): void
     {
-        abort_unless(in_array(Auth::user()?->role, ['admin', 'keuangan']), 403);
+        abort_unless(Gate::allows('verifikasi-keuangan'), 403);
 
         $entity = match ($type) {
             'permohonan' => Permohonan::findOrFail($id),
@@ -85,7 +91,7 @@ class VerifikasiKeuanganIndex extends Component
 
     public function render()
     {
-        abort_unless(in_array(Auth::user()?->role, ['admin', 'keuangan']), 403);
+        abort_unless(Gate::allows('verifikasi-keuangan'), 403);
 
         $countPendingPermohonan = Permohonan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count();
         $countPendingPencairan = Pencairan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count();

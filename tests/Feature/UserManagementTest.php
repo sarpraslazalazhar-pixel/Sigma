@@ -30,7 +30,7 @@ class UserManagementTest extends TestCase
         ]);
 
         $this->adminUser = User::where('username', 'admin')->first();
-        $this->unitUser = User::where('username', 'tu.sekretariat')->first();
+        $this->unitUser = User::where('username', 'subakti')->first();
     }
 
     public function test_non_admin_cannot_access_user_management(): void
@@ -47,7 +47,7 @@ class UserManagementTest extends TestCase
             ->assertStatus(200)
             ->assertSee('Manajemen Pengguna & Leveling')
             ->assertSee('admin')
-            ->assertSee('tu.sekretariat');
+            ->assertSee('subakti');
     }
 
     public function test_admin_can_create_new_user(): void
@@ -124,7 +124,7 @@ class UserManagementTest extends TestCase
 
     public function test_admin_can_reset_user_password(): void
     {
-        $user = User::where('username', 'tu.sekretariat')->first();
+        $user = User::where('username', 'subakti')->first();
 
         Livewire::actingAs($this->adminUser)
             ->test(UserIndex::class)

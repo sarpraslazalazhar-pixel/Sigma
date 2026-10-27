@@ -5,6 +5,9 @@ namespace App\Livewire\Ump;
 use App\Models\Lampiran;
 use App\Models\Setting;
 use App\Models\Ump;
+use App\Models\UmpItem;
+use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\UmpWorkflow;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -25,12 +28,26 @@ class UmpDetail extends Component
 
     public int $umpId;
 
-    /** Baris penggunaan dana (Bagian B): id, tgl, rincian, no_bukti, jumlah. */
-    public array $items = [];
+    /**
+     * Baris penggunaan dana (Bagian B) dikelompokkan per penerima.
+     * Key: id record ump_penerima (string) atau 'pj' untuk baris milik PJ/tanpa penerima.
+     *
+     * @var array<string, array<int, array{id: ?int, tgl: string, rincian: string, no_bukti: string, jumlah: int}>>
+     */
+    public array $itemsByPenerima = [];
+
+    /** Daftar id user yang ditunjuk sebagai penerima (untuk form sinkronisasi). */
+    public array $selectedPenerimaIds = [];
 
     public string $catatanKekurangan = '';
 
     public $buktiPendukung = null;
+
+    /** Berkas bukti transaksi per baris item. */
+    public $buktiItem = null;
+
+    /** id UmpItem yang sedang diunggah buktinya. */
+    public ?int $buktiItemTarget = null;
 
     // Panel persetujuan (FR-UMP-4)
     public bool $showApprovalModal = false;
@@ -52,7 +69,8 @@ class UmpDetail extends Component
         return Ump::with([
             'pencairan.permohonan.unit',
             'pj',
-            'items',
+            'items.lampiran',
+            'penerima.user',
             'approvals',
             'lampiran',
         ])->findOrFail($this->umpId);
@@ -68,7 +86,7 @@ class UmpDetail extends Component
         return match ($status) {
             'draft' => ['label' => 'Draft', 'class' => 'bg-slate-100 text-slate-700 border-slate-200'],
             'perlu_perbaikan' => ['label' => 'Perlu Perbaikan', 'class' => 'bg-amber-50 text-amber-800 border-amber-200'],
-            'ttd_pj' => ['label' => 'Menunggu TTD Kadiv', 'class' => 'bg-blue-50 text-blue-700 border-blue-200'],
+            'ttd_pj' => ['label' => 'Menunggu Diperiksa', 'class' => 'bg-blue-50 text-blue-700 border-blue-200'],
             'ttd_manager_keuangan' => ['label' => 'Menunggu TTD Mgr Keuangan', 'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200'],
             'ttd_kepala_keuangan' => ['label' => 'Menunggu TTD Kepala Keuangan', 'class' => 'bg-purple-50 text-purple-700 border-purple-200'],
             'selesai' => ['label' => 'Selesai', 'class' => 'bg-emerald-50 text-emerald-700 border-emerald-200'],
@@ -79,7 +97,69 @@ class UmpDetail extends Component
 
     public function getTotalPenggunaanProperty(): int
     {
-        return (int) collect($this->items)->sum('jumlah');
+        return (int) collect($this->itemsByPenerima)->flatten(1)->sum('jumlah');
+    }
+
+    /**
+     * Penerima yang belum mengisi satu baris pun (soft warning sebelum PJ submit).
+     *
+     * @return array<int, string>
+     */
+    public function getIncompletePenerimaNamesProperty(): array
+    {
+        return $this->ump->penerima
+            ->filter(fn ($penerima) => ! isset($this->itemsByPenerima[(string) $penerima->id])
+                || count($this->itemsByPenerima[(string) $penerima->id]) === 0)
+            ->map(fn ($penerima) => $penerima->user?->name ?? 'Penerima #'.$penerima->id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Key section milik pengguna saat ini: id ump_penerima atau 'pj'.
+     */
+    public function getActivePenerimaKeyProperty(): string
+    {
+        $user = Auth::user();
+        if (! $user) {
+            return 'pj';
+        }
+
+        $penerima = $this->ump->penerima->firstWhere('user_id', $user->id);
+
+        return $penerima ? (string) $penerima->id : 'pj';
+    }
+
+    /**
+     * Apakah pengguna berwenang mengubah baris pada section tertentu.
+     * PJ bertanggung jawab atas seluruh UMP; admin/TU/keuangan bisa mengelola semua; penerima hanya section miliknya.
+     */
+    public function canEditSection(string $key): bool
+    {
+        if (! $this->isEditable) {
+            return false;
+        }
+
+        $user = Auth::user();
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->role === 'admin' || (bool) $user->is_petugas_input || $user->isKeuangan()) {
+            return true;
+        }
+
+        if ($this->ump->pj_id === $user->id) {
+            return true;
+        }
+
+        if ($key === 'pj') {
+            return false;
+        }
+
+        $penerima = $this->ump->penerima->firstWhere('id', (int) $key);
+
+        return $penerima !== null && $penerima->user_id === $user->id;
     }
 
     /**
@@ -95,14 +175,25 @@ class UmpDetail extends Component
         $status = $this->ump->status;
 
         if ($status === 'ttd_pj') {
-            $urutan = $user->leveling?->urutan ?? 0;
-            $docDivisiId = $this->ump->pencairan?->permohonan?->unit?->getDivisiId();
-            $userDivisiId = $user->unit?->getDivisiId();
-            $sameDivisi = $docDivisiId !== null && $userDivisiId !== null && $docDivisiId === $userDivisiId;
+            if ($user->role === 'admin' || (bool) $user->is_petugas_input) {
+                return true;
+            }
 
-            return ($sameDivisi && $urutan >= 2)
-                || $user->role === 'keuangan'
-                || $user->role === 'admin';
+            $pj = $this->ump->pj ?: $this->ump->pencairan?->permohonan?->user;
+            if ($pj && $user->id === $pj->id) {
+                return false;
+            }
+
+            $pjDivisiId = $pj?->unit?->getDivisiId() ?? $this->ump->pencairan?->permohonan?->unit?->getDivisiId();
+            $pjUnitId = $pj?->unit_id ?? $this->ump->pencairan?->permohonan?->unit_id;
+
+            $userDivisiId = $user->unit?->getDivisiId();
+            $sameDivisi = $pjDivisiId !== null && $userDivisiId !== null && $pjDivisiId === $userDivisiId;
+            $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
+
+            $urutan = $user->leveling?->urutan ?? 0;
+
+            return ($sameDivisi || $sameUnit) && $urutan >= 2;
         }
 
         if (in_array($status, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
@@ -225,13 +316,13 @@ class UmpDetail extends Component
         return (int) (round($this->selisih / $kelipatan) * $kelipatan);
     }
 
-    public function tambahBaris(): void
+    public function tambahBaris(string $penerimaKey = 'pj'): void
     {
-        if (! $this->isEditable) {
+        if (! $this->canEditSection($penerimaKey)) {
             return;
         }
 
-        $this->items[] = [
+        $this->itemsByPenerima[$penerimaKey][] = [
             'id' => null,
             'tgl' => '',
             'rincian' => '',
@@ -240,14 +331,18 @@ class UmpDetail extends Component
         ];
     }
 
-    public function hapusBaris(int $index): void
+    public function hapusBaris(string $penerimaKey, int $index): void
     {
-        if (! $this->isEditable) {
+        if (! $this->canEditSection($penerimaKey)) {
             return;
         }
 
-        unset($this->items[$index]);
-        $this->items = array_values($this->items);
+        if (! isset($this->itemsByPenerima[$penerimaKey][$index])) {
+            return;
+        }
+
+        unset($this->itemsByPenerima[$penerimaKey][$index]);
+        $this->itemsByPenerima[$penerimaKey] = array_values($this->itemsByPenerima[$penerimaKey]);
     }
 
     public function simpanDraft(): void
@@ -316,6 +411,124 @@ class UmpDetail extends Component
         $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
+    /**
+     * Sinkronkan daftar penerima dana (hanya PJ / TU / keuangan / admin saat UMP editable).
+     */
+    public function syncPenerima(): void
+    {
+        if (! $this->isEditable) {
+            session()->flash('error', 'Daftar penerima hanya dapat diubah saat UMP Draft / Perlu Perbaikan.');
+
+            return;
+        }
+
+        $user = Auth::user();
+        $allowed = $user && (
+            $user->id === $this->ump->pj_id
+            || $user->is_petugas_input
+            || $user->role === 'admin'
+            || $user->isKeuangan()
+        );
+
+        if (! $allowed) {
+            session()->flash('error', 'Anda tidak berwenang mengubah daftar penerima dana.');
+
+            return;
+        }
+
+        $this->validate([
+            'selectedPenerimaIds' => ['array'],
+            'selectedPenerimaIds.*' => ['integer', 'exists:users,id'],
+        ], [
+            'selectedPenerimaIds.*.exists' => 'Penerima dana yang dipilih tidak valid.',
+        ]);
+
+        $newIds = array_values(array_unique(array_map('intval', $this->selectedPenerimaIds)));
+
+        $existing = $this->ump->penerima()->pluck('user_id')->all();
+        $toAdd = array_diff($newIds, $existing);
+
+        $this->ump->penerimaUsers()->sync($newIds);
+
+        foreach ($toAdd as $penerimaUserId) {
+            $penerimaUser = User::find($penerimaUserId);
+            if (! $penerimaUser) {
+                continue;
+            }
+
+            NotificationService::kirim(
+                $penerimaUser,
+                'dokumen_diputuskan',
+                [
+                    'judul' => 'Anda Ditunjuk sebagai Penerima Dana UMP',
+                    'pesan' => 'Anda ditunjuk untuk melaporkan penggunaan dana pada UMP '.($this->ump->pencairan?->no_ppd ?? '#'.$this->ump->id).'.',
+                    'url' => route('ump.detail', $this->ump->id),
+                ],
+                "ump_penerima_{$this->ump->id}_{$penerimaUserId}"
+            );
+        }
+
+        $this->loadItems();
+        $msg = 'Daftar penerima dana diperbarui.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+    }
+
+    /**
+     * Unggah bukti transfer/transaksi untuk satu baris penggunaan dana.
+     */
+    public function simpanBuktiItem(int $itemId): void
+    {
+        $this->validate([
+            'buktiItem' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+        ], [
+            'buktiItem.required' => 'Berkas bukti transaksi wajib dipilih.',
+            'buktiItem.mimes' => 'Berkas harus berformat JPG, PNG, atau PDF.',
+            'buktiItem.max' => 'Ukuran berkas maksimal 5 MB.',
+        ]);
+
+        $item = UmpItem::where('ump_id', $this->umpId)->findOrFail($itemId);
+
+        $penerimaKey = $item->penerima_id ? (string) $item->penerima_id : 'pj';
+        if (! $this->canEditSection($penerimaKey)) {
+            session()->flash('error', 'Anda tidak berwenang mengunggah bukti untuk baris ini.');
+
+            return;
+        }
+
+        $file = $this->buktiItem;
+        $path = $file->store('lampiran/ump-item', 'local');
+
+        Lampiran::create([
+            'attachable_type' => UmpItem::class,
+            'attachable_id' => $item->id,
+            'jenis' => 'bukti_tf',
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $file->getMimeType() ?? 'application/octet-stream',
+            'size' => $file->getSize() ?? 0,
+            'sha256' => hash_file('sha256', $file->getRealPath()),
+            'version' => 1,
+            'uploaded_by' => Auth::id(),
+        ]);
+
+        $this->reset('buktiItem', 'buktiItemTarget');
+        $this->loadItems();
+        session()->flash('success', 'Bukti transaksi berhasil diunggah.');
+        $this->dispatch('notify', ['type' => 'success', 'message' => 'Bukti transaksi berhasil diunggah.']);
+    }
+
+    public function setBuktiItemTarget(int $itemId): void
+    {
+        $this->buktiItemTarget = $itemId;
+        $this->buktiItem = null;
+    }
+
+    public function cancelBuktiItemTarget(): void
+    {
+        $this->reset('buktiItem', 'buktiItemTarget');
+    }
+
     public function simpanBuktiPendukung(): void
     {
         if (! $this->isEditable) {
@@ -353,36 +566,54 @@ class UmpDetail extends Component
     /** Buang baris kosong, lalu validasi baris tersisa (FR-UMP-2). */
     protected function cleanedItems(): array
     {
-        $this->items = array_values(array_filter($this->items, function ($row) {
-            return trim((string) ($row['rincian'] ?? '')) !== ''
-                || (int) ($row['jumlah'] ?? 0) > 0
-                || ! empty($row['tgl']);
-        }));
+        $flattened = [];
 
-        if ($this->items === []) {
+        foreach ($this->itemsByPenerima as $key => $rows) {
+            $penerimaId = $key === 'pj' ? null : (int) $key;
+
+            foreach ($rows as $row) {
+                $hasContent = trim((string) ($row['rincian'] ?? '')) !== ''
+                    || (int) ($row['jumlah'] ?? 0) > 0
+                    || ! empty($row['tgl']);
+
+                if (! $hasContent) {
+                    continue;
+                }
+
+                $row['penerima_id'] = $penerimaId;
+                $flattened[] = $row;
+            }
+        }
+
+        $this->itemsByPenerima = $this->regroupItems($flattened);
+
+        if ($flattened === []) {
             return [];
         }
 
         $this->validate([
-            'items' => ['array'],
-            'items.*.tgl' => ['required', 'date'],
-            'items.*.rincian' => ['required', 'string', 'min:3'],
-            'items.*.no_bukti' => ['nullable', 'string', 'max:100'],
-            'items.*.jumlah' => ['required', 'integer', 'min:1'],
+            'itemsByPenerima' => ['array'],
+            'itemsByPenerima.*.*.tgl' => ['required', 'date'],
+            'itemsByPenerima.*.*.rincian' => ['required', 'string', 'min:3'],
+            'itemsByPenerima.*.*.no_bukti' => ['nullable', 'string', 'max:100'],
+            'itemsByPenerima.*.*.jumlah' => ['required', 'integer', 'min:1'],
         ], [
-            'items.*.tgl.required' => 'Tanggal pengeluaran wajib diisi.',
-            'items.*.tgl.date' => 'Tanggal pengeluaran tidak valid.',
-            'items.*.rincian.required' => 'Rincian pengeluaran wajib diisi.',
-            'items.*.rincian.min' => 'Rincian pengeluaran minimal 3 karakter.',
-            'items.*.jumlah.required' => 'Jumlah pengeluaran wajib diisi.',
-            'items.*.jumlah.min' => 'Jumlah pengeluaran harus lebih dari 0.',
+            'itemsByPenerima.*.*.tgl.required' => 'Tanggal pengeluaran wajib diisi.',
+            'itemsByPenerima.*.*.tgl.date' => 'Tanggal pengeluaran tidak valid.',
+            'itemsByPenerima.*.*.rincian.required' => 'Rincian pengeluaran wajib diisi.',
+            'itemsByPenerima.*.*.rincian.min' => 'Rincian pengeluaran minimal 3 karakter.',
+            'itemsByPenerima.*.*.jumlah.required' => 'Jumlah pengeluaran wajib diisi.',
+            'itemsByPenerima.*.*.jumlah.min' => 'Jumlah pengeluaran harus lebih dari 0.',
         ]);
+
         // FR-UMP-7: item dates must fall within the budget year
         $tahun = $this->ump->pencairan?->permohonan?->kodeAnggaran?->tahunAnggaran?->tahun;
         if ($tahun) {
-            foreach ($this->items as $idx => $row) {
-                if (! empty($row['tgl']) && Carbon::parse($row['tgl'])->year !== (int) $tahun) {
-                    $this->addError("items.{$idx}.tgl", "Tanggal pengeluaran harus berada dalam tahun anggaran {$tahun}.");
+            foreach ($this->itemsByPenerima as $key => $rows) {
+                foreach ($rows as $idx => $row) {
+                    if (! empty($row['tgl']) && Carbon::parse($row['tgl'])->year !== (int) $tahun) {
+                        $this->addError("itemsByPenerima.{$key}.{$idx}.tgl", "Tanggal pengeluaran harus berada dalam tahun anggaran {$tahun}.");
+                    }
                 }
             }
             if ($this->getErrorBag()->isNotEmpty()) {
@@ -400,31 +631,105 @@ class UmpDetail extends Component
             }
         }
 
-        return $this->items;
+        return $flattened;
+    }
+
+    /**
+     * Susun ulang daftar baris menjadi struktur per-penerima.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    protected function regroupItems(array $rows): array
+    {
+        $grouped = [];
+        foreach ($rows as $row) {
+            $key = empty($row['penerima_id']) ? 'pj' : (string) $row['penerima_id'];
+            $grouped[$key][] = $row;
+        }
+
+        return $grouped;
     }
 
     protected function loadItems(): void
     {
-        $this->items = $this->ump->items->map(fn ($item) => [
-            'id' => $item->id,
-            'tgl' => $item->tgl->toDateString(),
-            'rincian' => $item->rincian,
-            'no_bukti' => $item->no_bukti ?? '',
-            'jumlah' => (int) $item->jumlah,
+        $ump = $this->ump;
+        // Segarkan atribut & relasi pada instance yang sama (computed $this->ump ter-cache per request),
+        // agar UI langsung menampilkan data tersimpan tanpa perlu refresh halaman.
+        $ump->refresh();
+        $ump->load(['items.lampiran', 'penerima.user']);
+
+        $grouped = $ump->items->groupBy(fn ($item) => $item->penerima_id ?: 'pj');
+
+        $this->itemsByPenerima = [];
+        foreach ($grouped as $key => $items) {
+            $this->itemsByPenerima[(string) $key] = $items->map(fn ($item) => [
+                'id' => $item->id,
+                'tgl' => $item->tgl?->toDateString() ?? '',
+                'rincian' => $item->rincian,
+                'no_bukti' => $item->no_bukti ?? '',
+                'jumlah' => (int) $item->jumlah,
+            ])->values()->all();
+        }
+
+        // Pastikan setiap penerima punya section meski belum ada baris.
+        foreach ($ump->penerima as $p) {
+            $key = (string) $p->id;
+            if (! isset($this->itemsByPenerima[$key])) {
+                $this->itemsByPenerima[$key] = [];
+            }
+        }
+
+        if (! isset($this->itemsByPenerima['pj'])) {
+            $this->itemsByPenerima['pj'] = [];
+        }
+
+        ksort($this->itemsByPenerima);
+
+        $this->selectedPenerimaIds = $ump->penerima->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * Kandidat penerima dana: pengguna aktif pada divisi UMP.
+     *
+     * @return array<int, array{id: int, name: string, sub: string}>
+     */
+    public function getPenerimaCandidatesProperty(): array
+    {
+        $divisiId = $this->ump->pencairan?->permohonan?->unit?->getDivisiId();
+
+        $query = User::with(['unit', 'leveling'])->where('is_active', true);
+
+        if ($divisiId) {
+            $query->where(function ($q) use ($divisiId) {
+                $q->where('unit_id', $divisiId)
+                    ->orWhereHas('unit', fn ($u) => $u->where('parent_id', $divisiId));
+            });
+        }
+
+        return $query->orderBy('name')->get()->map(fn (User $u) => [
+            'id' => $u->id,
+            'name' => $u->name,
+            'sub' => $u->jabatan ?: ($u->leveling?->nama ?? $u->unit?->nama ?? ''),
         ])->values()->all();
     }
 
     public function render(): View
     {
+        $ump = $this->ump;
+
         return view('livewire.ump.ump-detail', [
-            'ump' => $this->ump,
+            'ump' => $ump,
             'isEditable' => $this->isEditable,
+            'itemsByPenerima' => $this->itemsByPenerima,
             'totalPenggunaan' => $this->totalPenggunaan,
             'selisih' => $this->selisih,
             'defisit' => $this->defisit,
             'pembulatan' => $this->pembulatan,
             'canApprove' => $this->canApprove(),
             'stepProgress' => $this->stepProgress,
+            'penerimaCandidates' => $this->penerimaCandidates,
+            'incompletePenerimaNames' => $this->incompletePenerimaNames,
         ]);
     }
 }

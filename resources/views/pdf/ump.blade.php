@@ -111,7 +111,31 @@
         $signerKepKeuJabatan = $signerKepKeu?->signer_jabatan ?: 'Kepala Keuangan';
 
         $items = $ump->items->sortBy('tgl')->values();
-        $maxRows = max(9, $items->count());
+
+        // Susun baris PDF: dikelompokkan per penerima bila ada penerima dana; jika tidak, flat.
+        $pdfRows = [];
+        if ($ump->penerima->isNotEmpty()) {
+            $sections = collect([['label' => $pjUser?->name ?? 'Penanggung Jawab', 'penerima_id' => null]]);
+            foreach ($ump->penerima->sortBy(fn ($p) => $p->user?->name ?? '') as $penerimaRow) {
+                $sections->push(['label' => $penerimaRow->user?->name ?? 'Penerima', 'penerima_id' => $penerimaRow->id]);
+            }
+            foreach ($sections as $sec) {
+                $secItems = $items->filter(fn ($it) => $it->penerima_id === $sec['penerima_id'])->values();
+                if ($secItems->isEmpty()) {
+                    continue;
+                }
+                $pdfRows[] = ['type' => 'header', 'label' => $sec['label']];
+                foreach ($secItems as $it) {
+                    $pdfRows[] = ['type' => 'item', 'item' => $it];
+                }
+            }
+        } else {
+            foreach ($items as $it) {
+                $pdfRows[] = ['type' => 'item', 'item' => $it];
+            }
+        }
+
+        $maxRows = max(9, count($pdfRows));
         $noPpdDisplay = $ump->pencairan?->no_ppd ? (str_starts_with($ump->pencairan->no_ppd, 'PPD') ? $ump->pencairan->no_ppd : 'PPD. ' . $ump->pencairan->no_ppd) : 'PPD.';
     @endphp
 
@@ -182,22 +206,40 @@
             </tr>
 
             {{-- DATA RINCIAN DENGAN PADDING BARIS --}}
-            @for ($i = 0; $i < $maxRows; $i++)
-                @php $item = $items->get($i); @endphp
+            @php $rowNo = 0; @endphp
+            @foreach ($pdfRows as $pdfRow)
+                @if ($pdfRow['type'] === 'header')
+                    <tr>
+                        <td colspan="5" style="font-weight: bold; background-color: #eaeaea; padding-left: 6px;">
+                            Penerima: {{ $pdfRow['label'] }}
+                        </td>
+                    </tr>
+                @else
+                    @php $rowNo++; $item = $pdfRow['item']; @endphp
+                    <tr>
+                        <td style="text-align: center; height: 18px;">{{ $rowNo }}</td>
+                        <td style="text-align: center;">
+                            {{ $item->tgl ? \Carbon\Carbon::parse($item->tgl)->locale('id')->translatedFormat('j F Y') : '' }}
+                        </td>
+                        <td style="text-align: left; padding-left: 6px;">
+                            {{ $item->rincian }}
+                        </td>
+                        <td style="text-align: center;">
+                            {{ $item->no_bukti ?: '-' }}
+                        </td>
+                        <td style="text-align: right; padding-right: 6px;">
+                            {{ number_format($item->jumlah, 0, ',', '.') }}
+                        </td>
+                    </tr>
+                @endif
+            @endforeach
+            @for ($i = count($pdfRows); $i < $maxRows; $i++)
                 <tr>
-                    <td style="text-align: center; height: 18px;">{{ $i + 1 }}</td>
-                    <td style="text-align: center;">
-                        {{ $item && $item->tgl ? \Carbon\Carbon::parse($item->tgl)->locale('id')->translatedFormat('j F Y') : '' }}
-                    </td>
-                    <td style="text-align: left; padding-left: 6px;">
-                        {{ $item ? $item->rincian : '' }}
-                    </td>
-                    <td style="text-align: center;">
-                        {{ $item ? ($item->no_bukti ?: '-') : '' }}
-                    </td>
-                    <td style="text-align: right; padding-right: 6px;">
-                        {{ $item ? number_format($item->jumlah, 0, ',', '.') : '' }}
-                    </td>
+                    <td style="text-align: center; height: 18px;">{{ '' }}</td>
+                    <td style="text-align: center;">{{ '' }}</td>
+                    <td style="text-align: left; padding-left: 6px;">{{ '' }}</td>
+                    <td style="text-align: center;">{{ '' }}</td>
+                    <td style="text-align: right; padding-right: 6px;">{{ '' }}</td>
                 </tr>
             @endfor
 
@@ -242,25 +284,25 @@
             <tr>
                 <td style="height: 60px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
                     @if ($signerPj)
-                        <div style="font-size: 7pt; color: #166534; font-weight: bold;">✓ Disetujui Digital</div>
+                        <div style="font-size: 7pt; color: #166534; font-weight: bold; font-family: DejaVu Sans, sans-serif;">✓ Disetujui Digital</div>
                         <div style="font-size: 6.5pt; color: #666;">{{ \Carbon\Carbon::parse($signerPj->signed_at)->format('d/m/Y') }}</div>
                     @endif
                 </td>
                 <td style="height: 60px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
                     @if ($signerKadiv)
-                        <div style="font-size: 7pt; color: #166534; font-weight: bold;">✓ Disetujui Digital</div>
+                        <div style="font-size: 7pt; color: #166534; font-weight: bold; font-family: DejaVu Sans, sans-serif;">✓ Disetujui Digital</div>
                         <div style="font-size: 6.5pt; color: #666;">{{ \Carbon\Carbon::parse($signerKadiv->signed_at)->format('d/m/Y') }}</div>
                     @endif
                 </td>
                 <td style="height: 60px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
                     @if ($signerMgrKeu)
-                        <div style="font-size: 7pt; color: #166534; font-weight: bold;">✓ Disetujui Digital</div>
+                        <div style="font-size: 7pt; color: #166534; font-weight: bold; font-family: DejaVu Sans, sans-serif;">✓ Disetujui Digital</div>
                         <div style="font-size: 6.5pt; color: #666;">{{ \Carbon\Carbon::parse($signerMgrKeu->signed_at)->format('d/m/Y') }}</div>
                     @endif
                 </td>
                 <td style="height: 60px; vertical-align: bottom; text-align: center; padding-bottom: 4px;">
                     @if ($signerKepKeu)
-                        <div style="font-size: 7pt; color: #166534; font-weight: bold;">✓ Disetujui Digital</div>
+                        <div style="font-size: 7pt; color: #166534; font-weight: bold; font-family: DejaVu Sans, sans-serif;">✓ Disetujui Digital</div>
                         <div style="font-size: 6.5pt; color: #666;">{{ \Carbon\Carbon::parse($signerKepKeu->signed_at)->format('d/m/Y') }}</div>
                     @endif
                 </td>

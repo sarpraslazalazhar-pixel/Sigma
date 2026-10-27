@@ -18,7 +18,7 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
-                <span>+ Buat Permohonan Baru</span>
+                <span>Buat Permohonan Baru</span>
             </a>
         </div>
     </div>
@@ -57,9 +57,8 @@
                 >
                     <option value="">Semua Status</option>
                     <option value="draft">Draft</option>
-                    <option value="diajukan">Menunggu Atasan</option>
-                    <option value="disetujui_atasan">Menunggu Kadiv</option>
-                    <option value="diketahui_kadiv">Menunggu Keuangan</option>
+                    <option value="diajukan">Menunggu Persetujuan</option>
+                    <option value="diketahui_kadiv">Menunggu Persetujuan Akhir</option>
                     <option value="disetujui_keuangan">Disetujui Keuangan</option>
                     <option value="perlu_perbaikan">Perlu Perbaikan</option>
                     <option value="ditolak">Ditolak</option>
@@ -159,17 +158,17 @@
     </div>
 
     {{-- VIEW 2: DESKTOP TABLE VIEW (>= 1024px) --}}
-    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-        <table class="w-full text-left text-xs">
+    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-x-auto">
+        <table class="w-full min-w-[900px] text-left text-xs">
             <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                 <tr>
-                    <th class="py-3.5 px-4">No. Pengajuan</th>
-                    <th class="py-3.5 px-4">Unit / Divisi</th>
-                    <th class="py-3.5 px-4">Kegiatan & Pos Anggaran</th>
-                    <th class="py-3.5 px-4">Tgl Kegiatan</th>
-                    <th class="py-3.5 px-4 text-right">Total Permohonan</th>
-                    <th class="py-3.5 px-4 text-center">Status</th>
-                    <th class="py-3.5 px-4 text-right">Aksi</th>
+                    <th class="py-3.5 px-3">No. Pengajuan</th>
+                    <th class="py-3.5 px-3">Unit / Divisi</th>
+                    <th class="py-3.5 px-3">Kegiatan & Pos Anggaran</th>
+                    <th class="py-3.5 px-3">Tgl Kegiatan</th>
+                    <th class="py-3.5 px-3 text-right">Total Permohonan</th>
+                    <th class="py-3.5 px-3 text-center">Status</th>
+                    <th class="py-3.5 px-3 text-right sticky right-0 z-20 bg-slate-50 border-l border-slate-200">Aksi</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -177,8 +176,8 @@
                     @php
                         $badge = $this->getStatusBadge($item->status);
                     @endphp
-                    <tr class="hover:bg-slate-50/80 transition-colors">
-                        <td class="py-3.5 px-4 whitespace-nowrap font-mono font-bold text-slate-900">
+                    <tr class="group hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3.5 px-3 whitespace-nowrap font-mono font-bold text-slate-900">
                             {{ $item->no_pengajuan ?: 'DRAFT' }}
                             @if ($item->submitted_at)
                                 <span class="block text-[11px] font-sans font-normal text-slate-400">
@@ -186,7 +185,7 @@
                                 </span>
                             @endif
                         </td>
-                        <td class="py-3.5 px-4">
+                        <td class="py-3.5 px-3">
                             <span class="font-semibold text-slate-800 block">
                                 {{ $item->unit?->nama ?? '-' }}
                             </span>
@@ -194,7 +193,7 @@
                                 Pengaju: {{ $item->user?->name ?? '-' }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 max-w-[280px]">
+                        <td class="py-3.5 px-3 max-w-[220px] 2xl:max-w-[280px]">
                             <span class="font-semibold text-slate-900 block truncate" title="{{ $item->nama_kegiatan }}">
                                 {{ $item->nama_kegiatan }}
                             </span>
@@ -202,7 +201,7 @@
                                 {{ $item->kodeAnggaran?->kode }} - {{ $item->kodeAnggaran?->nama }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 whitespace-nowrap text-slate-600 tabular-nums">
+                        <td class="py-3.5 px-3 whitespace-nowrap text-slate-600 tabular-nums">
                             {{ $item->tgl_mulai ? $item->tgl_mulai->format('d/m/Y') : '-' }}
                             @if ($item->tgl_selesai)
                                 <span class="text-slate-400 block text-[11px]">
@@ -210,7 +209,7 @@
                                 </span>
                             @endif
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap font-bold text-slate-900 tabular-nums">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap font-bold text-slate-900 tabular-nums">
                             Rp {{ number_format($item->total_diminta, 0, ',', '.') }}
                             @if ($item->total_disetujui !== null && $item->total_disetujui !== $item->total_diminta)
                                 <span class="block text-[11px] font-semibold text-emerald-700">
@@ -218,12 +217,12 @@
                                 </span>
                             @endif
                         </td>
-                        <td class="py-3.5 px-4 text-center whitespace-nowrap">
+                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
                             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold border {{ $badge['class'] }}">
                                 {{ $badge['label'] }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                        <td class="py-3.5 px-3 text-right whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 border-l border-slate-100">
                             <a
                                 href="{{ route('permohonan.detail', $item->id) }}"
                                 wire:navigate
@@ -239,7 +238,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="py-8 px-4 text-center text-slate-500 text-xs">
+                        <td colspan="7" class="py-8 px-3 text-center text-slate-500 text-xs">
                             Tidak ada dokumen permohonan yang sesuai kriteria pencarian.
                         </td>
                     </tr>

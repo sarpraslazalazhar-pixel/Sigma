@@ -38,10 +38,13 @@ class LampiranController extends Controller
 
         abort_unless($allowed, 403);
 
-        $disk = Storage::disk('local');
+        $diskName = Storage::disk('public')->exists($lampiran->path) ? 'public' : 'local';
+        $disk = Storage::disk($diskName);
         abort_unless($disk->exists($lampiran->path), 404);
 
-        return $disk->response($lampiran->path, $lampiran->original_name);
+        return $disk->response($lampiran->path, $lampiran->original_name, [
+            'Content-Disposition' => 'inline; filename="'.$lampiran->original_name.'"',
+        ]);
     }
 
     private function resolveUnit(Lampiran $lampiran): ?Unit

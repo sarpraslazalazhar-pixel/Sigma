@@ -370,7 +370,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="save" class="p-6 space-y-4">
+                <form wire:submit="save" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     {{-- Nama Lengkap --}}
                     <div>
                         <label for="form_name" class="block text-xs font-semibold text-slate-700 mb-1">
@@ -590,7 +590,7 @@
                     </button>
                 </div>
 
-                <form wire:submit="saveResetPassword" class="p-6 space-y-4">
+                <form wire:submit="saveResetPassword" action="#" onsubmit="return false;" class="p-6 space-y-4">
                     <p class="text-xs text-slate-600">
                         Atur kata sandi baru untuk <strong>{{ $resetUserName }}</strong>:
                     </p>

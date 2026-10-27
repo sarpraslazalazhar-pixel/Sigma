@@ -18,6 +18,7 @@ use Database\Seeders\KodeAnggaranSeeder;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -57,11 +58,11 @@ class PermohonanItGaApprovalTest extends TestCase
             KodeAnggaranSeeder::class,
         ]);
 
-        $this->koordinatorIt = User::where('username', 'koordinator.it')->firstOrFail();
-        $this->managerHumas = User::where('username', 'manager.humas')->firstOrFail();
+        $this->koordinatorIt = User::where('username', 'rudiansah')->firstOrFail();
+        $this->managerHumas = User::where('username', 'sigit.nugroho')->firstOrFail();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->firstOrFail();
-        $this->financeUser = User::where('username', 'rochadi.kohar')->firstOrFail();
-        $this->tuSekretariat = User::where('username', 'tu.sekretariat')->firstOrFail();
+        $this->financeUser = User::where('username', 'direktur.keuangan')->firstOrFail();
+        $this->tuSekretariat = User::where('username', 'subakti')->firstOrFail();
 
         $this->ta = TahunAnggaran::where('status', 'aktif')->firstOrFail();
         $this->unitHum = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
@@ -117,19 +118,14 @@ class PermohonanItGaApprovalTest extends TestCase
         $workflow->submit($permohonan);
         $permohonan->refresh();
 
-        $this->assertEquals('diajukan', $permohonan->status);
         $this->assertStringStartsWith('UNT-SEK-HUM-PMH-', $permohonan->no_pengajuan);
 
-        // 2. Tahap 1: Manager Humas IT GA menyetujui
-        $workflow->approve($permohonan, $this->managerHumas, [
-            'catatan' => 'Kebutuhan sarana kerja IT disetujui atasan divisi',
-        ]);
-        $permohonan->refresh();
-        $this->assertEquals('disetujui_atasan', $permohonan->status);
+        // 2. Tahap 1: dokumen menunggu pemeriksaan Kepala Divisi Sekretariat
+        $this->assertEquals('diajukan', $permohonan->status);
 
-        // 3. Tahap 2: Kadiv (Rahmatullah Sidik) menyetujui
+        // 3. Tahap 2: Kepala Divisi Sekretariat (Rahmatullah Sidik) memeriksa
         $workflow->approve($permohonan, $this->kadivUser, [
-            'catatan' => 'Disetujui Kadiv Sekretariat / Dirops',
+            'catatan' => 'Diperiksa Kadiv Sekretariat / Dirops',
         ]);
         $permohonan->refresh();
         $this->assertEquals('diketahui_kadiv', $permohonan->status);
@@ -196,9 +192,10 @@ class PermohonanItGaApprovalTest extends TestCase
         // Tahap Keuangan melalui petugas input TU Sekretariat
         Livewire::actingAs($this->tuSekretariat)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->set('proxySignerName', 'Rochadi Kohar')
-            ->set('proxySignerJabatan', 'Manajer Anggaran & Treasury')
+            ->set('proxySignerName', 'Direktur Keuangan')
+            ->set('proxySignerJabatan', 'Kepala Divisi Keuangan / Direktur Keuangan')
             ->set('proxySignedAt', now()->toDateString())
+            ->set('proxyScanFile', UploadedFile::fake()->create('scan_it_approval.pdf', 100, 'application/pdf'))
             ->set("approvedItemAmounts.{$item->id}", 50000000)
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();

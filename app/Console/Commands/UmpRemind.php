@@ -33,8 +33,8 @@ class UmpRemind extends Command
             return Command::SUCCESS;
         }
 
+        $pengingatHari = (int) Setting::get('ump.pengingat_hari', 3);
         $today = Carbon::today();
-
         $umps = Ump::with(['pj', 'pencairan.permohonan.user'])
             ->whereNotIn('status', ['selesai', 'dibatalkan'])
             ->whereNotNull('jatuh_tempo')
@@ -52,7 +52,7 @@ class UmpRemind extends Command
                 $statusTenggat = 'lewat';
                 $hariLewat = abs($diffDays);
                 $pesan = "Laporan UMP No. PPD {$ump->pencairan?->no_ppd} telah melewati jatuh tempo ({$ump->jatuh_tempo}) sebanyak {$hariLewat} hari.";
-            } elseif ($diffDays <= 3) {
+            } elseif ($diffDays <= $pengingatHari) {
                 $statusTenggat = 'mendekati';
                 $pesan = "Laporan UMP No. PPD {$ump->pencairan?->no_ppd} mendekati batas waktu jatuh tempo ({$ump->jatuh_tempo}). Sisa {$diffDays} hari.";
             }

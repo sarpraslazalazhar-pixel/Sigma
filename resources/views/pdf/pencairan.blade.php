@@ -232,7 +232,7 @@
                     <tr>
                         <td class="meta-label">PROGRAM</td>
                         <td class="meta-colon">:</td>
-                        <td>{{ strtoupper($permohonan->program) }}</td>
+                        <td>{{ strtoupper($permohonan->kodeAnggaran?->nama ?? $permohonan->program) }}</td>
                     </tr>
                 </table>
             </td>
@@ -242,10 +242,7 @@
                         <td class="meta-label">MATA ANGGARAN</td>
                         <td class="meta-colon">:</td>
                         <td class="font-bold">
-                            {{ $permohonan->kodeAnggaran?->kode }}<br>
-                            <span style="font-weight: normal; font-size: 8pt; color: #475569;">
-                                {{ $permohonan->kodeAnggaran?->nama }}
-                            </span>
+                            {{ $permohonan->kodeAnggaran?->kode ?? '-' }}
                         </td>
                     </tr>
                     <tr>

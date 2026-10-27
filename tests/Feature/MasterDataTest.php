@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\KodeAnggaran;
 use App\Models\Setting;
 use App\Models\TahunAnggaran;
+use App\Models\Unit;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\BudgetCalculator;
@@ -184,10 +185,26 @@ class MasterDataTest extends TestCase
 
     public function test_user_relations(): void
     {
-        $user = User::where('username', 'tu.sekretariat')->first();
+        $user = User::where('username', 'lias')->first();
         $this->assertNotNull($user->unit);
         $this->assertEquals('UNT-SEK-DKL', $user->unit->kode);
         $this->assertNotNull($user->leveling);
         $this->assertEquals(1, $user->leveling->urutan);
+    }
+
+    public function test_kpw_unit_manager_resolves_to_fundraising_manager(): void
+    {
+        $kpw = Unit::where('kode', 'UNT-FND-KPW-JTG')->firstOrFail();
+        $manager = $kpw->getManager();
+
+        $this->assertNotNull($manager);
+        $this->assertEquals(2, $manager->leveling?->urutan);
+        $this->assertStringContainsString('fundraising', strtolower($manager->jabatan));
+
+        // Kepala KPw berstatus Supervisor (urutan 1), bukan Manager
+        $kepalaKpw = User::where('username', 'kepala.kpw.jtg')->firstOrFail();
+        $this->assertEquals(1, $kepalaKpw->leveling?->urutan);
+        $this->assertTrue($kepalaKpw->isSupervisor());
+        $this->assertFalse($kepalaKpw->isManager());
     }
 }
