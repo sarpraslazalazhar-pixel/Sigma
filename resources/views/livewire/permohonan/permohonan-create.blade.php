@@ -139,13 +139,54 @@
                     <label for="unit_id" class="block text-xs font-semibold text-slate-700 mb-1">
                         Unit / Divisi Pengaju *
                     </label>
-                    <x-searchable-select
-                        wire:model.live="unit_id"
-                        :options="$units"
-                        placeholder="Pilih Unit / Divisi Pengaju..."
-                        search-placeholder="Cari nama atau kode unit pengaju..."
-                        :nullable="false"
-                    />
+                    @if ($this->hasAutoUnit)
+                        <div class="relative">
+                            <input
+                                type="text"
+                                id="unit_id_display"
+                                readonly
+                                value="{{ $this->unitDisplayText }}"
+                                title="{{ $this->unitDisplayText }}"
+                                class="w-full min-h-[44px] truncate rounded-xl border border-slate-300 text-xs font-medium text-slate-900 px-3.5 py-2.5 pr-20 bg-slate-50 cursor-default focus:border-[#1E60D5] focus:outline-hidden @error('unit_id') border-red-500 @enderror"
+                            />
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Otomatis
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">
+                            Otomatis dari unit/divisi {{ $this->atasNamaUser->name }} ({{ $this->atasNamaUser->jabatan ?? $this->atasNamaUser->leveling?->nama ?? 'Pemohon' }}).
+                        </p>
+                    @elseif ($isTu && ! $this->user_id)
+                        <div class="relative">
+                            <input
+                                type="text"
+                                id="unit_id_display"
+                                readonly
+                                disabled
+                                placeholder="Otomatis terisi setelah memilih Pejabat Pemohon di atas..."
+                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-500 px-3.5 py-2.5 bg-slate-100 cursor-not-allowed focus:outline-hidden"
+                            />
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">
+                            Pilih Pejabat Pemohon di atas untuk menentukan unit/divisi secara otomatis.
+                        </p>
+                    @else
+                        <x-searchable-select
+                            wire:model.live="unit_id"
+                            :options="$units"
+                            placeholder="Pilih Unit / Divisi Pengaju..."
+                            search-placeholder="Cari nama atau kode unit pengaju..."
+                            :nullable="false"
+                        />
+                        @if ($this->atasNamaUser && ! $this->atasNamaUser->unit_id)
+                            <p class="text-[11px] text-amber-600 mt-1">
+                                Pejabat pemohon belum memiliki unit/divisi di sistem, silakan pilih unit secara manual.
+                            </p>
+                        @endif
+                    @endif
                     @error('unit_id')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
@@ -584,26 +625,42 @@
             </div>
 
             {{-- Summary & Leveling Bar --}}
-            <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-50/70 p-4 rounded-2xl">
-                <div>
-                    <span class="text-xs text-slate-500 block">Tingkat Pengajuan Pemohon:</span>
-                    <span class="inline-flex items-center gap-1.5 font-bold text-slate-900 text-sm mt-0.5">
-                        <svg class="w-4 h-4 text-[#1E60D5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <span>Tingkat {{ $requiredApprover?->nama ?? 'Supervisor' }} (Leveling {{ $requiredApprover?->urutan ?? 1 }})</span>
-                    </span>
-                    <p class="text-[11px] text-slate-400 mt-0.5">
-                        Tahap 1 (Pemohon): Supervisor, Manajer, atau Kadiv (dapat diinput oleh TU) &bull; Tahap 2 (Pemeriksa): Kepala Divisi Sekretariat &bull; Tahap 3 (Penyetuju): Bagian Keuangan
-                    </p>
+            <div class="pt-4 border-t border-slate-100 flex flex-col gap-3 bg-slate-50/70 p-4 rounded-2xl">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Tingkat Pengajuan Pemohon:</span>
+                        <span class="inline-flex items-center gap-1.5 font-bold text-slate-900 text-sm mt-0.5">
+                            <svg class="w-4 h-4 text-[#1E60D5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                            <span>Tingkat {{ $requiredApprover?->nama ?? 'Supervisor' }} (Leveling {{ $requiredApprover?->urutan ?? 1 }})</span>
+                        </span>
+                        <p class="text-[11px] text-slate-400 mt-0.5">
+                            Tahap 1 (Pemohon): Supervisor, Manajer, atau Kadiv (dapat diinput oleh TU) &bull; Tahap 2 (Pemeriksa): Kepala Divisi Sekretariat &bull; Tahap 3 (Penyetuju): Bagian Keuangan
+                        </p>
+                    </div>
+
+                    <div class="text-left sm:text-right">
+                        <span class="text-xs text-slate-500 block">Total Permohonan Dana:</span>
+                        <span class="text-xl sm:text-2xl font-bold text-[#0F2F57] tabular-nums">
+                            Rp {{ number_format($totalDiminta, 0, ',', '.') }}
+                        </span>
+                    </div>
                 </div>
 
-                <div class="text-left sm:text-right">
-                    <span class="text-xs text-slate-500 block">Total Permohonan Dana:</span>
-                    <span class="text-xl sm:text-2xl font-bold text-[#0F2F57] tabular-nums">
-                        Rp {{ number_format($totalDiminta, 0, ',', '.') }}
-                    </span>
-                </div>
+                @if ($this->isOverPemohonLimit)
+                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-xs text-red-800">
+                        <svg class="w-4 h-4 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 110 18A9 9 0 0112 3z"/>
+                        </svg>
+                        <span>
+                            Total melebihi batas kewenangan <strong>{{ $this->atasNamaUser?->name }}</strong>
+                            sebagai {{ $this->atasNamaUser?->jabatan ?? $this->atasNamaUser?->leveling?->nama ?? 'Pemohon' }}
+                            (maks. <strong>Rp {{ number_format($this->pemohonLimit, 0, ',', '.') }}</strong>).
+                            Minta TU untuk mengubah Pejabat Pemohon ke tingkat yang lebih tinggi, atau minta Manajer/Kadiv membuat pengajuan langsung.
+                        </span>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -631,5 +688,8 @@
                 Ajukan Sekarang
             </button>
         </div>
+        @error('pemohon_limit')
+            <p class="text-xs text-red-600 text-right mt-1">{{ $message }}</p>
+        @enderror
     </div>
 </div>

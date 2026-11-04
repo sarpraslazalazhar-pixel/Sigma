@@ -63,16 +63,18 @@ class PermohonanCreate extends Component
         // Pengaju lain dengan leveling membuat atas nama dirinya sendiri.
         if ($this->isTu) {
             $this->user_id = null;
+            $this->unit_id = null;
         } elseif ($user && $user->role === 'unit' && (($user->leveling?->urutan ?? 0) < 1)) {
             $atasan = User::where('unit_id', $user->unit_id)
                 ->whereHas('leveling', fn ($q) => $q->where('urutan', 1))
                 ->where('is_active', true)
                 ->first() ?? Unit::find($user->unit_id)?->getManager();
             $this->user_id = $atasan?->id ?? $user->id;
+            $this->unit_id = $atasan?->unit_id ?? $user?->unit_id;
         } else {
             $this->user_id = $user?->id;
+            $this->unit_id = $user?->unit_id;
         }
-        $this->unit_id = $user?->unit_id;
         $this->tgl_mulai = now()->toDateString();
 
         $defaultSumberDana = null;
@@ -156,12 +158,56 @@ class PermohonanCreate extends Component
 
     public function getAtasNamaUserProperty(): ?User
     {
-        return $this->user_id ? User::with('leveling', 'unit')->find($this->user_id) : null;
+        return $this->user_id ? User::with('leveling', 'unit.parent')->find($this->user_id) : null;
+    }
+
+    public function getSelectedUnitProperty(): ?Unit
+    {
+        return $this->unit_id ? Unit::with('parent')->find($this->unit_id) : null;
+    }
+
+    public function getHasAutoUnitProperty(): bool
+    {
+        return (bool) ($this->atasNamaUser && $this->atasNamaUser->unit_id);
+    }
+
+    public function getPemohonLimitProperty(): ?int
+    {
+        $batas = $this->atasNamaUser?->leveling?->batas_atas;
+
+        return $batas !== null ? (int) $batas : null;
+    }
+
+    public function getIsOverPemohonLimitProperty(): bool
+    {
+        return $this->pemohonLimit !== null && $this->totalDiminta > $this->pemohonLimit;
+    }
+
+    public function getUnitDisplayTextProperty(): string
+    {
+        $unit = $this->selectedUnit;
+        if (! $unit) {
+            return '';
+        }
+
+        if ($unit->parent) {
+            return "{$unit->parent->nama} — {$unit->nama} ({$unit->kode})";
+        }
+
+        return "{$unit->nama} ({$unit->kode})";
+    }
+
+    public function updatedCreatorLevel(): void
+    {
+        $this->user_id = null;
+        $this->unit_id = null;
     }
 
     public function updatedUserId(?int $value): void
     {
         if (! $value) {
+            $this->unit_id = null;
+
             return;
         }
 
@@ -169,6 +215,8 @@ class PermohonanCreate extends Component
         if ($selected?->unit_id) {
             $this->unit_id = $selected->unit_id;
             $this->updatedUnitId($selected->unit_id);
+        } else {
+            $this->unit_id = null;
         }
     }
 
@@ -278,6 +326,10 @@ class PermohonanCreate extends Component
 
     protected function validateForm(): void
     {
+        if ($this->atasNamaUser?->unit_id) {
+            $this->unit_id = $this->atasNamaUser->unit_id;
+        }
+
         if ($this->kode_anggaran_id && empty($this->program)) {
             $kode = KodeAnggaran::find($this->kode_anggaran_id);
             if ($kode) {
@@ -329,6 +381,7 @@ class PermohonanCreate extends Component
         }
 
         $messages = [
+            'unit_id.required' => 'Unit / Divisi pengaju wajib diisi.',
             'items.*.uraian.required' => 'Uraian rincian wajib diisi.',
             'items.*.jumlah_diminta.required' => 'Nominal rincian wajib diisi.',
             'items.*.jumlah_diminta.min' => 'Nominal rincian minimal Rp 1.',
@@ -382,6 +435,19 @@ class PermohonanCreate extends Component
 
     public function submitNow(): void
     {
+        if ($this->isOverPemohonLimit) {
+            $pemohon = $this->atasNamaUser;
+            $this->addError(
+                'pemohon_limit',
+                'Total pengajuan (Rp '.number_format($this->totalDiminta, 0, ',', '.').') melebihi batas kewenangan '.
+                ($pemohon?->name ?? 'pemohon').' sebagai '.($pemohon?->jabatan ?? $pemohon?->leveling?->nama ?? 'Pemohon').
+                ' (maks. Rp '.number_format($this->pemohonLimit, 0, ',', '.').
+                '). Minta TU untuk mengubah Pejabat Pemohon ke tingkat yang lebih tinggi, atau minta Manajer/Kadiv membuat pengajuan langsung.'
+            );
+
+            return;
+        }
+
         $this->validateForm();
 
         $permohonan = DB::transaction(function () {
@@ -434,7 +500,14 @@ class PermohonanCreate extends Component
         $kodeAnggaranList = KodeAnggaran::sortHierarchically($rawLeaf);
 
         $programs = ProgramUtama::where('is_active', true)->orderBy('nama', 'asc')->get();
-        $units = Unit::orderBy('nama', 'asc')->get();
+        $units = Unit::with('parent')
+            ->orderBy('nama', 'asc')
+            ->get()
+            ->map(fn (Unit $u) => [
+                'id' => $u->id,
+                'kode' => $u->kode,
+                'nama' => $u->parent ? "{$u->parent->nama} — {$u->nama}" : $u->nama,
+            ]);
         $sumberDanaList = SumberDana::where('is_active', true)->orderBy('id', 'asc')->get();
         $asnafList = Asnaf::where('is_active', true)->orderBy('id', 'asc')->get();
 
@@ -442,7 +515,7 @@ class PermohonanCreate extends Component
         $needsAsnaf = $selectedSumberDana && $selectedSumberDana->butuh_asnaf;
 
         // Pejabat pemohon (Tahap 1): Supervisor, Manajer, atau Kadiv.
-        $creatorCandidates = User::with(['unit', 'leveling'])
+        $creatorCandidates = User::with(['unit.parent', 'leveling'])
             ->where('is_active', true)
             ->when($this->creatorLevel !== '', function ($q) {
                 $this->creatorLevel === '3'
@@ -451,7 +524,21 @@ class PermohonanCreate extends Component
             }, fn ($q) => $q->whereHas('leveling', fn ($l) => $l->where('urutan', '<=', 3)))
             ->get()
             ->sortBy(fn (User $u) => [$u->leveling?->urutan ?? 9, $u->name])
-            ->values();
+            ->values()
+            ->map(function (User $u) {
+                $jabatan = $u->jabatan ?: $u->leveling?->nama ?? 'Pejabat';
+                $unitText = '';
+                if ($u->unit) {
+                    $divisi = $u->unit->parent?->nama;
+                    $unitText = ' • '.($divisi ? $divisi.' - ' : '').$u->unit->nama;
+                }
+
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'jabatan' => $jabatan.$unitText,
+                ];
+            });
 
         return view('livewire.permohonan.permohonan-create', [
             'programs' => $programs,

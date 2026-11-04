@@ -120,7 +120,7 @@
             <div>
                 <span class="text-slate-400 block text-[11px]">Unit / Divisi</span>
                 <span class="font-semibold text-slate-800 block mt-0.5">
-                    {{ $permohonan->unit?->nama ?? '-' }}
+                    {{ $permohonan->unit?->nama_lengkap ?? '-' }}
                 </span>
             </div>
 

@@ -53,10 +53,6 @@ class MasterDataSeeder extends Seeder
                 'is_active' => true,
             ]
         );
-        $untSekDir = Unit::updateOrCreate(
-            ['kode' => 'UNT-SEK-DIR'],
-            ['nama' => 'Unit Direksi', 'tipe' => 'unit', 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
-        );
         $untSekKlm = Unit::updateOrCreate(
             ['kode' => 'UNT-SEK-KLM'],
             ['nama' => 'Unit Kelembagaan', 'tipe' => 'unit', 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
@@ -82,10 +78,6 @@ class MasterDataSeeder extends Seeder
             ]
         );
         Unit::updateOrCreate(
-            ['kode' => 'UNT-KEU-DIR'],
-            ['nama' => 'Unit Direksi', 'tipe' => 'unit', 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
-        );
-        Unit::updateOrCreate(
             ['kode' => 'UNT-KEU-KLR'],
             ['nama' => 'Unit Pengeluaran', 'tipe' => 'unit', 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
@@ -108,10 +100,6 @@ class MasterDataSeeder extends Seeder
                 'sumber_dana_default_id' => $sumberDanaInfakUmum->id,
                 'is_active' => true,
             ]
-        );
-        Unit::updateOrCreate(
-            ['kode' => 'UNT-FND-DIR'],
-            ['nama' => 'Unit Direksi', 'tipe' => 'unit', 'parent_id' => $divFnd->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-FND-INT'],
@@ -191,7 +179,7 @@ class MasterDataSeeder extends Seeder
             'DIV-KLM' => 'DIV-SEK',
             'DIV-DKL' => 'DIV-SEK',
             'SEK' => 'DIV-SEK',
-            'DIR' => 'UNT-SEK-DIR',
+            'DIR' => 'DIV-SEK',
             'KLM' => 'UNT-SEK-KLM',
             'HUM' => 'UNT-SEK-HUM',
             'DKL' => 'UNT-SEK-DKL',

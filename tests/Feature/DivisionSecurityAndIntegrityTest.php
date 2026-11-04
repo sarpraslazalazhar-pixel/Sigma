@@ -35,12 +35,12 @@ class DivisionSecurityAndIntegrityTest extends TestCase
     public function test_unit_get_divisi_id_returns_correct_id(): void
     {
         $divSek = Unit::where('kode', 'DIV-SEK')->firstOrFail();
-        $untSekDir = Unit::where('kode', 'UNT-SEK-DIR')->firstOrFail();
+        $untSekKlm = Unit::where('kode', 'UNT-SEK-KLM')->firstOrFail();
 
         $this->assertEquals($divSek->id, $divSek->getDivisiId());
         $this->assertEquals($divSek->id, $divSek->divisi_id);
-        $this->assertEquals($divSek->id, $untSekDir->getDivisiId());
-        $this->assertEquals($divSek->id, $untSekDir->divisi_id);
+        $this->assertEquals($divSek->id, $untSekKlm->getDivisiId());
+        $this->assertEquals($divSek->id, $untSekKlm->divisi_id);
     }
 
     public function test_lampiran_access_isolated_by_division(): void
@@ -94,7 +94,7 @@ class DivisionSecurityAndIntegrityTest extends TestCase
         $responseCross->assertStatus(403);
 
         // 2. User dari divisi yang sama diizinkan
-        $userSameDivisi = User::where('unit_id', Unit::where('kode', 'UNT-SEK-DIR')->first()->id)->firstOrFail();
+        $userSameDivisi = User::where('unit_id', Unit::where('kode', 'DIV-SEK')->first()->id)->firstOrFail();
         $responseSame = $this->actingAs($userSameDivisi)->get(route('lampiran.show', $lampiran->id));
         $responseSame->assertStatus(200);
     }

@@ -13,16 +13,16 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Unit-unit spesifik sesuai penempatan
-        $untSekDir = Unit::where('kode', 'UNT-SEK-DIR')->first();
+        $divSek = Unit::where('kode', 'DIV-SEK')->first();
         $untSekKlm = Unit::where('kode', 'UNT-SEK-KLM')->first();
         $untSekHum = Unit::where('kode', 'UNT-SEK-HUM')->first();
         $untSekDkl = Unit::where('kode', 'UNT-SEK-DKL')->first();
 
-        $untKeuDir = Unit::where('kode', 'UNT-KEU-DIR')->first();
+        $divKeu = Unit::where('kode', 'DIV-KEU')->first();
         $untKeuKlr = Unit::where('kode', 'UNT-KEU-KLR')->first();
         $untKeuAkn = Unit::where('kode', 'UNT-KEU-AKN')->first();
 
-        $untFndDir = Unit::where('kode', 'UNT-FND-DIR')->first();
+        $divFnd = Unit::where('kode', 'DIV-FND')->first();
         $untFndInt = Unit::where('kode', 'UNT-FND-INT')->first();
         $untFndEks = Unit::where('kode', 'UNT-FND-EKS')->first();
 
@@ -48,7 +48,7 @@ class UserSeeder extends Seeder
                 'email' => 'rahmatullah@alazharpeduli.or.id',
                 'password' => $defaultPassword,
                 'role' => 'unit',
-                'unit_id' => $untSekDir?->id,
+                'unit_id' => $divSek?->id,
                 'leveling_id' => $lvlKadiv?->id,
                 'jabatan' => 'Kepala Divisi Sekretariat LAZWaf Al Azhar dan Pemberdayaan Umat / Direktur Operasional LAZWaf Al Azhar',
                 'status_kepegawaian' => 'Tetap',
@@ -375,7 +375,7 @@ class UserSeeder extends Seeder
                 'email' => 'direktur.keuangan@alazharpeduli.or.id',
                 'password' => $defaultPassword,
                 'role' => 'keuangan',
-                'unit_id' => $untKeuDir?->id,
+                'unit_id' => $divKeu?->id,
                 'leveling_id' => $lvlKadiv?->id,
                 'jabatan' => 'Kepala Divisi Keuangan / Direktur Keuangan',
                 'status_kepegawaian' => 'Tetap',
@@ -416,7 +416,7 @@ class UserSeeder extends Seeder
                 'email' => 'direktur.laz@alazharpeduli.or.id',
                 'password' => $defaultPassword,
                 'role' => 'unit',
-                'unit_id' => $untFndDir?->id,
+                'unit_id' => $divFnd?->id,
                 'leveling_id' => $lvlKadiv?->id,
                 'jabatan' => 'Kepala Divisi LAZ Al Azhar / Direktur LAZ Al Azhar',
                 'status_kepegawaian' => 'Tetap',

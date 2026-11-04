@@ -98,7 +98,7 @@ class PermohonanItGaApprovalTest extends TestCase
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-IT-001',
             'unit_id' => $this->unitIt->id,
-            'user_id' => $this->koordinatorIt->id,
+            'user_id' => $this->tuSekretariat->id,
             'atasan_id' => $this->managerHumas->id,
             'kode_anggaran_id' => $this->posSaranaIt->id,
             'program' => 'Operasional Kesekretariatan',
@@ -175,7 +175,7 @@ class PermohonanItGaApprovalTest extends TestCase
             'permohonan_id' => $permohonan->id,
             'uraian' => 'Lisensi Software dan Cloud Server',
             'asnaf_id' => $this->asnafAmil->id,
-            'jumlah_diminta' => 50000000,
+            'jumlah_diminta' => 10000000,
         ]);
 
         $workflow->submit($permohonan);
@@ -196,12 +196,12 @@ class PermohonanItGaApprovalTest extends TestCase
             ->set('proxySignerJabatan', 'Kepala Divisi Keuangan / Direktur Keuangan')
             ->set('proxySignedAt', now()->toDateString())
             ->set('proxyScanFile', UploadedFile::fake()->create('scan_it_approval.pdf', 100, 'application/pdf'))
-            ->set("approvedItemAmounts.{$item->id}", 50000000)
+            ->set("approvedItemAmounts.{$item->id}", 10000000)
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();
 
         $permohonan->refresh();
         $this->assertEquals('disetujui_keuangan', $permohonan->status);
-        $this->assertEquals(50000000, $permohonan->total_disetujui);
+        $this->assertEquals(10000000, $permohonan->total_disetujui);
     }
 }

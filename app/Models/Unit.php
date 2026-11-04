@@ -56,6 +56,15 @@ class Unit extends Model
         return $this->getDivisiId();
     }
 
+    public function getNamaLengkapAttribute(): string
+    {
+        if ($this->parent) {
+            return "{$this->parent->nama} — {$this->nama}";
+        }
+
+        return $this->nama;
+    }
+
     /**
      * Dapatkan semua ID unit dalam divisi yang sama (divisi induk dan semua unit anak).
      *

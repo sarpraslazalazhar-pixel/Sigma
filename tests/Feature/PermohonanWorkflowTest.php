@@ -121,6 +121,61 @@ class PermohonanWorkflowTest extends TestCase
         $this->assertEquals('Manager', $lvl->nama);
     }
 
+    public function test_submit_blocked_when_total_exceeds_pemohon_level_limit(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        // Supervisor batas_atas = 2.000.000; submit 3.000.000 -> must throw
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->supervisorUser->id, // urutan=1, batas_atas=2000000
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Test Limit',
+            'nama_kegiatan' => 'Pengajuan Melebihi Limit Supervisor',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Item melebihi limit',
+            'jumlah_diminta' => 3000000,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/melebihi batas kewenangan/');
+        $workflow->submit($permohonan);
+    }
+
+    public function test_submit_allowed_when_total_at_or_below_pemohon_level_limit(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        // Manager batas_atas = 10.000.000; submit 8.000.000 -> passes
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->managerUser->id, // urutan=2, batas_atas=10000000
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Test',
+            'nama_kegiatan' => 'Pengajuan Dalam Limit Manager',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Item dalam limit',
+            'jumlah_diminta' => 8000000,
+        ]);
+
+        $result = $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $result->status);
+    }
+
     public function test_approval_workflow_through_kadiv_sekretariat_and_keuangan(): void
     {
         $workflow = new PermohonanWorkflow;

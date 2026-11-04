@@ -79,6 +79,16 @@ class PermohonanWorkflow
             // Hitung total diminta dari rincian item
             $totalDiminta = (int) $locked->items()->sum('jumlah_diminta');
             $locked->total_diminta = $totalDiminta;
+            $pemohon = $locked->user()->with('leveling')->first();
+            $batasAtas = $pemohon?->leveling?->batas_atas;
+            if ($batasAtas !== null && $totalDiminta > (int) $batasAtas) {
+                throw new RuntimeException(
+                    'Total pengajuan melebihi batas kewenangan '.($pemohon?->name ?? 'pemohon').
+                    ' sebagai '.($pemohon?->jabatan ?? $pemohon?->leveling?->nama ?? 'Pemohon').
+                    ' (maks. Rp '.number_format($batasAtas, 0, ',', '.').
+                    '). Ubah Pejabat Pemohon ke tingkat yang lebih tinggi.'
+                );
+            }
 
             // Tentukan Leveling Required berdasarkan nominal total diminta
             $levelingRequired = Leveling::where('batas_bawah', '<=', $totalDiminta)

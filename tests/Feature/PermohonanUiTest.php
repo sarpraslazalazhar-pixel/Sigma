@@ -569,6 +569,77 @@ class PermohonanUiTest extends TestCase
         ]);
     }
 
+    public function test_tu_automatically_sets_unit_when_pejabat_pemohon_is_selected(): void
+    {
+        $tuUser = $this->staffUser;
+        $itUser = User::where('jabatan', 'like', '%IT%')->whereNotNull('unit_id')->first() ?? $this->managerUser;
+
+        // 1. TU membuka form create: unit_id awal null, hasAutoUnit false
+        $component = Livewire::actingAs($tuUser)
+            ->test(PermohonanCreate::class)
+            ->assertSet('isTu', true)
+            ->assertSet('user_id', null)
+            ->assertSet('unit_id', null)
+            ->assertSet('hasAutoUnit', false)
+            ->assertSee('Pilih Pejabat Pemohon di atas untuk menentukan unit/divisi secara otomatis.');
+
+        // 2. TU memilih pemohon (misal Koordinator IT): unit_id otomatis terisi unit pemohon & hasAutoUnit true
+        $component->set('user_id', $itUser->id)
+            ->assertSet('unit_id', $itUser->unit_id)
+            ->assertSet('hasAutoUnit', true)
+            ->assertSee('Otomatis')
+            ->assertSee($itUser->unit->nama);
+
+        // 3. TU mengosongkan pilihan: unit_id kembali null
+        $component->set('user_id', null)
+            ->assertSet('unit_id', null)
+            ->assertSet('hasAutoUnit', false);
+
+        // 4. Non-TU user membuka form: unit_id otomatis terisi unit user
+        Livewire::actingAs($this->managerUser)
+            ->test(PermohonanCreate::class)
+            ->assertSet('isTu', false)
+            ->assertSet('unit_id', $this->managerUser->unit_id)
+            ->assertSet('hasAutoUnit', true)
+            ->assertSee('Otomatis');
+    }
+
+    public function test_submitnow_blocked_when_total_exceeds_pemohon_level_limit(): void
+    {
+        // supervisorUser (anas.priyogi, urutan=1, batas_atas=2000000)
+        $supervisor = User::where('username', 'anas.priyogi')->firstOrFail();
+
+        Livewire::actingAs($this->staffUser) // TU
+            ->test(PermohonanCreate::class)
+            ->set('user_id', $supervisor->id)      // sets unit_id automatically
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('nama_kegiatan', 'Kegiatan Over Limit')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('items.0.uraian', 'Item besar')
+            ->set('items.0.jumlah_diminta', '3000000') // > 2000000 batas supervisor
+            ->call('submitNow')
+            ->assertHasErrors(['pemohon_limit'])
+            ->assertSee('melebihi batas kewenangan');
+
+        $this->assertDatabaseMissing('permohonan', ['nama_kegiatan' => 'Kegiatan Over Limit', 'user_id' => $supervisor->id, 'status' => 'diajukan']);
+
+        // saveDraft succeeds for same amount
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanCreate::class)
+            ->set('user_id', $supervisor->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('nama_kegiatan', 'Draft Over Limit OK')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('items.0.uraian', 'Item besar')
+            ->set('items.0.jumlah_diminta', '3000000')
+            ->call('saveDraft')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('permohonan', ['nama_kegiatan' => 'Draft Over Limit OK', 'user_id' => $supervisor->id, 'status' => 'draft']);
+    }
+
     public function test_final_approval_requires_uploaded_scan_file(): void
     {
         $permohonan = Permohonan::create([

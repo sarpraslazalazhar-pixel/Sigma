@@ -438,7 +438,7 @@ class PermohonanDetail extends Component
             'proxySignerJabatan' => ['required', 'string', 'max:255'],
             'proxySignedAt' => ['required', 'date'],
             'approvedItemAmounts.*' => ['required', 'integer', 'min:0'],
-            'proxyScanFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+            'proxyScanFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,bin', 'extensions:pdf,jpg,jpeg,png', 'max:10240'],
         ], [
             'proxySignerName.required' => 'Nama penanda tangan Kepala Divisi wajib diisi.',
             'proxySignerJabatan.required' => 'Jabatan penanda tangan Kepala Divisi wajib diisi.',
@@ -498,8 +498,14 @@ class PermohonanDetail extends Component
 
     public function submitPermohonan(): void
     {
-        $workflow = new PermohonanWorkflow;
-        $workflow->submit($this->permohonan);
+        try {
+            $workflow = new PermohonanWorkflow;
+            $workflow->submit($this->permohonan);
+        } catch (RuntimeException $e) {
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return;
+        }
 
         unset($this->permohonan);
 
