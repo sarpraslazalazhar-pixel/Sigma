@@ -400,6 +400,11 @@
                 <div class="sig-role">
                     {{ $permohonan->user?->jabatan ?? 'Pemohon Anggaran' }}
                 </div>
+                @if ($permohonan->pengusul && $permohonan->pengusul_id !== $permohonan->user_id)
+                    <div style="font-size: 8px; color: #64748b; margin-top: 4px;">
+                        Diusulkan oleh: {{ $permohonan->pengusul->name }} ({{ $permohonan->pengusul->jabatan ?? 'Staf' }})
+                    </div>
+                @endif
                 <div class="sig-date">
                     Tgl: {{ $permohonan->submitted_at ? $permohonan->submitted_at->format('d/m/Y') : ($permohonan->created_at ? $permohonan->created_at->format('d/m/Y') : '......................') }}
                 </div>

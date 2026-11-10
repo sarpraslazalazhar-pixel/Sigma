@@ -16,6 +16,7 @@ class Permohonan extends Model
         'no_pengajuan',
         'unit_id',
         'user_id',
+        'pengusul_id',
         'atasan_id',
         'kode_anggaran_id',
         'program',
@@ -72,6 +73,11 @@ class Permohonan extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function pengusul(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pengusul_id');
     }
 
     public function atasan(): BelongsTo

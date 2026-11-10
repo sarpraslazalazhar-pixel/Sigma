@@ -8,6 +8,7 @@ use App\Livewire\Auth\Login;
 use App\Livewire\Dashboard;
 use App\Livewire\Keuangan\VerifikasiKeuanganIndex;
 use App\Livewire\Laporan\LaporanMonitoringIndex;
+use App\Livewire\Laporan\LaporanPpdPerOrang;
 use App\Livewire\Master\AuditLogIndex;
 use App\Livewire\Master\KodeAnggaranIndex;
 use App\Livewire\Master\PengaturanIndex;
@@ -17,6 +18,7 @@ use App\Livewire\Master\UserIndex;
 use App\Livewire\Pencairan\PencairanIndex;
 use App\Livewire\Permohonan\PermohonanCreate;
 use App\Livewire\Permohonan\PermohonanDetail;
+use App\Livewire\Permohonan\PermohonanEdit;
 use App\Livewire\Permohonan\PermohonanIndex;
 use App\Livewire\Reports\LaporanPengeluaranIndex;
 use App\Livewire\Ump\UmpDetail;
@@ -43,12 +45,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/master/pengaturan', PengaturanIndex::class)->middleware('can:manage-master-data')->name('master.pengaturan');
     Route::get('/laporan/pengeluaran-bulanan', LaporanPengeluaranIndex::class)->name('laporan.pengeluaran-bulanan');
     Route::get('/laporan/monitoring', LaporanMonitoringIndex::class)->name('laporan.monitoring');
+    Route::get('/laporan/ppd-per-orang', LaporanPpdPerOrang::class)->name('laporan.ppd-per-orang');
 
     // Permohonan Dana
     Route::get('/permohonan', PermohonanIndex::class)->name('permohonan.index');
     Route::get('/permohonan/buat', PermohonanCreate::class)->middleware('can:create-permohonan')->name('permohonan.create');
     Route::get('/permohonan/{id}', PermohonanDetail::class)->name('permohonan.detail');
     Route::get('/permohonan/{id}/cetak-pdf', [PermohonanPdfController::class, 'cetak'])->name('permohonan.cetak-pdf');
+    Route::get('/permohonan/{id}/edit', PermohonanEdit::class)->name('permohonan.edit');
 
     // Pencairan Dana / PPD
     Route::get('/pencairan', PencairanIndex::class)->name('pencairan.index');

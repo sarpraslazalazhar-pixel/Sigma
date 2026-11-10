@@ -403,6 +403,7 @@ class PermohonanCreate extends Component
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
                 'user_id' => $this->user_id ?: Auth::id(),
+                'pengusul_id' => Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
                 'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
@@ -456,6 +457,7 @@ class PermohonanCreate extends Component
                 'unit_id' => $this->unit_id,
                 'atasan_id' => $this->atasan_id ?: null,
                 'user_id' => $this->user_id ?: Auth::id(),
+                'pengusul_id' => Auth::id(),
                 'kode_anggaran_id' => $this->kode_anggaran_id,
                 'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
                 'nama_kegiatan' => $this->nama_kegiatan,
@@ -489,8 +491,13 @@ class PermohonanCreate extends Component
 
     public function render(): View
     {
-        $activeYear = TahunAnggaran::where('status', 'aktif')->first();
-        $taId = $activeYear ? $activeYear->id : 0;
+        $selectedYearId = (int) session('tahun_anggaran_id', 0);
+        $selectedYear = $selectedYearId ? TahunAnggaran::find($selectedYearId) : null;
+        if (! $selectedYear) {
+            $selectedYear = TahunAnggaran::where('status', 'aktif')->first()
+                ?? TahunAnggaran::orderBy('tahun', 'desc')->first();
+        }
+        $taId = $selectedYear?->id ?? 0;
 
         // Ambil leaf kode anggaran saja
         $rawLeaf = KodeAnggaran::where('tahun_anggaran_id', $taId)
@@ -527,6 +534,9 @@ class PermohonanCreate extends Component
             ->values()
             ->map(function (User $u) {
                 $jabatan = $u->jabatan ?: $u->leveling?->nama ?? 'Pejabat';
+                $limitText = $u->leveling?->batas_atas
+                    ? ' • Maks Rp '.number_format($u->leveling->batas_atas, 0, ',', '.')
+                    : ' • Tanpa Batas';
                 $unitText = '';
                 if ($u->unit) {
                     $divisi = $u->unit->parent?->nama;
@@ -536,7 +546,7 @@ class PermohonanCreate extends Component
                 return [
                     'id' => $u->id,
                     'name' => $u->name,
-                    'jabatan' => $jabatan.$unitText,
+                    'jabatan' => $jabatan.$limitText.$unitText,
                 ];
             });
 

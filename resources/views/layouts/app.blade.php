@@ -254,6 +254,14 @@
                                         >
                                             • Monitoring & Rekap Excel
                                         </a>
+                                        <a
+                                            href="{{ route('laporan.ppd-per-orang') }}"
+                                            wire:navigate
+                                            @click="sidebarOpen = false"
+                                            class="{{ request()->routeIs('laporan.ppd-per-orang') ? 'text-blue-700 font-bold' : 'text-slate-600 hover:text-slate-900' }} block py-1.5 text-xs transition-colors"
+                                        >
+                                            • Rekap PPD per Orang
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -445,6 +453,8 @@
                                     Pengeluaran Bulanan
                                 @elseif (request()->routeIs('laporan.monitoring'))
                                     Monitoring Anggaran & Export
+                                @elseif (request()->routeIs('laporan.ppd-per-orang'))
+                                    Rekap PPD per Orang
                                 @elseif (request()->routeIs('master.pengaturan'))
                                     Konfigurasi Sistem
                                 @elseif (request()->routeIs('master.users'))

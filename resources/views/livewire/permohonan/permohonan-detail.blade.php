@@ -23,6 +23,9 @@
                 </div>
                 <p class="text-xs text-slate-500 mt-1">
                     Diajukan oleh <span class="font-semibold text-slate-700">{{ $permohonan->user?->name ?? '-' }}</span>
+                    @if ($permohonan->pengusul && $permohonan->pengusul_id !== $permohonan->user_id)
+                        &bull; Diusulkan oleh <span class="font-semibold text-slate-700">{{ $permohonan->pengusul->name }}</span>
+                    @endif
                     pada {{ $permohonan->submitted_at ? $permohonan->submitted_at->timezone('Asia/Jakarta')->format('d M Y, H:i') . ' WIB' : ($permohonan->created_at->timezone('Asia/Jakarta')->format('d M Y, H:i') . ' WIB') }}
                 </p>
             </div>
@@ -41,6 +44,29 @@
                 </svg>
                 <span>Cetak PDF</span>
             </a>
+            @if ($this->canEditDraft)
+                <a
+                    href="{{ route('permohonan.edit', $permohonan->id) }}"
+                    wire:navigate
+                    class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
+                >
+                    <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>Edit Permohonan</span>
+                </a>
+
+                <button
+                    type="button"
+                    wire:click="openChangePemohonModal"
+                    class="min-h-[44px] px-4 py-2.5 rounded-full border border-amber-300 bg-amber-50 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                    <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span>Alih Pejabat Pemohon</span>
+                </button>
+            @endif
 
             {{-- Resubmit jika Draft / Perlu Perbaikan --}}
             @if ($canResubmit)
@@ -1059,6 +1085,72 @@
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    @endif
+
+    {{-- MODAL UBAH PEJABAT PEMOHON --}}
+    @if ($showChangePemohonModal)
+        <div class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div
+                @click.outside="$wire.closeChangePemohonModal()"
+                class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-100 animate-in fade-in zoom-in-95 duration-150"
+            >
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                        <h3 class="text-sm font-bold text-[#0F2F57]">Alihkan Pejabat Pemohon</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Pilih pejabat dengan batas kewenangan yang mencukupi untuk total pengajuan Rp {{ number_format($permohonan->total_diminta, 0, ',', '.') }}.</p>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="closeChangePemohonModal"
+                        class="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label for="newPemohonId" class="block text-xs font-semibold text-slate-700 mb-1">
+                            Pejabat Pemohon Baru *
+                        </label>
+                        <x-searchable-select
+                            wire:model.live="newPemohonId"
+                            :options="$this->pemohonCandidates"
+                            placeholder="Pilih Pejabat Pemohon..."
+                            search-placeholder="Cari nama pejabat, jabatan, atau limit..."
+                            :nullable="false"
+                        />
+                        @error('newPemohonId')
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900">
+                        <span class="block font-semibold">Catatan:</span>
+                        Unit/Divisi pengajuan akan otomatis disesuaikan dengan unit dari pejabat yang dipilih.
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                    <button
+                        type="button"
+                        wire:click="closeChangePemohonModal"
+                        class="min-h-[40px] px-4 py-2 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="updatePejabatPemohon"
+                        class="min-h-[40px] px-5 py-2 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                    >
+                        Simpan Perubahan
+                    </button>
+                </div>
             </div>
         </div>
     @endif

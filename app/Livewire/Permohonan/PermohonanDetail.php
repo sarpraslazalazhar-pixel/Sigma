@@ -7,6 +7,7 @@ use App\Models\Pencairan;
 use App\Models\Permohonan;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -67,6 +68,11 @@ class PermohonanDetail extends Component
 
     public array $penerimaIds = [];
 
+    // Modal Alih Pejabat Pemohon (Draft / Perlu Perbaikan)
+    public bool $showChangePemohonModal = false;
+
+    public ?int $newPemohonId = null;
+
     public function mount(int $id): void
     {
         $this->permohonanId = $id;
@@ -125,6 +131,7 @@ class PermohonanDetail extends Component
         return Permohonan::with([
             'unit',
             'user.leveling',
+            'pengusul.leveling',
             'atasan',
             'kodeAnggaran',
             'sumberDana',
@@ -297,6 +304,104 @@ class PermohonanDetail extends Component
         $isOwnerOrAdmin = ($p->user_id === $user->id) || ($user->role === 'admin');
 
         return $isOwnerOrAdmin && in_array($p->status, ['draft', 'perlu_perbaikan']);
+    }
+
+    public function getCanEditDraftProperty(): bool
+    {
+        $user = Auth::user();
+        $p = $this->permohonan;
+
+        if (! $user) {
+            return false;
+        }
+
+        $isAuthorized = ($p->user_id === $user->id)
+            || ($p->pengusul_id === $user->id)
+            || ($user->role === 'admin')
+            || (bool) $user->is_petugas_input;
+
+        return $isAuthorized && in_array($p->status, ['draft', 'perlu_perbaikan'], true);
+    }
+
+    public function getPemohonCandidatesProperty(): array
+    {
+        return User::with(['unit.parent', 'leveling'])
+            ->where('is_active', true)
+            ->whereHas('leveling', fn ($l) => $l->where('urutan', '<=', 3))
+            ->get()
+            ->sortBy(fn (User $u) => [$u->leveling?->urutan ?? 9, $u->name])
+            ->values()
+            ->map(function (User $u) {
+                $jabatan = $u->jabatan ?: $u->leveling?->nama ?? 'Pejabat';
+                $limitText = $u->leveling?->batas_atas
+                    ? ' • Maks Rp '.number_format($u->leveling->batas_atas, 0, ',', '.')
+                    : ' • Tanpa Batas';
+                $unitText = '';
+                if ($u->unit) {
+                    $divisi = $u->unit->parent?->nama;
+                    $unitText = ' • '.($divisi ? $divisi.' - ' : '').$u->unit->nama;
+                }
+
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'jabatan' => $jabatan.$limitText.$unitText,
+                ];
+            })
+            ->toArray();
+    }
+
+    public function openChangePemohonModal(): void
+    {
+        abort_unless($this->canEditDraft, 403, 'Anda tidak berwenang mengubah pemohon dokumen ini.');
+        $this->newPemohonId = $this->permohonan->user_id;
+        $this->showChangePemohonModal = true;
+    }
+
+    public function closeChangePemohonModal(): void
+    {
+        $this->showChangePemohonModal = false;
+        $this->resetErrorBag();
+    }
+
+    public function updatePejabatPemohon(): void
+    {
+        abort_unless($this->canEditDraft, 403, 'Anda tidak berwenang mengubah pemohon dokumen ini.');
+
+        $this->validate([
+            'newPemohonId' => ['required', 'exists:users,id'],
+        ], [
+            'newPemohonId.required' => 'Pejabat pemohon baru wajib dipilih.',
+        ]);
+
+        $p = $this->permohonan;
+        $newPejabat = User::with(['unit', 'leveling'])->findOrFail($this->newPemohonId);
+
+        $batasAtas = $newPejabat->leveling?->batas_atas;
+        if ($batasAtas !== null && $p->total_diminta > (int) $batasAtas) {
+            $this->addError(
+                'newPemohonId',
+                'Total pengajuan (Rp '.number_format($p->total_diminta, 0, ',', '.').") melebihi batas kewenangan {$newPejabat->name} sebagai ".($newPejabat->jabatan ?? $newPejabat->leveling?->nama ?? 'Pejabat').' (maks. Rp '.number_format($batasAtas, 0, ',', '.').').'
+            );
+
+            return;
+        }
+
+        $before = $p->toArray();
+        $p->user_id = $newPejabat->id;
+        if ($newPejabat->unit_id) {
+            $p->unit_id = $newPejabat->unit_id;
+        }
+        $p->save();
+
+        (new AuditLogger)->log('permohonan.pemohon_changed', $p, $before, $p->fresh()->toArray());
+
+        $this->closeChangePemohonModal();
+        unset($this->permohonan);
+
+        $msg = "Pejabat pemohon berhasil dialihkan ke {$newPejabat->name}.";
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function openAction(string $type): void

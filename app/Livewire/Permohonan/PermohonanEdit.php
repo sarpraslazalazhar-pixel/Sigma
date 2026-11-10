@@ -1,0 +1,587 @@
+<?php
+
+namespace App\Livewire\Permohonan;
+
+use App\Models\Asnaf;
+use App\Models\KodeAnggaran;
+use App\Models\Leveling;
+use App\Models\Permohonan;
+use App\Models\PermohonanItem;
+use App\Models\ProgramUtama;
+use App\Models\SumberDana;
+use App\Models\TahunAnggaran;
+use App\Models\Unit;
+use App\Models\User;
+use App\Services\AuditLogger;
+use App\Services\BudgetCalculator;
+use App\Services\PermohonanWorkflow;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+
+#[Layout('layouts.app')]
+#[Title('Edit Permohonan Dana: SIGMA LAZ Al-Azhar')]
+class PermohonanEdit extends Component
+{
+    public int $permohonanId;
+
+    public string $program = '';
+
+    public string $nama_kegiatan = '';
+
+    public ?int $unit_id = null;
+
+    public string $tgl_mulai = '';
+
+    public ?string $tgl_selesai = null;
+
+    public ?int $sumber_dana_id = null;
+
+    public ?int $kode_anggaran_id = null;
+
+    public string $catatan_over = '';
+
+    public ?int $atasan_id = null;
+
+    public ?int $user_id = null;
+
+    public string $creatorLevel = '';
+
+    public array $items = [];
+
+    public function mount(int $id): void
+    {
+        $this->permohonanId = $id;
+        $user = Auth::user();
+        $p = Permohonan::with(['items', 'user'])->findOrFail($id);
+
+        $isAuthorized = ($p->user_id === $user?->id)
+            || ($p->pengusul_id === $user?->id)
+            || ($user?->role === 'admin')
+            || (bool) $user?->is_petugas_input;
+
+        abort_unless($isAuthorized && in_array($p->status, ['draft', 'perlu_perbaikan'], true), 403, 'Dokumen ini tidak dapat diedit.');
+
+        $this->program = $p->program ?? '';
+        $this->nama_kegiatan = $p->nama_kegiatan ?? '';
+        $this->unit_id = $p->unit_id;
+        $this->tgl_mulai = $p->tgl_mulai ? $p->tgl_mulai->toDateString() : now()->toDateString();
+        $this->tgl_selesai = $p->tgl_selesai ? $p->tgl_selesai->toDateString() : null;
+        $this->sumber_dana_id = $p->sumber_dana_id;
+        $this->kode_anggaran_id = $p->kode_anggaran_id;
+        $this->catatan_over = $p->catatan_over ?? '';
+        $this->user_id = $p->user_id;
+
+        $this->items = $p->items->map(fn ($it) => [
+            'id' => $it->id,
+            'uraian' => $it->uraian,
+            'asnaf_id' => $it->asnaf_id,
+            'program_utama_id' => $it->program_utama_id,
+            'jumlah_diminta' => (string) $it->jumlah_diminta,
+        ])->toArray();
+
+        if (empty($this->items)) {
+            $this->items = [
+                [
+                    'id' => null,
+                    'uraian' => '',
+                    'asnaf_id' => null,
+                    'program_utama_id' => null,
+                    'jumlah_diminta' => '',
+                ],
+            ];
+        }
+    }
+
+    public function updatedUnitId(?int $value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $unit = Unit::with('parent')->find($value);
+        $isHumas = $unit && (
+            str_contains(strtoupper($unit->kode), 'HUM') ||
+            str_contains(strtolower($unit->nama), 'humas')
+        );
+
+        if ($isHumas) {
+            $infakUmum = SumberDana::where('nama', 'like', '%Infak Umum%')->first();
+            $this->sumber_dana_id = $infakUmum?->id ?? $unit?->sumber_dana_default_id;
+        } else {
+            $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
+            $this->sumber_dana_id = $unit?->sumber_dana_default_id ?? $zakat?->id;
+
+            $asnafAmil = Asnaf::where('nama', 'Amil')->first();
+            if ($asnafAmil) {
+                foreach ($this->items as $idx => $item) {
+                    if (empty($this->items[$idx]['asnaf_id'])) {
+                        $this->items[$idx]['asnaf_id'] = $asnafAmil->id;
+                    }
+                }
+            }
+        }
+    }
+
+    public function getIsTuProperty(): bool
+    {
+        $user = Auth::user();
+
+        return (bool) ($user && ($user->is_petugas_input || $user->role === 'admin' || $user->role === 'keuangan'));
+    }
+
+    public function getAtasNamaUserProperty(): ?User
+    {
+        return $this->user_id ? User::with('leveling', 'unit.parent')->find($this->user_id) : null;
+    }
+
+    public function getSelectedUnitProperty(): ?Unit
+    {
+        return $this->unit_id ? Unit::with('parent')->find($this->unit_id) : null;
+    }
+
+    public function getHasAutoUnitProperty(): bool
+    {
+        return (bool) ($this->atasNamaUser && $this->atasNamaUser->unit_id);
+    }
+
+    public function getPemohonLimitProperty(): ?int
+    {
+        $batas = $this->atasNamaUser?->leveling?->batas_atas;
+
+        return $batas !== null ? (int) $batas : null;
+    }
+
+    public function getIsOverPemohonLimitProperty(): bool
+    {
+        return $this->pemohonLimit !== null && $this->totalDiminta > $this->pemohonLimit;
+    }
+
+    public function getUnitDisplayTextProperty(): string
+    {
+        $unit = $this->selectedUnit;
+        if (! $unit) {
+            return '';
+        }
+
+        if ($unit->parent) {
+            return "{$unit->parent->nama} — {$unit->nama} ({$unit->kode})";
+        }
+
+        return "{$unit->nama} ({$unit->kode})";
+    }
+
+    public function updatedCreatorLevel(): void
+    {
+        $this->user_id = null;
+        $this->unit_id = null;
+    }
+
+    public function updatedUserId(?int $value): void
+    {
+        if (! $value) {
+            $this->unit_id = null;
+
+            return;
+        }
+
+        $selected = User::with('unit')->find($value);
+        if ($selected?->unit_id) {
+            $this->unit_id = $selected->unit_id;
+            $this->updatedUnitId($selected->unit_id);
+        } else {
+            $this->unit_id = null;
+        }
+    }
+
+    public function updatedKodeAnggaranId(?int $value): void
+    {
+        if ($value) {
+            $kode = KodeAnggaran::find($value);
+            if ($kode) {
+                $this->program = $kode->nama;
+
+                if (str_starts_with($kode->kode, '2.4') || str_contains(strtolower($kode->nama), 'amil')) {
+                    $zakat = SumberDana::where('nama', 'like', '%Zakat%')->first();
+                    if ($zakat) {
+                        $this->sumber_dana_id = $zakat->id;
+                    }
+                    $asnafAmil = Asnaf::where('nama', 'Amil')->first();
+                    if ($asnafAmil) {
+                        foreach ($this->items as $idx => $item) {
+                            if (empty($this->items[$idx]['asnaf_id'])) {
+                                $this->items[$idx]['asnaf_id'] = $asnafAmil->id;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public function addItem(): void
+    {
+        $sumberDana = $this->sumber_dana_id ? SumberDana::find($this->sumber_dana_id) : null;
+        $defaultAsnaf = ($sumberDana && $sumberDana->butuh_asnaf)
+            ? Asnaf::where('nama', 'Amil')->value('id')
+            : null;
+
+        $this->items[] = [
+            'id' => null,
+            'uraian' => '',
+            'asnaf_id' => $defaultAsnaf,
+            'program_utama_id' => null,
+            'jumlah_diminta' => '',
+        ];
+    }
+
+    public function removeItem(int $index): void
+    {
+        if (count($this->items) > 1) {
+            unset($this->items[$index]);
+            $this->items = array_values($this->items);
+        }
+    }
+
+    public function getTotalDimintaProperty(): int
+    {
+        $total = 0;
+        foreach ($this->items as $item) {
+            $raw = $item['jumlah_diminta'] ?? 0;
+            if (is_string($raw)) {
+                $raw = preg_replace('/\D/', '', $raw);
+            }
+            $val = is_numeric($raw) ? (int) $raw : 0;
+            $total += max(0, $val);
+        }
+
+        return $total;
+    }
+
+    public function getBudgetInfoProperty(): ?array
+    {
+        if (! $this->kode_anggaran_id) {
+            return null;
+        }
+
+        $leaf = KodeAnggaran::find($this->kode_anggaran_id);
+        if (! $leaf) {
+            return null;
+        }
+
+        $calculator = new BudgetCalculator;
+        $tree = $calculator->calculateTree($leaf->tahun_anggaran_id);
+
+        return $tree->get($leaf->id);
+    }
+
+    public function getIsOverBudgetProperty(): bool
+    {
+        $info = $this->budgetInfo;
+        if (! $info) {
+            return false;
+        }
+
+        $sisa = $info['sisa_tersedia'] ?? 0;
+
+        return $this->totalDiminta > $sisa;
+    }
+
+    public function getRequiredApproverProperty(): ?Leveling
+    {
+        $total = $this->totalDiminta;
+
+        return Leveling::where('batas_bawah', '<=', $total)
+            ->where(function ($q) use ($total) {
+                $q->whereNull('batas_atas')->orWhere('batas_atas', '>=', $total);
+            })
+            ->orderBy('urutan', 'desc')
+            ->first();
+    }
+
+    protected function validateForm(): void
+    {
+        if ($this->atasNamaUser?->unit_id) {
+            $this->unit_id = $this->atasNamaUser->unit_id;
+        }
+
+        if ($this->kode_anggaran_id && empty($this->program)) {
+            $kode = KodeAnggaran::find($this->kode_anggaran_id);
+            if ($kode) {
+                $this->program = $kode->nama;
+            }
+        }
+        foreach ($this->items as $idx => $item) {
+            if (isset($item['jumlah_diminta']) && is_string($item['jumlah_diminta'])) {
+                $clean = preg_replace('/\D/', '', $item['jumlah_diminta']);
+                $this->items[$idx]['jumlah_diminta'] = $clean !== '' ? (int) $clean : null;
+            }
+        }
+
+        $sumberDana = SumberDana::find($this->sumber_dana_id);
+        $needsAsnaf = $sumberDana && $sumberDana->butuh_asnaf;
+
+        $rules = [
+            'program' => ['required', 'string', 'max:255'],
+            'nama_kegiatan' => ['required', 'string', 'max:255'],
+            'unit_id' => ['required', 'exists:units,id'],
+            'tgl_mulai' => ['required', 'date'],
+            'tgl_selesai' => ['nullable', 'date', 'after_or_equal:tgl_mulai'],
+            'sumber_dana_id' => ['required', 'exists:sumber_dana,id'],
+            'kode_anggaran_id' => [
+                'required',
+                'exists:kode_anggaran,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $leaf = KodeAnggaran::find($value);
+                    if ($leaf && ! $leaf->isLeaf()) {
+                        $fail('Kode anggaran yang dipilih harus berupa pos aktif tingkat terendah (leaf), tidak boleh pos induk.');
+                    }
+                },
+            ],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.uraian' => ['required', 'string', 'max:500'],
+            'items.*.jumlah_diminta' => ['required', 'integer', 'min:1'],
+        ];
+
+        if ($needsAsnaf) {
+            $rules['items.*.asnaf_id'] = ['required', 'exists:asnaf,id'];
+        }
+
+        if ($this->isTu) {
+            $rules['user_id'] = ['required', 'exists:users,id'];
+        }
+
+        if ($this->isOverBudget) {
+            $rules['catatan_over'] = ['required', 'string', 'min:10'];
+        }
+
+        $messages = [
+            'unit_id.required' => 'Unit / Divisi pengaju wajib diisi.',
+            'items.*.uraian.required' => 'Uraian rincian wajib diisi.',
+            'items.*.jumlah_diminta.required' => 'Nominal rincian wajib diisi.',
+            'items.*.jumlah_diminta.min' => 'Nominal rincian minimal Rp 1.',
+            'items.*.asnaf_id.required' => 'Asnaf wajib dipilih untuk sumber dana Zakat.',
+            'user_id.required' => 'Pejabat pemohon wajib dipilih.',
+            'catatan_over.required' => 'Catatan over budget wajib diisi karena total pengajuan melebihi sisa plafon.',
+            'catatan_over.min' => 'Catatan over budget minimal 10 karakter.',
+        ];
+        $this->validate($rules, $messages);
+    }
+
+    public function saveDraft(): void
+    {
+        $this->validateForm();
+
+        $permohonan = DB::transaction(function () {
+            $p = Permohonan::findOrFail($this->permohonanId);
+            $before = $p->toArray();
+
+            $p->update([
+                'unit_id' => $this->unit_id,
+                'user_id' => $this->user_id ?: Auth::id(),
+                'kode_anggaran_id' => $this->kode_anggaran_id,
+                'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
+                'nama_kegiatan' => $this->nama_kegiatan,
+                'tgl_mulai' => $this->tgl_mulai,
+                'tgl_selesai' => $this->tgl_selesai ?: null,
+                'sumber_dana_id' => $this->sumber_dana_id,
+                'total_diminta' => $this->totalDiminta,
+                'catatan_over' => $this->isOverBudget ? $this->catatan_over : null,
+            ]);
+
+            // Sync items
+            $existingItemIds = [];
+            foreach ($this->items as $item) {
+                if (! empty($item['id'])) {
+                    $pi = PermohonanItem::find($item['id']);
+                    if ($pi && $pi->permohonan_id === $p->id) {
+                        $pi->update([
+                            'uraian' => trim($item['uraian']),
+                            'asnaf_id' => $item['asnaf_id'] ?: null,
+                            'program_utama_id' => $item['program_utama_id'] ?: null,
+                            'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                        ]);
+                        $existingItemIds[] = $pi->id;
+
+                        continue;
+                    }
+                }
+
+                $created = PermohonanItem::create([
+                    'permohonan_id' => $p->id,
+                    'uraian' => trim($item['uraian']),
+                    'asnaf_id' => $item['asnaf_id'] ?: null,
+                    'program_utama_id' => $item['program_utama_id'] ?: null,
+                    'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                ]);
+                $existingItemIds[] = $created->id;
+            }
+
+            PermohonanItem::where('permohonan_id', $p->id)
+                ->whereNotIn('id', $existingItemIds)
+                ->delete();
+
+            (new AuditLogger)->log('permohonan.updated_draft', $p, $before, $p->fresh()->toArray());
+
+            return $p;
+        });
+
+        session()->flash('success', "Draft permohonan dana {$permohonan->no_pengajuan} berhasil diperbarui.");
+        $this->redirect(route('permohonan.detail', $permohonan->id), navigate: true);
+    }
+
+    public function submitNow(): void
+    {
+        if ($this->isOverPemohonLimit) {
+            $pemohon = $this->atasNamaUser;
+            $this->addError(
+                'pemohon_limit',
+                'Total pengajuan (Rp '.number_format($this->totalDiminta, 0, ',', '.').') melebihi batas kewenangan '.
+                ($pemohon?->name ?? 'pemohon').' sebagai '.($pemohon?->jabatan ?? $pemohon?->leveling?->nama ?? 'Pemohon').
+                ' (maks. Rp '.number_format($this->pemohonLimit, 0, ',', '.').
+                '). Minta TU untuk mengubah Pejabat Pemohon ke tingkat yang lebih tinggi, atau minta Manajer/Kadiv membuat pengajuan langsung.'
+            );
+
+            return;
+        }
+
+        $this->validateForm();
+
+        $permohonan = DB::transaction(function () {
+            $p = Permohonan::findOrFail($this->permohonanId);
+            $before = $p->toArray();
+
+            $p->update([
+                'unit_id' => $this->unit_id,
+                'user_id' => $this->user_id ?: Auth::id(),
+                'kode_anggaran_id' => $this->kode_anggaran_id,
+                'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
+                'nama_kegiatan' => $this->nama_kegiatan,
+                'tgl_mulai' => $this->tgl_mulai,
+                'tgl_selesai' => $this->tgl_selesai ?: null,
+                'sumber_dana_id' => $this->sumber_dana_id,
+                'total_diminta' => $this->totalDiminta,
+                'catatan_over' => $this->isOverBudget ? $this->catatan_over : null,
+            ]);
+
+            // Sync items
+            $existingItemIds = [];
+            foreach ($this->items as $item) {
+                if (! empty($item['id'])) {
+                    $pi = PermohonanItem::find($item['id']);
+                    if ($pi && $pi->permohonan_id === $p->id) {
+                        $pi->update([
+                            'uraian' => trim($item['uraian']),
+                            'asnaf_id' => $item['asnaf_id'] ?: null,
+                            'program_utama_id' => $item['program_utama_id'] ?: null,
+                            'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                        ]);
+                        $existingItemIds[] = $pi->id;
+
+                        continue;
+                    }
+                }
+
+                $created = PermohonanItem::create([
+                    'permohonan_id' => $p->id,
+                    'uraian' => trim($item['uraian']),
+                    'asnaf_id' => $item['asnaf_id'] ?: null,
+                    'program_utama_id' => $item['program_utama_id'] ?: null,
+                    'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                ]);
+                $existingItemIds[] = $created->id;
+            }
+
+            PermohonanItem::where('permohonan_id', $p->id)
+                ->whereNotIn('id', $existingItemIds)
+                ->delete();
+
+            $workflow = new PermohonanWorkflow;
+
+            return $workflow->submit($p);
+        });
+
+        session()->flash('success', "Permohonan dana {$permohonan->no_pengajuan} berhasil diajukan untuk proses persetujuan.");
+        $this->redirect(route('permohonan.detail', $permohonan->id), navigate: true);
+    }
+
+    public function render(): View
+    {
+        $selectedYearId = (int) session('tahun_anggaran_id', 0);
+        $selectedYear = $selectedYearId ? TahunAnggaran::find($selectedYearId) : null;
+        if (! $selectedYear) {
+            $selectedYear = TahunAnggaran::where('status', 'aktif')->first()
+                ?? TahunAnggaran::orderBy('tahun', 'desc')->first();
+        }
+        $taId = $selectedYear?->id ?? 0;
+
+        // Ambil leaf kode anggaran saja
+        $rawLeaf = KodeAnggaran::where('tahun_anggaran_id', $taId)
+            ->where('is_active', true)
+            ->whereDoesntHave('children')
+            ->get();
+        $kodeAnggaranList = KodeAnggaran::sortHierarchically($rawLeaf);
+
+        $programs = ProgramUtama::where('is_active', true)->orderBy('nama', 'asc')->get();
+        $units = Unit::with('parent')
+            ->orderBy('nama', 'asc')
+            ->get()
+            ->map(fn (Unit $u) => [
+                'id' => $u->id,
+                'kode' => $u->kode,
+                'nama' => $u->parent ? "{$u->parent->nama} — {$u->nama}" : $u->nama,
+            ]);
+        $sumberDanaList = SumberDana::where('is_active', true)->orderBy('id', 'asc')->get();
+        $asnafList = Asnaf::where('is_active', true)->orderBy('id', 'asc')->get();
+
+        $selectedSumberDana = SumberDana::find($this->sumber_dana_id);
+        $needsAsnaf = $selectedSumberDana && $selectedSumberDana->butuh_asnaf;
+
+        // Pejabat pemohon (Tahap 1): Supervisor, Manajer, atau Kadiv.
+        $creatorCandidates = User::with(['unit.parent', 'leveling'])
+            ->where('is_active', true)
+            ->when($this->creatorLevel !== '', function ($q) {
+                $this->creatorLevel === '3'
+                    ? $q->whereHas('leveling', fn ($l) => $l->where('urutan', '>=', 3))
+                    : $q->whereHas('leveling', fn ($l) => $l->where('urutan', (int) $this->creatorLevel));
+            }, fn ($q) => $q->whereHas('leveling', fn ($l) => $l->where('urutan', '<=', 3)))
+            ->get()
+            ->sortBy(fn (User $u) => [$u->leveling?->urutan ?? 9, $u->name])
+            ->values()
+            ->map(function (User $u) {
+                $jabatan = $u->jabatan ?: $u->leveling?->nama ?? 'Pejabat';
+                $limitText = $u->leveling?->batas_atas
+                    ? ' • Maks Rp '.number_format($u->leveling->batas_atas, 0, ',', '.')
+                    : ' • Tanpa Batas';
+                $unitText = '';
+                if ($u->unit) {
+                    $divisi = $u->unit->parent?->nama;
+                    $unitText = ' • '.($divisi ? $divisi.' - ' : '').$u->unit->nama;
+                }
+
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'jabatan' => $jabatan.$limitText.$unitText,
+                ];
+            });
+
+        return view('livewire.permohonan.permohonan-edit', [
+            'programs' => $programs,
+            'units' => $units,
+            'sumberDanaList' => $sumberDanaList,
+            'kodeAnggaranList' => $kodeAnggaranList,
+            'asnafList' => $asnafList,
+            'needsAsnaf' => $needsAsnaf,
+            'budgetInfo' => $this->budgetInfo,
+            'isOverBudget' => $this->isOverBudget,
+            'requiredApprover' => $this->requiredApprover,
+            'totalDiminta' => $this->totalDiminta,
+            'isTu' => $this->isTu,
+            'creatorCandidates' => $creatorCandidates,
+        ]);
+    }
+}
