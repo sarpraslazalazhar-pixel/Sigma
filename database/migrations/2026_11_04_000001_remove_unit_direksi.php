@@ -13,14 +13,40 @@ return new class extends Migration
             if (! $unit) {
                 continue;
             }
-            $parentId = $unit->parent_id;
-            if ($parentId) {
-                DB::table('users')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
-                DB::table('penomoran')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
-                DB::table('permohonan')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
+
+            $tujuanId = $this->resolveTujuanId($unit);
+            if (! $tujuanId) {
+                continue;
             }
+
+            DB::table('users')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
+            DB::table('penomoran')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
+            DB::table('permohonan')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
             DB::table('units')->where('id', $unit->id)->delete();
         }
+    }
+
+    /**
+     * Unit induk; jika kosong, divisi dengan kode sepadan (UNT-SEK-DIR -> DIV-SEK);
+     * jika tetap kosong, divisi pertama. Null berarti unit dibiarkan (tanpa tujuan aman).
+     */
+    private function resolveTujuanId(object $unit): ?int
+    {
+        if ($unit->parent_id) {
+            return (int) $unit->parent_id;
+        }
+
+        $segmen = explode('-', (string) $unit->kode)[1] ?? null;
+        if ($segmen) {
+            $divisiId = DB::table('units')->where('kode', "DIV-{$segmen}")->value('id');
+            if ($divisiId) {
+                return (int) $divisiId;
+            }
+        }
+
+        $divisiId = DB::table('units')->where('tipe', 'divisi')->orderBy('id')->value('id');
+
+        return $divisiId ? (int) $divisiId : null;
     }
 
     public function down(): void
