@@ -17,6 +17,7 @@ return new class extends Migration
             if ($parentId) {
                 DB::table('users')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
                 DB::table('penomoran')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
+                DB::table('permohonan')->where('unit_id', $unit->id)->update(['unit_id' => $parentId]);
             }
             DB::table('units')->where('id', $unit->id)->delete();
         }
