@@ -15,15 +15,16 @@ return new class extends Migration
             }
 
             $tujuanId = $this->resolveTujuanId($unit);
-            if (! $tujuanId) {
+            if (! $tujuanId || $tujuanId === (int) $unit->id) {
                 continue;
             }
 
+            $this->mergePenomoran((int) $unit->id, $tujuanId);
             DB::table('users')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
-            DB::table('penomoran')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
             DB::table('permohonan')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
+            DB::table('units')->where('parent_id', $unit->id)->update(['parent_id' => $tujuanId]);
 
-            // Jangan biarkan pembersihan unit memblokir migrasi lain: lewati bila masih ada referensi.
+            // Jangan blokir migrasi berikutnya bila masih ada referensi tak terduga.
             if (DB::table('permohonan')->where('unit_id', $unit->id)->exists()) {
                 continue;
             }
@@ -53,6 +54,30 @@ return new class extends Migration
         $divisiId = DB::table('units')->where('tipe', 'divisi')->orderBy('id')->value('id');
 
         return $divisiId ? (int) $divisiId : null;
+    }
+
+    /**
+     * Penomoran unik per (jenis, unit_id, tahun): gabungkan nomor terakhir sebelum pindah unit.
+     */
+    private function mergePenomoran(int $dariId, int $keId): void
+    {
+        foreach (DB::table('penomoran')->where('unit_id', $dariId)->get() as $row) {
+            $existing = DB::table('penomoran')
+                ->where('unit_id', $keId)
+                ->where('jenis', $row->jenis)
+                ->where('tahun', $row->tahun)
+                ->first();
+
+            if (! $existing) {
+                DB::table('penomoran')->where('id', $row->id)->update(['unit_id' => $keId]);
+
+                continue;
+            }
+
+            DB::table('penomoran')->where('id', $existing->id)
+                ->update(['last_number' => max((int) $existing->last_number, (int) $row->last_number)]);
+            DB::table('penomoran')->where('id', $row->id)->delete();
+        }
     }
 
     public function down(): void
