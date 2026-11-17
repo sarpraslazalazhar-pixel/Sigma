@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Permohonan\PermohonanCreate;
 use App\Livewire\Permohonan\PermohonanDetail;
 use App\Livewire\Permohonan\PermohonanEdit;
+use App\Livewire\Permohonan\PermohonanIndex;
 use App\Models\KodeAnggaran;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
@@ -220,5 +221,42 @@ class PermohonanAuditAndEditTest extends TestCase
             'uraian' => 'Item Pertama Diperbarui',
             'jumlah_diminta' => 3500000,
         ]);
+    }
+
+    public function test_tu_can_continue_and_submit_draft_from_other_division(): void
+    {
+        $unitProgram = Unit::where('kode', 'UNT-PRG-INT')->firstOrFail();
+
+        $pmh = Permohonan::create([
+            'no_pengajuan' => 'DRAFT-TU-LANJUT',
+            'unit_id' => $unitProgram->id,
+            'user_id' => $this->managerUser->id,
+            'pengusul_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Pos Anggaran Operasional',
+            'nama_kegiatan' => 'Draft Lanjutan TU',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+            'total_diminta' => 1500000,
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $pmh->id,
+            'uraian' => 'Item Draft TU',
+            'jumlah_diminta' => 1500000,
+        ]);
+
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanIndex::class)
+            ->assertSee('Draft Lanjutan TU');
+
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->assertSee('Ajukan Permohonan')
+            ->call('submitPermohonan')
+            ->assertSee('Menunggu Persetujuan');
+
+        $this->assertEquals('diajukan', $pmh->fresh()->status);
     }
 }

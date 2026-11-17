@@ -58,12 +58,15 @@ class PermohonanPolicy
 
     /**
      * Memperbarui dokumen permohonan dana.
-     * Hanya pemohon sendiri dan hanya saat status draft atau perlu_perbaikan.
+     * Pemohon, pengusul, petugas TU, dan admin boleh memperbarui saat status draft atau perlu_perbaikan.
      */
     public function update(User $user, Permohonan $permohonan): bool
     {
-        return $permohonan->user_id === $user->id
-            && in_array($permohonan->status, ['draft', 'perlu_perbaikan'], true);
+        $isAuthorized = $permohonan->user_id === $user->id
+            || $permohonan->pengusul_id === $user->id
+            || (bool) $user->is_petugas_input;
+
+        return $isAuthorized && in_array($permohonan->status, ['draft', 'perlu_perbaikan'], true);
     }
 
     /**

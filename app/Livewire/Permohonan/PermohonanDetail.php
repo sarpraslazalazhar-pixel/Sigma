@@ -301,9 +301,12 @@ class PermohonanDetail extends Component
             return false;
         }
 
-        $isOwnerOrAdmin = ($p->user_id === $user->id) || ($user->role === 'admin');
+        $isAuthorized = ($p->user_id === $user->id)
+            || ($p->pengusul_id === $user->id)
+            || ($user->role === 'admin')
+            || (bool) $user->is_petugas_input;
 
-        return $isOwnerOrAdmin && in_array($p->status, ['draft', 'perlu_perbaikan']);
+        return $isAuthorized && in_array($p->status, ['draft', 'perlu_perbaikan']);
     }
 
     public function getCanEditDraftProperty(): bool

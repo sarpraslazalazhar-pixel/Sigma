@@ -134,7 +134,8 @@ class PermohonanIndex extends Component
                 if (! empty($divisiUnitIds)) {
                     $q->whereIn('unit_id', $divisiUnitIds);
                 }
-                $q->orWhere('user_id', $user->id);
+                $q->orWhere('user_id', $user->id)
+                    ->orWhere('pengusul_id', $user->id);
             });
         }
 

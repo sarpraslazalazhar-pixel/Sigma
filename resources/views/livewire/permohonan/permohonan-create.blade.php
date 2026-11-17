@@ -115,25 +115,6 @@
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {{-- Program (Nama Mata Anggaran) --}}
-                <div>
-                    <label for="program" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Program (Nama Mata Anggaran) *
-                    </label>
-                    <input
-                        type="text"
-                        id="program"
-                        wire:model="program"
-                        readonly
-                        placeholder="Otomatis dari nama kode anggaran yang dipilih"
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3.5 py-2.5 bg-slate-50 cursor-default focus:border-[#1E60D5] focus:outline-hidden @error('program') border-red-500 @enderror"
-                        required
-                    />
-                    @error('program')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
                 {{-- Unit / Divisi --}}
                 <div>
                     <label for="unit_id" class="block text-xs font-semibold text-slate-700 mb-1">
@@ -192,79 +173,8 @@
                     @enderror
                 </div>
 
-                {{-- Sumber Dana --}}
-                <div>
-                    <label for="sumber_dana_id" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Sumber Dana *
-                    </label>
-                    <select
-                        id="sumber_dana_id"
-                        wire:model.live="sumber_dana_id"
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('sumber_dana_id') border-red-500 @enderror"
-                    >
-                        <option value="">Pilih Sumber Dana</option>
-                        @foreach ($sumberDanaList as $sd)
-                            <option value="{{ $sd->id }}">
-                                {{ $sd->nama }} {{ $sd->butuh_asnaf ? '(Wajib Asnaf)' : '' }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('sumber_dana_id')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                {{-- Nama Kegiatan --}}
-                <div class="md:col-span-2 lg:col-span-3">
-                    <label for="nama_kegiatan" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Nama Kegiatan / Keperluan *
-                    </label>
-                    <input
-                        type="text"
-                        id="nama_kegiatan"
-                        wire:model="nama_kegiatan"
-                        placeholder="Contoh: Santunan Yatim Ramadhan 1447 H, Operasional IT Bulanan, dll."
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('nama_kegiatan') border-red-500 @enderror"
-                    />
-                    @error('nama_kegiatan')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                {{-- Tanggal Mulai --}}
-                <div>
-                    <label for="tgl_mulai" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Tanggal Mulai Kegiatan *
-                    </label>
-                    <input
-                        type="date"
-                        id="tgl_mulai"
-                        wire:model="tgl_mulai"
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('tgl_mulai') border-red-500 @enderror"
-                    />
-                    @error('tgl_mulai')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
-                {{-- Tanggal Selesai --}}
-                <div>
-                    <label for="tgl_selesai" class="block text-xs font-semibold text-slate-700 mb-1">
-                        Tanggal Selesai Kegiatan (Opsional)
-                    </label>
-                    <input
-                        type="date"
-                        id="tgl_selesai"
-                        wire:model="tgl_selesai"
-                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('tgl_selesai') border-red-500 @enderror"
-                    />
-                    @error('tgl_selesai')
-                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                    @enderror
-                </div>
-
                 {{-- Mata Anggaran / Pos Anggaran (Searchable Dropdown) --}}
-                <div>
+                <div class="lg:col-span-2">
                     <label for="kode_anggaran_id" class="block text-xs font-semibold text-slate-700 mb-1">
                         Pos Anggaran (Mata Anggaran) *
                     </label>
@@ -386,6 +296,77 @@
                     </div>
 
                     @error('kode_anggaran_id')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                {{-- Nama Kegiatan --}}
+                <div class="md:col-span-2 lg:col-span-3">
+                    <label for="nama_kegiatan" class="block text-xs font-semibold text-slate-700 mb-1">
+                        Nama Kegiatan / Keperluan *
+                    </label>
+                    <input
+                        type="text"
+                        id="nama_kegiatan"
+                        wire:model="nama_kegiatan"
+                        placeholder="Contoh: Santunan Yatim Ramadhan 1447 H, Operasional IT Bulanan, dll."
+                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('nama_kegiatan') border-red-500 @enderror"
+                    />
+                    @error('nama_kegiatan')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                {{-- Tanggal Mulai --}}
+                <div>
+                    <label for="tgl_mulai" class="block text-xs font-semibold text-slate-700 mb-1">
+                        Tanggal Mulai Kegiatan *
+                    </label>
+                    <input
+                        type="date"
+                        id="tgl_mulai"
+                        wire:model="tgl_mulai"
+                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('tgl_mulai') border-red-500 @enderror"
+                    />
+                    @error('tgl_mulai')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                {{-- Tanggal Selesai --}}
+                <div>
+                    <label for="tgl_selesai" class="block text-xs font-semibold text-slate-700 mb-1">
+                        Tanggal Selesai Kegiatan (Opsional)
+                    </label>
+                    <input
+                        type="date"
+                        id="tgl_selesai"
+                        wire:model="tgl_selesai"
+                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('tgl_selesai') border-red-500 @enderror"
+                    />
+                    @error('tgl_selesai')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                {{-- Sumber Dana --}}
+                <div>
+                    <label for="sumber_dana_id" class="block text-xs font-semibold text-slate-700 mb-1">
+                        Sumber Dana *
+                    </label>
+                    <select
+                        id="sumber_dana_id"
+                        wire:model.live="sumber_dana_id"
+                        class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('sumber_dana_id') border-red-500 @enderror"
+                    >
+                        <option value="">Pilih Sumber Dana</option>
+                        @foreach ($sumberDanaList as $sd)
+                            <option value="{{ $sd->id }}">
+                                {{ $sd->nama }} {{ $sd->butuh_asnaf ? '(Wajib Asnaf)' : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('sumber_dana_id')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
                 </div>

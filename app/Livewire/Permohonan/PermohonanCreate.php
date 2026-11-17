@@ -347,7 +347,6 @@ class PermohonanCreate extends Component
         $needsAsnaf = $sumberDana && $sumberDana->butuh_asnaf;
 
         $rules = [
-            'program' => ['required', 'string', 'max:255'],
             'nama_kegiatan' => ['required', 'string', 'max:255'],
             'unit_id' => ['required', 'exists:units,id'],
             'tgl_mulai' => ['required', 'date'],
