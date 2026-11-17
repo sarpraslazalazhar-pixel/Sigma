@@ -22,6 +22,12 @@ return new class extends Migration
             DB::table('users')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
             DB::table('penomoran')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
             DB::table('permohonan')->where('unit_id', $unit->id)->update(['unit_id' => $tujuanId]);
+
+            // Jangan biarkan pembersihan unit memblokir migrasi lain: lewati bila masih ada referensi.
+            if (DB::table('permohonan')->where('unit_id', $unit->id)->exists()) {
+                continue;
+            }
+
             DB::table('units')->where('id', $unit->id)->delete();
         }
     }
