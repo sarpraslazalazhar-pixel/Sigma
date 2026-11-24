@@ -17,8 +17,8 @@ class Pencairan extends Model
         'tgl_cair',
         'jumlah',
         'status',
+        'dicairkan_oleh',
         'alasan_batal',
-        'perlu_verifikasi_keuangan',
         'verifikasi_keuangan_at',
         'verifikasi_keuangan_oleh',
     ];
@@ -28,7 +28,6 @@ class Pencairan extends Model
         return [
             'tgl_cair' => 'date',
             'jumlah' => 'integer',
-            'perlu_verifikasi_keuangan' => 'boolean',
             'verifikasi_keuangan_at' => 'datetime',
         ];
     }

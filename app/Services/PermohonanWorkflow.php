@@ -577,15 +577,13 @@ class PermohonanWorkflow
                 throw new RuntimeException("Nomor PPD {$noPpd} sudah dipakai.");
             }
 
-            $perluVerifikasi = (bool) ($user->is_petugas_input && $user->role !== 'admin' && $user->role !== 'keuangan');
-
             $pencairan = Pencairan::create([
                 'permohonan_id' => $locked->id,
                 'no_ppd' => $noPpd,
                 'tgl_cair' => $data['tgl_cair'] ?? now()->toDateString(),
                 'jumlah' => $locked->total_disetujui,
                 'status' => 'dicairkan',
-                'perlu_verifikasi_keuangan' => $perluVerifikasi,
+                'dicairkan_oleh' => $user->id,
             ]);
 
             $before = $locked->toArray();
@@ -617,7 +615,6 @@ class PermohonanWorkflow
                 'kekurangan' => 0,
                 'status' => 'draft',
                 'jatuh_tempo' => $jatuhTempo,
-                'perlu_verifikasi_keuangan' => $perluVerifikasi,
             ]);
 
             (new AuditLogger)->log('permohonan.cairkan', $locked, $before, $locked->fresh()->toArray());

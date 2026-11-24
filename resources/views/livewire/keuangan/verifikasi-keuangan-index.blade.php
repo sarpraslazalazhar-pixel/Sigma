@@ -1,280 +1,135 @@
-<div class="space-y-6">
-    {{-- Header --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-xl sm:text-2xl font-bold text-[#0F2F57] tracking-tight">
-                Verifikasi Keuangan
-            </h1>
-            <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Antrean dokumen permohonan, pencairan, dan UMP yang memerlukan verifikasi kelengkapan oleh Bagian Keuangan.
-            </p>
-        </div>
-    </div>
+<div class="space-y-5">
+    <header>
+        <h1 class="text-xl font-bold tracking-tight text-[#0F2F57] sm:text-2xl">Verifikasi Keuangan</h1>
+        <p class="mt-1 max-w-prose text-sm text-slate-600">Periksa kelengkapan Permohonan, PPD, dan Laporan. Verifikasi ini tidak menahan persetujuan atau pencairan.</p>
+    </header>
 
-    {{-- Flash Notifications --}}
     @if (session()->has('success'))
-        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-            <svg class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>{{ session('success') }}</span>
-        </div>
+        <p role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+            {{ session('success') }}
+        </p>
     @endif
 
-    {{-- Metric Cards --}}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Total Menunggu</span>
-            <div class="flex items-baseline gap-2 mt-1">
-                <span class="text-2xl font-bold {{ $totalPending > 0 ? 'text-amber-600' : 'text-slate-800' }}">
-                    {{ $totalPending }}
-                </span>
-                <span class="text-xs text-slate-500">dokumen</span>
-            </div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Permohonan</span>
-            <div class="flex items-baseline gap-2 mt-1">
-                <span class="text-2xl font-bold text-slate-800">{{ $countPendingPermohonan }}</span>
-                <span class="text-xs text-slate-500">pending</span>
-            </div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Pencairan (PPD)</span>
-            <div class="flex items-baseline gap-2 mt-1">
-                <span class="text-2xl font-bold text-slate-800">{{ $countPendingPencairan }}</span>
-                <span class="text-xs text-slate-500">pending</span>
-            </div>
-        </div>
-
-        <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Pertanggungjawaban (UMP)</span>
-            <div class="flex items-baseline gap-2 mt-1">
-                <span class="text-2xl font-bold text-slate-800">{{ $countPendingUmp }}</span>
-                <span class="text-xs text-slate-500">pending</span>
-            </div>
-        </div>
-    </div>
-
-    {{-- Filter Bar --}}
-    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-                <label for="search-input" class="block text-xs font-semibold text-slate-700 mb-1">
-                    Cari Dokumen:
-                </label>
-                <input
-                    type="text"
-                    id="search-input"
-                    wire:model.live.debounce.300ms="search"
-                    placeholder="Nomor dokumen, unit, pos anggaran..."
-                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                >
-            </div>
-
-            <div>
-                <label for="jenis-filter" class="block text-xs font-semibold text-slate-700 mb-1">
-                    Jenis Dokumen:
-                </label>
-                <select
-                    id="jenis-filter"
-                    wire:model.live="filterJenis"
-                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                >
-                    <option value="semua">Semua Jenis Dokumen</option>
-                    <option value="permohonan">Permohonan Dana</option>
-                    <option value="pencairan">Pencairan (PPD)</option>
-                    <option value="ump">Uang Muka Pas / UMP</option>
+    <section aria-label="Antrean verifikasi" class="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+        <div class="grid gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr]">
+            <label class="grid gap-1 text-xs font-semibold text-slate-700 sm:col-span-2 xl:col-span-1">
+                Cari dokumen
+                <input type="search" wire:model.live.debounce.300ms="search" placeholder="Nomor, unit, kegiatan, atau pos anggaran"
+                    class="min-h-12 min-w-0 rounded-xl border border-slate-500 bg-white px-3 text-sm font-normal text-slate-900">
+            </label>
+            <label class="grid gap-1 text-xs font-semibold text-slate-700">
+                Jenis dokumen
+                <select wire:model.live="filterJenis" class="min-h-12 rounded-xl border border-slate-500 bg-white px-3 text-sm font-normal text-slate-900">
+                    <option value="semua">Semua jenis</option>
+                    <option value="permohonan">Permohonan</option>
+                    <option value="pencairan">Pencairan PPD</option>
+                    <option value="ump">Laporan</option>
                 </select>
-            </div>
-
-            <div>
-                <label for="status-filter" class="block text-xs font-semibold text-slate-700 mb-1">
-                    Status Verifikasi:
-                </label>
-                <select
-                    id="status-filter"
-                    wire:model.live="filterStatus"
-                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                >
-                    <option value="belum">Belum Diverifikasi</option>
-                    <option value="terverifikasi">Sudah Terverifikasi</option>
-                    <option value="semua">Semua Status</option>
+            </label>
+            <label class="grid gap-1 text-xs font-semibold text-slate-700">
+                Status kelengkapan
+                <select wire:model.live="filterStatus" class="min-h-12 rounded-xl border border-slate-500 bg-white px-3 text-sm font-normal text-slate-900">
+                    <option value="belum">Menunggu pemeriksaan</option>
+                    <option value="perbaikan">Perlu perbaikan</option>
+                    <option value="terverifikasi">Terverifikasi</option>
+                    <option value="semua">Semua status</option>
                 </select>
-            </div>
+            </label>
         </div>
-    </div>
 
-    {{-- VIEW 1: Mobile Cards (< 1024px) --}}
-    <div class="block lg:hidden space-y-3">
-        @forelse ($items as $item)
-            <div wire:key="verif-m-{{ $item['type'] }}-{{ $item['id'] }}" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
-                <div class="flex items-start justify-between gap-2">
-                    <div>
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-[#DCE5F6] text-[#001B3E]">
-                            {{ $item['no_dokumen'] }}
-                        </span>
-                        <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                            {{ $item['jenis'] }}
-                        </span>
-                    </div>
-                    @if ($item['is_verified'])
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Terverifikasi
-                        </span>
-                    @else
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            Belum Diverifikasi
-                        </span>
-                    @endif
-                </div>
+        <p wire:loading role="status" class="border-b border-slate-200 px-4 py-2 text-sm text-slate-700">Memperbarui antrean…</p>
+        @error('catatan')
+            <p id="kesalahan-catatan" role="alert" class="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $message }}</p>
+        @enderror
 
-                <div class="text-xs space-y-1">
-                    <div class="flex justify-between">
-                        <span class="text-slate-500">Unit:</span>
-                        <span class="font-medium text-slate-800">{{ $item['unit'] }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-500">Pos Anggaran:</span>
-                        <span class="font-medium text-slate-800">{{ $item['kode_anggaran'] }} - {{ $item['nama_pos'] }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-500">Nominal:</span>
-                        <span class="font-bold text-slate-900 font-mono">Rp {{ number_format($item['nominal'], 0, ',', '.') }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-500">Dicatat Oleh:</span>
-                        <span class="text-slate-700">{{ $item['dicatat_oleh'] }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-slate-500">Tanggal Catat:</span>
-                        <span class="text-slate-700">{{ $item['tgl_catat']?->format('d/m/Y H:i') }}</span>
-                    </div>
-                    @if ($item['is_verified'])
-                        <div class="pt-1.5 border-t border-slate-100 text-[11px] text-emerald-700">
-                            Diverifikasi oleh {{ $item['verifikator'] ?? '-' }} pada {{ $item['verified_at']?->format('d/m/Y H:i') }}
+        <ul class="divide-y divide-slate-200">
+            @forelse ($items as $item)
+                @php($key = $item['type'].'-'.$item['id'])
+                <li wire:key="verifikasi-{{ $key }}" class="space-y-3 p-4 sm:px-5">
+                    <div class="grid gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] md:items-center md:gap-5">
+                        <div class="min-w-0">
+                            <div class="text-xs font-semibold text-slate-600">{{ $item['label'] }}</div>
+                            <a href="{{ $item['url'] }}" wire:navigate
+                                class="inline-flex min-h-11 items-center break-all text-sm font-bold text-[#0F2F57] underline underline-offset-4">
+                                {{ $item['number'] }}
+                            </a>
+                            <p class="break-words text-sm text-slate-700">{{ $item['activity'] }}</p>
+                            <p class="break-words text-xs text-slate-600">
+                                {{ implode(' · ', array_filter([$item['unit'], $item['budget'], $item['date']?->format('d/m/Y')])) }}
+                            </p>
                         </div>
-                    @endif
-                </div>
 
-                <div class="pt-2 border-t border-slate-100 flex justify-end">
-                    @if ($item['is_verified'])
-                        <button
-                            type="button"
-                            wire:click="batalVerifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
-                            class="min-h-[44px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                            Batal Verifikasi
-                        </button>
-                    @else
-                        <button
-                            type="button"
-                            wire:click="verifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
-                            class="min-h-[44px] px-5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition-colors cursor-pointer"
-                        >
-                            Verifikasi Sekarang
-                        </button>
-                    @endif
-                </div>
-            </div>
-        @empty
-            <div class="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 text-xs">
-                Tidak ada dokumen yang memerlukan verifikasi.
-            </div>
-        @endforelse
-    </div>
+                        <div class="space-y-1">
+                            <p class="text-sm font-semibold tabular-nums text-slate-900">Rp {{ number_format($item['amount'], 0, ',', '.') }}</p>
+                            @if ($item['verified'])
+                                <p class="text-xs font-semibold text-emerald-800">Terverifikasi{{ $item['reviewer'] ? ' · '.$item['reviewer'] : '' }}</p>
+                            @elseif ($item['returned'])
+                                <p class="text-xs font-semibold text-amber-900">Perlu perbaikan</p>
+                            @else
+                                <p class="text-xs font-semibold text-slate-700">Menunggu pemeriksaan</p>
+                            @endif
+                        </div>
 
-    {{-- VIEW 2: Desktop Table (>= 1024px) --}}
-    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-                <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
-                    <tr>
-                        <th class="py-3.5 px-4">No. Dokumen</th>
-                        <th class="py-3.5 px-3">Jenis</th>
-                        <th class="py-3.5 px-4">Unit / Divisi</th>
-                        <th class="py-3.5 px-4">Pos Anggaran</th>
-                        <th class="py-3.5 px-4 text-right">Nominal</th>
-                        <th class="py-3.5 px-4">Dicatat Oleh</th>
-                        <th class="py-3.5 px-3">Tgl Catat</th>
-                        <th class="py-3.5 px-3 text-center">Status</th>
-                        <th class="py-3.5 px-4 text-right">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-slate-700">
-                    @forelse ($items as $item)
-                        <tr wire:key="verif-row-{{ $item['type'] }}-{{ $item['id'] }}" class="hover:bg-slate-50/70 transition-colors">
-                            <td class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
-                                {{ $item['no_dokumen'] }}
-                            </td>
-                            <td class="py-3.5 px-3 whitespace-nowrap">
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                                    {{ $item['jenis'] }}
-                                </span>
-                            </td>
-                            <td class="py-3.5 px-4 whitespace-nowrap">
-                                {{ $item['unit'] }}
-                            </td>
-                            <td class="py-3.5 px-4">
-                                <span class="font-semibold text-slate-800">{{ $item['kode_anggaran'] }}</span>
-                                <span class="text-slate-500 block text-[11px] truncate max-w-xs">{{ $item['nama_pos'] }}</span>
-                            </td>
-                            <td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-900 whitespace-nowrap">
-                                Rp {{ number_format($item['nominal'], 0, ',', '.') }}
-                            </td>
-                            <td class="py-3.5 px-4 whitespace-nowrap">
-                                {{ $item['dicatat_oleh'] }}
-                            </td>
-                            <td class="py-3.5 px-3 text-slate-500 whitespace-nowrap">
-                                {{ $item['tgl_catat']?->format('d/m/Y H:i') }}
-                            </td>
-                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                                @if ($item['is_verified'])
-                                    <div class="inline-flex flex-col items-center">
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            Terverifikasi
-                                        </span>
-                                        <span class="text-[9px] text-slate-400 mt-0.5">
-                                            {{ $item['verifikator'] ?? '-' }}
-                                        </span>
-                                    </div>
-                                @else
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                        Belum Diverifikasi
-                                    </span>
-                                @endif
-                            </td>
-                            <td class="py-3.5 px-4 text-right whitespace-nowrap">
-                                @if ($item['is_verified'])
-                                    <button
-                                        type="button"
-                                        wire:click="batalVerifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
-                                        class="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                                    >
-                                        Batal
-                                    </button>
-                                @else
-                                    <button
-                                        type="button"
-                                        wire:click="verifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
-                                        class="min-h-[44px] px-4 py-1.5 rounded-xl text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 transition-colors cursor-pointer"
-                                    >
-                                        Verifikasi
-                                    </button>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="9" class="py-8 text-center text-slate-500 text-xs">
-                                Tidak ada dokumen yang memerlukan verifikasi.
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
+                        @if ($item['canReview'])
+                            @if ($item['verified'])
+                                <button type="button" wire:click="batalVerifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
+                                    wire:confirm="Batalkan verifikasi dan kembalikan dokumen ke antrean?"
+                                    wire:loading.attr="disabled"
+                                    class="min-h-11 justify-self-start rounded-full border border-slate-500 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                                    Batalkan verifikasi
+                                </button>
+                            @else
+                                <button type="button" wire:click="pilih('{{ $item['type'] }}', {{ $item['id'] }})"
+                                    aria-expanded="{{ $dokumenDipilih === $key ? 'true' : 'false' }}"
+                                    wire:loading.attr="disabled"
+                                    class="min-h-11 justify-self-start rounded-full bg-[#0F2F57] px-5 text-sm font-semibold text-white hover:bg-[#1d426d]">
+                                    Periksa kelengkapan
+                                </button>
+                            @endif
+                        @elseif (! $item['verified'] && ! $item['returned'])
+                            <p class="max-w-[15rem] text-xs text-slate-600">
+                                {{ $item['unattributedPpd'] ? 'Penerbit PPD tidak tercatat.' : 'Dokumen ini perlu diperiksa oleh petugas lain.' }}
+                            </p>
+                        @endif
+                    </div>
+
+                    @if ($item['note'] !== null)
+                        <p class="whitespace-pre-wrap break-words rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-800">{{ $item['note'] }}</p>
+                    @endif
+
+                    @if ($item['canReview'] && ! $item['verified'] && $dokumenDipilih === $key)
+                        <form wire:submit="verifikasi('{{ $item['type'] }}', {{ $item['id'] }})"
+                            class="space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-3 sm:p-4">
+                            <label for="catatan-verifikasi" class="block text-sm font-semibold text-slate-800">Catatan pemeriksaan</label>
+                            <p id="petunjuk-catatan" class="text-xs text-slate-600">Catatan opsional untuk verifikasi, wajib jika dokumen dikembalikan.</p>
+                            <textarea id="catatan-verifikasi" wire:model="catatan" aria-describedby="petunjuk-catatan{{ $errors->has('catatan') ? ' kesalahan-catatan' : '' }}"
+                                aria-invalid="{{ $errors->has('catatan') ? 'true' : 'false' }}"
+                                rows="3" maxlength="1000"
+                                class="w-full rounded-xl border border-slate-500 bg-white px-3 py-2 text-sm text-slate-900"></textarea>
+
+                            <div class="flex flex-wrap gap-2">
+                                <button type="submit" class="min-h-11 rounded-full bg-[#0F2F57] px-5 text-sm font-semibold text-white hover:bg-[#1d426d]">
+                                    Verifikasi dokumen
+                                </button>
+                                <button type="button" wire:click="kembalikan('{{ $item['type'] }}', {{ $item['id'] }})" wire:loading.attr="disabled"
+                                    class="min-h-11 rounded-full border border-amber-800 px-4 text-sm font-semibold text-amber-900 hover:bg-amber-50">
+                                    Kembalikan untuk perbaikan
+                                </button>
+                                <button type="button" wire:click="tutupCatatan" wire:loading.attr="disabled"
+                                    class="min-h-11 rounded-full px-4 text-sm font-semibold text-slate-700 hover:bg-slate-200">
+                                    Tutup
+                                </button>
+                            </div>
+                        </form>
+                    @endif
+                </li>
+            @empty
+                <li class="px-5 py-9 text-center text-sm text-slate-600">
+                    {{ $search !== '' || $filterJenis !== 'semua' || $filterStatus !== 'belum'
+                        ? 'Tidak ada dokumen yang cocok. Ubah pencarian atau filter.'
+                        : 'Tidak ada dokumen yang menunggu pemeriksaan kelengkapan.' }}
+                </li>
+            @endforelse
+        </ul>
+    </section>
 </div>

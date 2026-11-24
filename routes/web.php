@@ -4,6 +4,7 @@ use App\Http\Controllers\LampiranController;
 use App\Http\Controllers\PencairanPdfController;
 use App\Http\Controllers\PermohonanPdfController;
 use App\Http\Controllers\UmpPdfController;
+use App\Http\Controllers\VerifikasiKeuanganController;
 use App\Livewire\Auth\Login;
 use App\Livewire\Dashboard;
 use App\Livewire\Keuangan\VerifikasiKeuanganIndex;
@@ -65,6 +66,8 @@ Route::middleware('auth')->group(function () {
 
     // Verifikasi Keuangan
     Route::get('/keuangan/verifikasi', VerifikasiKeuanganIndex::class)->middleware('can:verifikasi-keuangan')->name('keuangan.verifikasi');
+    Route::post('/keuangan/verifikasi/{type}/{id}/cek-ulang', VerifikasiKeuanganController::class)
+        ->whereNumber('id')->name('keuangan.verifikasi.cek-ulang');
 
     // Lampiran Download/Stream
     Route::get('/lampiran/{id}', [LampiranController::class, 'show'])->name('lampiran.show');

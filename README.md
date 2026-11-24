@@ -30,6 +30,10 @@ $$\text{RAB / Kode Anggaran} \longrightarrow \text{Permohonan Dana} \longrightar
 
 Sistem ini menjamin pencegahan pemakaian ganda anggaran (*double budgeting*), mendeteksi potensi *over budget* secara dini, dan menyediakan jejak audit append-only yang tidak dapat dimanipulasi.
 
+**Verifikasi Keuangan** memeriksa kelengkapan Permohonan yang sudah sampai di tahap Keuangan, PPD terbit, dan Laporan yang sudah diajukan PJ. Keuangan atau Admin dapat memverifikasi dengan catatan atau mengembalikan dokumen dengan alasan. Petugas tidak boleh memeriksa dokumen yang ia ajukan, catat, atau terbitkan sendiri.
+
+Penanggung jawab atau TU yang mencatat dokumen dapat melampirkan bukti perbaikan dan memilih **Siap Dicek Ulang** di halaman asal. Pemeriksaan ini tidak menahan persetujuan atau pencairan. Riwayat verifikasi lama tetap tersedia. PPD lama yang penerbitnya tidak dapat diidentifikasi dari jejak audit tidak bisa diverifikasi sampai penerbitnya diketahui.
+
 ---
 
 ## 2. Tech Stack & Arsitektur

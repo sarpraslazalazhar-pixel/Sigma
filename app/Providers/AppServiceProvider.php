@@ -48,7 +48,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-master-data', fn (User $user) => $user->isAdmin());
         Gate::define('view-audit-logs', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
         Gate::define('manage-budget', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
-        Gate::define('verifikasi-keuangan', fn (User $user) => $user->hasRole(['admin', 'keuangan']) || (bool) $user->is_petugas_input);
+        Gate::define('verifikasi-keuangan', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
         Gate::define('cairkan-dana', fn (User $user) => $user->hasRole(['admin', 'keuangan']) || (bool) $user->is_petugas_input);
         Gate::define('create-permohonan', fn (User $user) => ! $user->isViewer());
 

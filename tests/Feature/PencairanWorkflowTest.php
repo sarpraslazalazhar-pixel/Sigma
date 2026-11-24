@@ -106,7 +106,7 @@ class PencairanWorkflowTest extends TestCase
 
         $this->assertSame('dicairkan', $this->permohonan->fresh()->status);
         $this->assertSame(5000000, $pencairan->jumlah);
-        $this->assertFalse($pencairan->perlu_verifikasi_keuangan);
+        $this->assertSame($this->financeUser->id, $pencairan->fresh()->dicairkan_oleh);
 
         $ump = Ump::where('pencairan_id', $pencairan->id)->firstOrFail();
         $this->assertSame('draft', $ump->status);
@@ -127,7 +127,7 @@ class PencairanWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_cairkan_by_petugas_input_flags_financial_verification(): void
+    public function test_cairkan_by_petugas_input_records_the_issuer(): void
     {
         $workflow = new PermohonanWorkflow;
 
@@ -136,8 +136,10 @@ class PencairanWorkflowTest extends TestCase
             'tgl_cair' => '2026-10-16',
         ]);
 
-        $this->assertTrue($pencairan->perlu_verifikasi_keuangan);
-        $this->assertTrue($pencairan->ump->perlu_verifikasi_keuangan);
+        $this->assertDatabaseHas('pencairan', [
+            'id' => $pencairan->id,
+            'dicairkan_oleh' => $this->petugasUser->id,
+        ]);
     }
 
     public function test_cairkan_duplicate_no_ppd_fails(): void

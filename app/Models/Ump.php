@@ -24,7 +24,6 @@ class Ump extends Model
         'kekurangan',
         'status',
         'jatuh_tempo',
-        'perlu_verifikasi_keuangan',
         'verifikasi_keuangan_at',
         'verifikasi_keuangan_oleh',
     ];
@@ -39,7 +38,6 @@ class Ump extends Model
             'saldo' => 'integer',
             'pembulatan' => 'integer',
             'kekurangan' => 'integer',
-            'perlu_verifikasi_keuangan' => 'boolean',
             'verifikasi_keuangan_at' => 'datetime',
         ];
     }

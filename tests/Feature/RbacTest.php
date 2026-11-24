@@ -137,7 +137,7 @@ class RbacTest extends TestCase
         $this->actingAs($this->keuangan)->get('/master/audit-logs')->assertOk();
         $this->actingAs($this->staffKlm)->get('/master/audit-logs')->assertStatus(403);
 
-        // 3. /keuangan/verifikasi: Hanya admin/keuangan/petugas yang diizinkan
+        // 3. /keuangan/verifikasi: Hanya admin dan keuangan yang diizinkan
         $plainUnitUser = User::where('username', 'rudiansah')->firstOrFail(); // is_petugas_input = false
         $this->actingAs($this->admin)->get('/keuangan/verifikasi')->assertOk();
         $this->actingAs($this->keuangan)->get('/keuangan/verifikasi')->assertOk();

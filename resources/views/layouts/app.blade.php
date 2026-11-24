@@ -196,16 +196,11 @@
 
                                 {{-- Verifikasi Keuangan --}}
                                 @can('verifikasi-keuangan')
-                                    @php
-                                        $pendingVerifikasiCount = \App\Models\Permohonan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
-                                            + \App\Models\Pencairan::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count()
-                                            + \App\Models\Ump::where('perlu_verifikasi_keuangan', true)->whereNull('verifikasi_keuangan_at')->count();
-                                    @endphp
                                     <a
                                         href="{{ route('keuangan.verifikasi') }}"
                                         wire:navigate
                                         @click="sidebarOpen = false"
-                                        class="{{ request()->routeIs('keuangan.verifikasi*') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center justify-between px-3.5 py-2.5 text-sm transition-colors"
+                                        class="{{ request()->routeIs('keuangan.verifikasi') ? 'bg-[#DCE5F6] text-[#001B3E] font-semibold' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900' }} rounded-xl flex items-center px-3.5 py-2.5 text-sm transition-colors"
                                     >
                                         <span class="flex items-center gap-3 truncate">
                                             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,11 +208,6 @@
                                             </svg>
                                             <span class="truncate">Verifikasi Keuangan</span>
                                         </span>
-                                        @if ($pendingVerifikasiCount > 0)
-                                            <span class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold animate-pulse">
-                                                {{ $pendingVerifikasiCount }}
-                                            </span>
-                                        @endif
                                     </a>
                                 @endcan
                                 {{-- Monitoring & Laporan Submenu --}}

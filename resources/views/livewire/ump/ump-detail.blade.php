@@ -75,6 +75,8 @@
         </div>
     @endif
 
+    @include('livewire.keuangan.status-verifikasi', ['document' => $ump, 'type' => 'ump'])
+
     {{-- PERLU PERBAIKAN ALERT BANNER UMP --}}
     @if ($ump->status === 'perlu_perbaikan')
         @php
@@ -159,7 +161,7 @@
         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
             Bagian A: Jumlah Diterima
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        <div class="max-w-sm text-xs">
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <span class="text-slate-400 block text-[11px]">Jumlah Dana Diterima (readonly)</span>
                 <input
@@ -168,12 +170,6 @@
                     value="Rp {{ number_format($ump->jumlah_total, 0, ',', '.') }}"
                     class="w-full mt-1 min-h-[44px] rounded-xl border border-slate-200 bg-white text-base font-bold text-[#0F2F57] px-3 py-2 tabular-nums cursor-not-allowed"
                 />
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <span class="text-slate-400 block text-[11px]">Status Verifikasi Keuangan</span>
-                <span class="font-semibold text-slate-800 block mt-2">
-                    {{ $ump->perlu_verifikasi_keuangan ? 'Perlu verifikasi ulang oleh Keuangan' : 'Tidak perlu verifikasi ulang' }}
-                </span>
             </div>
         </div>
     </div>

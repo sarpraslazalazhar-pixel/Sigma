@@ -30,7 +30,6 @@ class Permohonan extends Model
         'catatan_over',
         'leveling_required_id',
         'butuh_direksi',
-        'perlu_verifikasi_keuangan',
         'verifikasi_keuangan_at',
         'verifikasi_keuangan_oleh',
         'submitted_at',
@@ -44,7 +43,6 @@ class Permohonan extends Model
             'total_diminta' => 'integer',
             'total_disetujui' => 'integer',
             'butuh_direksi' => 'boolean',
-            'perlu_verifikasi_keuangan' => 'boolean',
             'verifikasi_keuangan_at' => 'datetime',
             'submitted_at' => 'datetime',
         ];

@@ -33,6 +33,34 @@
         </div>
     @endif
 
+    @if ($ppd)
+        <div class="space-y-3 rounded-2xl border border-slate-300 bg-white p-4 sm:p-5">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <h2 class="break-all text-base font-bold text-[#0F2F57]">{{ $ppd->no_ppd }}</h2>
+                    <p class="text-sm text-slate-700">{{ $ppd->permohonan->nama_kegiatan }}</p>
+                    <p class="mt-1 text-sm tabular-nums text-slate-700">
+                        Rp {{ number_format($ppd->jumlah, 0, ',', '.') }} · {{ $ppd->tgl_cair?->format('d/m/Y') }}
+                    </p>
+                </div>
+                <a href="{{ route('pencairan.index') }}" wire:navigate class="inline-flex min-h-11 items-center text-sm font-semibold text-[#0F2F57] underline">
+                    Tutup detail PPD
+                </a>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="{{ route('pencairan.cetak-pdf', $ppd->id) }}" class="inline-flex min-h-11 max-w-full items-center rounded-full border border-slate-500 px-4 text-sm font-semibold text-[#0F2F57]">
+                    Buka PDF PPD
+                </a>
+                @foreach ($ppd->lampiran as $lampiran)
+                    <a href="{{ route('lampiran.show', $lampiran->id) }}" class="inline-flex min-h-11 max-w-full items-center break-all rounded-full border border-slate-500 px-4 text-sm text-[#0F2F57]">
+                        {{ $lampiran->original_name }}
+                    </a>
+                @endforeach
+            </div>
+        </div>
+        @include('livewire.keuangan.status-verifikasi', ['document' => $ppd, 'type' => 'pencairan'])
+    @endif
+
     {{-- Metrics Grid --}}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs">
@@ -206,7 +234,10 @@
                                     <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
-                                    {{ $item->no_ppd }}
+                                    <a href="{{ route('pencairan.index', ['ppd' => $item->id]) }}" wire:navigate
+                                        class="inline-flex min-h-11 items-center text-[#0F2F57] underline underline-offset-4">
+                                        {{ $item->no_ppd }}
+                                    </a>
                                 </span>
                             </td>
                             <td class="py-3 px-3.5 whitespace-nowrap">

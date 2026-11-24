@@ -78,7 +78,6 @@ class PencairanUmpModelTest extends TestCase
         $this->assertInstanceOf(Carbon::class, $pencairan->tgl_cair);
         $this->assertSame('2026-10-15', $pencairan->tgl_cair->toDateString());
         $this->assertSame(5000000, $pencairan->jumlah);
-        $this->assertFalse($pencairan->perlu_verifikasi_keuangan);
 
         $this->assertTrue($pencairan->permohonan->is($this->permohonan));
         $this->assertTrue($this->permohonan->pencairan->is($pencairan));
@@ -113,7 +112,6 @@ class PencairanUmpModelTest extends TestCase
             'kekurangan' => 0,
             'status' => 'draft',
             'jatuh_tempo' => '2026-10-30',
-            'perlu_verifikasi_keuangan' => true,
         ]);
 
         $this->assertDatabaseHas('ump', [
@@ -126,7 +124,6 @@ class PencairanUmpModelTest extends TestCase
         $this->assertSame('2026-10-16', $ump->tgl_terima->toDateString());
         $this->assertSame('2026-10-30', $ump->jatuh_tempo->toDateString());
         $this->assertSame(5000000, $ump->jumlah_total);
-        $this->assertTrue($ump->perlu_verifikasi_keuangan);
 
         $this->assertTrue($ump->pencairan->is($pencairan));
         $this->assertTrue($ump->pj->is($this->user));
@@ -234,7 +231,6 @@ class PencairanUmpModelTest extends TestCase
             'tgl_cair' => '2026-10-15',
             'jumlah' => 5000000,
             'status' => 'dicairkan',
-            'perlu_verifikasi_keuangan' => false,
         ]);
     }
 

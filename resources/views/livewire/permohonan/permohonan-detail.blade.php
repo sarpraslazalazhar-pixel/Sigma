@@ -107,6 +107,8 @@
         </div>
     @endif
 
+    @include('livewire.keuangan.status-verifikasi', ['document' => $permohonan, 'type' => 'permohonan'])
+
     {{-- OVER BUDGET ALERT BANNER --}}
     @if ($permohonan->catatan_over)
         <div class="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-1.5 shadow-2xs">

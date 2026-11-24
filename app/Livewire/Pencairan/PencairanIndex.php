@@ -10,8 +10,10 @@ use App\Models\Unit;
 use App\Services\AuditLogger;
 use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -38,8 +40,18 @@ class PencairanIndex extends Component
 
     public ?int $tahunAnggaranId = null;
 
-    public function mount(): void
+    #[Locked]
+    public ?int $fokusPpd = null;
+
+    public function mount(Request $request): void
     {
+        $ppd = $request->query('ppd');
+        if ($ppd !== null) {
+            $id = filter_var($ppd, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            abort_if($id === false, 404);
+            $this->fokusPpd = $id;
+        }
+
         $this->tahunAnggaranId = (int) session(
             'tahun_anggaran_id',
             TahunAnggaran::where('status', 'aktif')->value('id') ?? 0
@@ -170,6 +182,12 @@ class PencairanIndex extends Component
         $user = Auth::user();
         $isGlobal = $user && ($user->role === 'admin' || $user->role === 'keuangan' || $user->is_petugas_input);
 
+        $ppd = null;
+        if ($this->fokusPpd !== null) {
+            $ppd = Pencairan::with(['permohonan.unit', 'lampiran'])->findOrFail($this->fokusPpd);
+            abort_unless($ppd->permohonan && $user?->can('view', $ppd->permohonan), 403);
+        }
+
         $query = Pencairan::with(['permohonan.unit', 'permohonan.user', 'ump.pj'])
             ->orderBy('tgl_cair', 'desc');
 
@@ -246,6 +264,7 @@ class PencairanIndex extends Component
 
         return view('livewire.pencairan.pencairan-index', [
             'pencairans' => $pencairans,
+            'ppd' => $ppd,
             'units' => $units,
             'totalPpd' => $totalPpd,
             'totalNominal' => $totalNominal,
