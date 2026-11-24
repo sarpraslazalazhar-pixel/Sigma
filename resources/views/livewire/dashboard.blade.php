@@ -169,7 +169,7 @@
                     Rp {{ number_format($kpiRealisasi, 0, ',', '.') }}
                 </p>
             </div>
-            <p class="text-[10px] text-slate-400 mt-3 pt-2 border-t border-slate-100">Berdasarkan dokumen UMP selesai</p>
+            <p class="text-[10px] text-slate-400 mt-3 pt-2 border-t border-slate-100">Berdasarkan dokumen Laporan selesai</p>
         </div>
 
         {{-- Card 4: Sisa Tersedia --}}
@@ -227,7 +227,7 @@
                     Tren Pengeluaran & Keterikatan Dana Bulanan
                 </h2>
                 <p class="text-xs text-slate-500 mt-0.5">
-                    Perbandingan alokasi budget, dana terikat permohonan, dan realisasi UMP s.d. bulan dipilih
+                    Perbandingan alokasi budget, dana terikat permohonan, dan realisasi Laporan s.d. bulan dipilih
                 </p>
             </div>
             <div class="flex items-center gap-4 text-xs font-medium text-slate-600">
@@ -377,7 +377,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13l4 4L19 7" />
                         </svg>
                         <p class="text-xs font-semibold text-slate-700">Tidak ada dokumen pending</p>
-                        <p class="text-[11px] text-slate-400 mt-0.5">Semua permohonan dana dan laporan UMP untuk Anda telah tuntas diproses.</p>
+                        <p class="text-[11px] text-slate-400 mt-0.5">Semua permohonan dana dan laporan untuk Anda telah tuntas diproses.</p>
                     </div>
                 @else
                     <div class="divide-y divide-slate-100">
@@ -390,7 +390,7 @@
                                 <div class="min-w-0">
                                     <div class="flex items-center gap-2">
                                         <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase {{ $doc['jenis'] === 'ump' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800' }}">
-                                            {{ strtoupper($doc['jenis']) }}
+                                            {{ $doc['jenis'] === 'ump' ? 'LAPORAN' : strtoupper($doc['jenis']) }}
                                         </span>
                                         <span class="text-xs font-bold text-slate-900 truncate">{{ $doc['no_dokumen'] }}</span>
                                     </div>
@@ -563,7 +563,7 @@
                 labels: d.labels,
                 datasets: [
                     {
-                        label: 'Realisasi UMP',
+                        label: 'Realisasi Laporan',
                         data: d.realisasi,
                         backgroundColor: '#059669',
                         borderRadius: 6,

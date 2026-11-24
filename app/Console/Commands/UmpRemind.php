@@ -22,13 +22,13 @@ class UmpRemind extends Command
      *
      * @var string
      */
-    protected $description = 'Kirim notifikasi pengingat jatuh tempo UMP yang mendekati atau melewati tenggat.';
+    protected $description = 'Kirim notifikasi pengingat jatuh tempo Laporan yang mendekati atau melewati tenggat.';
 
     public function handle(): int
     {
         $tenggatHari = Setting::get('ump.tenggat_hari');
         if ($tenggatHari === null || (int) $tenggatHari === 0) {
-            $this->info('Fitur tenggat UMP nonaktif (ump.tenggat_hari kosong atau 0).');
+            $this->info('Fitur tenggat Laporan nonaktif (ump.tenggat_hari kosong atau 0).');
 
             return Command::SUCCESS;
         }
@@ -51,10 +51,10 @@ class UmpRemind extends Command
             if ($diffDays < 0) {
                 $statusTenggat = 'lewat';
                 $hariLewat = abs($diffDays);
-                $pesan = "Laporan UMP No. PPD {$ump->pencairan?->no_ppd} telah melewati jatuh tempo ({$ump->jatuh_tempo}) sebanyak {$hariLewat} hari.";
+                $pesan = "Laporan No. PPD {$ump->pencairan?->no_ppd} telah melewati jatuh tempo ({$ump->jatuh_tempo}) sebanyak {$hariLewat} hari.";
             } elseif ($diffDays <= $pengingatHari) {
                 $statusTenggat = 'mendekati';
-                $pesan = "Laporan UMP No. PPD {$ump->pencairan?->no_ppd} mendekati batas waktu jatuh tempo ({$ump->jatuh_tempo}). Sisa {$diffDays} hari.";
+                $pesan = "Laporan No. PPD {$ump->pencairan?->no_ppd} mendekati batas waktu jatuh tempo ({$ump->jatuh_tempo}). Sisa {$diffDays} hari.";
             }
 
             if ($statusTenggat !== null) {
@@ -89,7 +89,7 @@ class UmpRemind extends Command
             }
         }
 
-        $this->info("Pengingat UMP selesai diproses. Notifikasi terkirim/terverifikasi: {$count}.");
+        $this->info("Pengingat Laporan selesai diproses. Notifikasi terkirim/terverifikasi: {$count}.");
 
         return Command::SUCCESS;
     }

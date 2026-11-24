@@ -181,7 +181,7 @@
                                     </svg>
                                     <span class="truncate">Pencairan PPD</span>
                                 </a>
-                                {{-- Laporan UMP --}}
+                                {{-- Laporan --}}
                                 <a
                                     href="{{ route('ump.index') }}"
                                     wire:navigate
@@ -191,7 +191,7 @@
                                     <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                                     </svg>
-                                    <span class="truncate">Laporan UMP</span>
+                                    <span class="truncate">Laporan</span>
                                 </a>
 
                                 {{-- Verifikasi Keuangan --}}
@@ -412,7 +412,7 @@
                                 @elseif (request()->routeIs('pencairan.*'))
                                     Pencairan PPD
                                 @elseif (request()->routeIs('ump.*'))
-                                    Laporan UMP
+                                    Laporan
                                 @elseif (request()->routeIs('laporan.*'))
                                     Laporan & Monitoring
                                 @elseif (request()->routeIs('master.pengaturan'))
@@ -438,7 +438,7 @@
                                 @elseif (request()->routeIs('pencairan.*'))
                                     Pencairan Kas & Bank
                                 @elseif (request()->routeIs('ump.*'))
-                                    Pertanggungjawaban Uang Muka
+                                    Laporan Penggunaan Dana
                                 @elseif (request()->routeIs('laporan.pengeluaran-bulanan'))
                                     Pengeluaran Bulanan
                                 @elseif (request()->routeIs('laporan.monitoring'))

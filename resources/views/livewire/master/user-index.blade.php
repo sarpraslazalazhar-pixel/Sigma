@@ -6,7 +6,7 @@
                 Manajemen Pengguna & Leveling
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Kelola akun personel kedinasan, penetapan peran (role), divisi unit kerja, dan hak persetujuan leveling.
+                Kelola akun personel kedinasan, struktur atasan langsung, divisi unit kerja, dan hak persetujuan leveling.
             </p>
         </div>
 
@@ -46,7 +46,7 @@
 
     {{-- Filter & Search Bar --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs space-y-3">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             {{-- Search Input --}}
             <div class="sm:col-span-2 relative">
                 <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
@@ -60,6 +60,31 @@
                     placeholder="Cari nama, username, email, jabatan..."
                     class="block w-full min-h-[44px] pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900 placeholder:text-slate-400 bg-white focus:border-[#1E60D5] focus:outline-hidden"
                 />
+            </div>
+
+            {{-- Divisi / Unit Filter --}}
+            <div>
+                <x-searchable-select
+                    wire:model.live="unitFilter"
+                    :options="$units"
+                    placeholder="Semua Divisi / Unit"
+                    null-label="Semua Divisi / Unit"
+                    search-placeholder="Cari divisi atau unit..."
+                />
+            </div>
+
+            {{-- Leveling Filter --}}
+            <div>
+                <select
+                    wire:model.live="levelingFilter"
+                    class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-700 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
+                >
+                    <option value="">Semua Leveling</option>
+                    @foreach ($levelings as $lvl)
+                        <option value="{{ $lvl->id }}">L{{ $lvl->urutan }} : {{ $lvl->nama }}</option>
+                    @endforeach
+                    <option value="none">Staf (Tanpa Leveling)</option>
+                </select>
             </div>
 
             {{-- Role Filter --}}
@@ -76,17 +101,6 @@
                 </select>
             </div>
 
-            {{-- Divisi / Unit Filter --}}
-            <div>
-                <x-searchable-select
-                    wire:model.live="unitFilter"
-                    :options="$units"
-                    placeholder="Semua Divisi / Unit"
-                    null-label="Semua Divisi / Unit"
-                    search-placeholder="Cari divisi atau unit..."
-                />
-            </div>
-
             {{-- Status Filter --}}
             <div>
                 <select
@@ -99,115 +113,237 @@
                 </select>
             </div>
         </div>
+
+        {{-- Toolbar Urutan Tampilan & Counter --}}
+        <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+            <p class="text-slate-500 tabular-nums">
+                Menampilkan <strong class="text-slate-800">{{ $users->count() }}</strong> personel
+                @if ($viewMode === 'hierarchy')
+                    · diurutkan berdasarkan struktur Divisi → Unit → Atasan & Tim
+                @else
+                    · diurutkan alfabetis A–Z
+                @endif
+            </p>
+
+            <div class="inline-flex items-center p-1 rounded-full bg-slate-100 border border-slate-200 self-start sm:self-auto">
+                <button
+                    type="button"
+                    wire:click="setViewMode('hierarchy')"
+                    class="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors cursor-pointer {{ $viewMode === 'hierarchy' ? 'bg-[#0F2F57] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900' }}"
+                >
+                    Urut Struktur
+                </button>
+                <button
+                    type="button"
+                    wire:click="setViewMode('alphabetical')"
+                    class="px-3 py-1 rounded-full text-[11px] font-semibold transition-colors cursor-pointer {{ $viewMode === 'alphabetical' ? 'bg-[#0F2F57] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900' }}"
+                >
+                    Alfabetis A–Z
+                </button>
+            </div>
+        </div>
     </div>
 
     {{-- VIEW 1: TAMPILAN MOBILE-FIRST (Card View, < 1024px) --}}
     <div class="block lg:hidden space-y-3">
-        @forelse ($users as $user)
-            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3 {{ !$user->is_active ? 'opacity-60 bg-slate-50' : '' }}">
-                {{-- Header Card: Avatar & Name --}}
-                <div class="flex items-start justify-between gap-2.5">
-                    <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-10 h-10 rounded-full bg-[#0F2F57] text-white flex items-center justify-center font-bold text-sm shrink-0">
-                            {{ strtoupper(substr($user->name, 0, 1)) }}
+        @if ($viewMode === 'hierarchy' && $userGroups->isNotEmpty())
+            @foreach ($userGroups as $group)
+                @if ($group['show_divisi_banner'])
+                    <div class="pt-2">
+                        <div class="px-3.5 py-2 rounded-xl bg-[#DCE5F6] text-[#001B3E] flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                @if ($group['divisi'])
+                                    <span class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#0F2F57] text-white shrink-0">
+                                        {{ $group['divisi']->kode }}
+                                    </span>
+                                    <span class="text-xs font-bold truncate">{{ $group['divisi']->nama }}</span>
+                                @else
+                                    <span class="text-xs font-bold truncate">Umum / Belum Ditugaskan</span>
+                                @endif
+                            </div>
+                            <span class="text-[10px] font-semibold text-[#0F2F57] shrink-0 tabular-nums">
+                                {{ $group['divisi_total'] }} orang
+                            </span>
                         </div>
-                        <div class="min-w-0">
-                            <h2 class="text-sm font-bold text-slate-900 truncate">
-                                {{ $user->name }}
-                            </h2>
-                            <p class="text-xs text-slate-500 truncate font-mono">
-                                {{ $user->username }}
-                            </p>
+                    </div>
+                @endif
+
+                @if ($group['unit'] && $group['unit']->tipe === 'unit')
+                    <div class="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="text-slate-400 text-xs">└</span>
+                            <span class="font-mono text-[10px] font-bold text-slate-700">{{ $group['unit']->kode }}</span>
+                            <span class="text-xs font-semibold text-slate-800 truncate">{{ $group['unit']->nama }}</span>
+                        </div>
+                        <span class="text-[10px] font-medium text-slate-500 shrink-0 tabular-nums">
+                            {{ $group['users']->count() }}
+                        </span>
+                    </div>
+                @endif
+
+                @foreach ($group['users'] as $user)
+                    @php
+                        $lvlOrder = (int) ($user->leveling?->urutan ?? 0);
+                        $avatarBg = match (true) {
+                            $lvlOrder >= 3 => 'bg-[#0F2F57]',
+                            $lvlOrder === 2 => 'bg-[#1E60D5]',
+                            $lvlOrder === 1 && ! $user->isAdmin() => 'bg-[#006C4C]',
+                            default => 'bg-slate-500',
+                        };
+                        $mobileIndent = match (true) {
+                            $user->hierarchyDepth >= 2 => 'ml-5 border-l-4 border-l-slate-300',
+                            $user->hierarchyDepth === 1 => 'ml-2.5 border-l-4 border-l-[#006C4C]/60',
+                            default => 'border-l-4 border-l-[#0F2F57]',
+                        };
+                    @endphp
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3 {{ $mobileIndent }} {{ !$user->is_active ? 'opacity-60 bg-slate-50' : '' }}">
+                        {{-- Header Card: Avatar & Name --}}
+                        <div class="flex items-start justify-between gap-2.5">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-10 h-10 rounded-full {{ $avatarBg }} text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                    {{ strtoupper(substr($user->name, 0, 1)) }}
+                                </div>
+                                <div class="min-w-0">
+                                    <h2 class="text-sm font-bold text-slate-900 truncate">
+                                        {{ $user->name }}
+                                    </h2>
+                                    <p class="text-xs text-slate-500 truncate font-mono">
+                                        {{ $user->username }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {{-- Status Badge --}}
+                            <div>
+                                @if ($user->is_active)
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        Aktif
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                        Nonaktif
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+
+                        {{-- Badges & Role --}}
+                        <div class="flex items-center gap-1.5 flex-wrap text-xs">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold text-[10px] bg-[#DCE5F6] text-[#001B3E]">
+                                {{ strtoupper($user->role) }}
+                            </span>
+                            @if ($user->leveling)
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                                    L{{ $user->leveling->urutan }} : {{ $user->leveling->nama }}
+                                </span>
+                            @endif
+                            @if ($user->is_petugas_input)
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-[10px] bg-amber-50 text-amber-800 border border-amber-200">
+                                    Petugas Keuangan
+                                </span>
+                            @endif
+                        </div>
+
+                        {{-- Info Grid --}}
+                        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                            <div class="p-2 rounded-xl bg-slate-50">
+                                <span class="text-[10px] text-slate-400 block">Jabatan</span>
+                                <span class="font-semibold text-slate-800 mt-0.5 block truncate">
+                                    {{ $user->jabatan ?? 'Staf' }}
+                                </span>
+                            </div>
+                            <div class="p-2 rounded-xl bg-slate-50">
+                                <span class="text-[10px] text-slate-400 block">Atasan Langsung</span>
+                                <span class="font-semibold text-slate-800 mt-0.5 block truncate">
+                                    {{ $user->atasan?->name ?? '—' }}
+                                </span>
+                            </div>
+                            <div class="col-span-2 p-2 rounded-xl bg-slate-50">
+                                <span class="text-[10px] text-slate-400 block">Email Kedinasan</span>
+                                <span class="text-slate-700 mt-0.5 block truncate">
+                                    {{ $user->email }}
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- Action Row (Tap targets >= 44px) --}}
+                        <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                wire:click="openResetPasswordModal({{ $user->id }})"
+                                class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                            >
+                                Reset Password
+                            </button>
+
+                            <button
+                                type="button"
+                                wire:click="openEditModal({{ $user->id }})"
+                                class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                            >
+                                Edit
+                            </button>
+
+                            @if ($user->id !== auth()->id())
+                                <button
+                                    type="button"
+                                    wire:click="toggleActive({{ $user->id }})"
+                                    class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold {{ $user->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer"
+                                >
+                                    {{ $user->is_active ? 'Nonaktif' : 'Aktifkan' }}
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            @endforeach
+        @else
+            @forelse ($users as $user)
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3 {{ !$user->is_active ? 'opacity-60 bg-slate-50' : '' }}">
+                    <div class="flex items-start justify-between gap-2.5">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-10 h-10 rounded-full bg-[#0F2F57] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                {{ strtoupper(substr($user->name, 0, 1)) }}
+                            </div>
+                            <div class="min-w-0">
+                                <h2 class="text-sm font-bold text-slate-900 truncate">{{ $user->name }}</h2>
+                                <p class="text-xs text-slate-500 truncate font-mono">{{ $user->username }}</p>
+                            </div>
+                        </div>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold {{ $user->is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' }}">
+                            {{ $user->is_active ? 'Aktif' : 'Nonaktif' }}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+                        <div class="p-2 rounded-xl bg-slate-50">
+                            <span class="text-[10px] text-slate-400 block">Divisi / Unit</span>
+                            <span class="font-semibold text-slate-800 mt-0.5 block truncate">
+                                {{ $user->unit ? $user->unit->kode . ' - ' . $user->unit->nama : 'Belum Ditugaskan' }}
+                            </span>
+                        </div>
+                        <div class="p-2 rounded-xl bg-slate-50">
+                            <span class="text-[10px] text-slate-400 block">Atasan Langsung</span>
+                            <span class="font-semibold text-slate-800 mt-0.5 block truncate">
+                                {{ $user->atasan?->name ?? '—' }}
+                            </span>
                         </div>
                     </div>
 
-                    {{-- Status Badge --}}
-                    <div>
-                        @if ($user->is_active)
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                Aktif
-                            </span>
-                        @else
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
-                                Nonaktif
-                            </span>
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
+                        <button type="button" wire:click="openResetPasswordModal({{ $user->id }})" class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer">Reset Password</button>
+                        <button type="button" wire:click="openEditModal({{ $user->id }})" class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer">Edit</button>
+                        @if ($user->id !== auth()->id())
+                            <button type="button" wire:click="toggleActive({{ $user->id }})" class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold {{ $user->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer">{{ $user->is_active ? 'Nonaktif' : 'Aktifkan' }}</button>
                         @endif
                     </div>
                 </div>
-
-                {{-- Badges & Role --}}
-                <div class="flex items-center gap-1.5 flex-wrap text-xs">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold text-[10px] bg-[#DCE5F6] text-[#001B3E]">
-                        {{ strtoupper($user->role) }}
-                    </span>
-                    @if ($user->leveling)
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full font-semibold text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
-                            L{{ $user->leveling->urutan }} : {{ $user->leveling->nama }}
-                        </span>
-                    @endif
-                    @if ($user->is_petugas_input)
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-[10px] bg-amber-50 text-amber-800 border border-amber-200">
-                            Petugas Keuangan
-                        </span>
-                    @endif
+            @empty
+                <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
+                    Tidak ada pengguna yang sesuai dengan kriteria filter.
                 </div>
-
-                {{-- Info Grid --}}
-                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
-                    <div class="p-2 rounded-xl bg-slate-50">
-                        <span class="text-[10px] text-slate-400 block">Divisi / Unit</span>
-                        <span class="font-semibold text-slate-800 mt-0.5 block truncate">
-                            {{ $user->unit ? $user->unit->kode . ' - ' . $user->unit->nama : 'Belum Ditugaskan' }}
-                        </span>
-                    </div>
-                    <div class="p-2 rounded-xl bg-slate-50">
-                        <span class="text-[10px] text-slate-400 block">Jabatan</span>
-                        <span class="font-semibold text-slate-800 mt-0.5 block truncate">
-                            {{ $user->jabatan ?? 'Staf' }}
-                        </span>
-                    </div>
-                    <div class="col-span-2 p-2 rounded-xl bg-slate-50">
-                        <span class="text-[10px] text-slate-400 block">Email Kedinasan</span>
-                        <span class="text-slate-700 mt-0.5 block truncate">
-                            {{ $user->email }}
-                        </span>
-                    </div>
-                </div>
-
-                {{-- Action Row (Tap targets >= 44px) --}}
-                <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
-                    <button
-                        type="button"
-                        wire:click="openResetPasswordModal({{ $user->id }})"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                    >
-                        Reset Password
-                    </button>
-
-                    <button
-                        type="button"
-                        wire:click="openEditModal({{ $user->id }})"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
-                    >
-                        Edit
-                    </button>
-
-                    @if ($user->id !== auth()->id())
-                        <button
-                            type="button"
-                            wire:click="toggleActive({{ $user->id }})"
-                            class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold {{ $user->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer"
-                        >
-                            {{ $user->is_active ? 'Nonaktif' : 'Aktifkan' }}
-                        </button>
-                    @endif
-                </div>
-            </div>
-        @empty
-            <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
-                Tidak ada pengguna yang sesuai dengan kriteria filter.
-            </div>
-        @endforelse
+            @endforelse
+        @endif
     </div>
 
     {{-- VIEW 2: TAMPILAN DESKTOP (M3 Table, >= 1024px) --}}
@@ -215,135 +351,262 @@
         <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                 <tr>
-                    <th class="py-3.5 px-4">Nama & Username</th>
-                    <th class="py-3.5 px-4">Email</th>
-                    <th class="py-3.5 px-3 text-center">Role</th>
-                    <th class="py-3.5 px-4">Divisi / Unit</th>
+                    <th class="py-3.5 px-4">Nama & Struktur Tim</th>
+                    <th class="py-3.5 px-4">Jabatan & Atasan</th>
                     <th class="py-3.5 px-4">Leveling</th>
-                    <th class="py-3.5 px-4">Jabatan</th>
+                    <th class="py-3.5 px-3 text-center">Role</th>
+                    <th class="py-3.5 px-4">Email</th>
                     <th class="py-3.5 px-3 text-center">Status</th>
                     <th class="py-3.5 px-4 text-right">Aksi</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-                @forelse ($users as $user)
-                    <tr class="hover:bg-slate-50/80 transition-colors {{ !$user->is_active ? 'opacity-50 bg-slate-50/50' : '' }}">
-                        {{-- Nama & Avatar --}}
-                        <td class="py-3.5 px-4">
-                            <div class="flex items-center gap-2.5">
-                                <div class="w-8 h-8 rounded-full bg-[#0F2F57] text-white flex items-center justify-center font-bold text-xs shrink-0">
-                                    {{ strtoupper(substr($user->name, 0, 1)) }}
+                @if ($viewMode === 'hierarchy' && $userGroups->isNotEmpty())
+                    @foreach ($userGroups as $group)
+                        @if ($group['show_divisi_banner'])
+                            <tr class="bg-[#DCE5F6]/50 border-t border-slate-200">
+                                <td colspan="7" class="py-2.5 px-4">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2">
+                                            @if ($group['divisi'])
+                                                <span class="px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-[#0F2F57] text-white">
+                                                    {{ $group['divisi']->kode }}
+                                                </span>
+                                                <span class="font-bold text-[#0F2F57] text-xs">
+                                                    {{ $group['divisi']->nama }}
+                                                </span>
+                                            @else
+                                                <span class="font-bold text-slate-700 text-xs">
+                                                    Umum / Belum Ditugaskan ke Unit
+                                                </span>
+                                            @endif
+                                        </div>
+                                        <span class="text-[11px] font-semibold text-[#0F2F57]/80 tabular-nums">
+                                            {{ $group['divisi_total'] }} Personel
+                                        </span>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @if ($group['unit'] && $group['unit']->tipe === 'unit')
+                            <tr class="bg-slate-50/90">
+                                <td colspan="7" class="py-2 px-4 pl-6">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-slate-300 font-mono">└</span>
+                                            <span class="px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold bg-white border border-slate-200 text-slate-700">
+                                                {{ $group['unit']->kode }}
+                                            </span>
+                                            <span class="font-semibold text-slate-700">
+                                                {{ $group['unit']->nama }}
+                                            </span>
+                                        </div>
+                                        <span class="text-[11px] text-slate-500 tabular-nums">
+                                            {{ $group['users']->count() }} orang
+                                        </span>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @foreach ($group['users'] as $user)
+                            @php
+                                $lvlOrder = (int) ($user->leveling?->urutan ?? 0);
+                                $avatarBg = match (true) {
+                                    $lvlOrder >= 3 => 'bg-[#0F2F57]',
+                                    $lvlOrder === 2 => 'bg-[#1E60D5]',
+                                    $lvlOrder === 1 && ! $user->isAdmin() => 'bg-[#006C4C]',
+                                    default => 'bg-slate-500',
+                                };
+                                $indentClass = match (true) {
+                                    $user->hierarchyDepth >= 3 => 'pl-16',
+                                    $user->hierarchyDepth === 2 => 'pl-11',
+                                    $user->hierarchyDepth === 1 => 'pl-6',
+                                    default => '',
+                                };
+                            @endphp
+                            <tr class="hover:bg-slate-50/80 transition-colors {{ !$user->is_active ? 'opacity-50 bg-slate-50/50' : '' }}">
+                                {{-- Nama & Indikator Pohon --}}
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2 {{ $indentClass }}">
+                                        @if ($user->hierarchyDepth > 0)
+                                            <span class="text-slate-300 font-mono select-none shrink-0">└</span>
+                                        @endif
+                                        <div class="w-8 h-8 rounded-full {{ $avatarBg }} text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                            {{ strtoupper(substr($user->name, 0, 1)) }}
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="font-bold text-slate-900">{{ $user->name }}</p>
+                                            <p class="text-[11px] text-slate-400 font-mono">{{ $user->username }}</p>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                {{-- Jabatan & Atasan --}}
+                                <td class="py-3 px-4 text-slate-700">
+                                    <p class="font-medium text-slate-900">{{ $user->jabatan ?? '-' }}</p>
+                                    <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                        @if ($user->atasan)
+                                            <span class="text-[11px] text-slate-400">
+                                                Atasan: <span class="text-slate-600 font-medium">{{ $user->atasan->name }}</span>
+                                            </span>
+                                        @endif
+                                        @if ($user->is_petugas_input)
+                                            <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                                Petugas Keuangan
+                                            </span>
+                                        @endif
+                                    </div>
+                                </td>
+
+                                {{-- Leveling --}}
+                                <td class="py-3 px-4 text-slate-700 whitespace-nowrap">
+                                    @if ($user->leveling)
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                            L{{ $user->leveling->urutan }} : {{ $user->leveling->nama }}
+                                        </span>
+                                    @else
+                                        <span class="text-slate-400 text-[11px]">Staf</span>
+                                    @endif
+                                </td>
+
+                                {{-- Role --}}
+                                <td class="py-3 px-3 text-center whitespace-nowrap">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-[10px] bg-[#DCE5F6] text-[#001B3E]">
+                                        {{ strtoupper($user->role) }}
+                                    </span>
+                                </td>
+
+                                {{-- Email --}}
+                                <td class="py-3 px-4 text-slate-600">
+                                    {{ $user->email }}
+                                </td>
+
+                                {{-- Status --}}
+                                <td class="py-3 px-3 text-center whitespace-nowrap">
+                                    @if ($user->is_active)
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            Aktif
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                            Nonaktif
+                                        </span>
+                                    @endif
+                                </td>
+
+                                {{-- Aksi --}}
+                                <td class="py-3 px-4 text-right whitespace-nowrap">
+                                    <div class="inline-flex items-center gap-1.5 justify-end">
+                                        <button
+                                            type="button"
+                                            wire:click="openResetPasswordModal({{ $user->id }})"
+                                            class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                            title="Reset Password"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                            </svg>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            wire:click="openEditModal({{ $user->id }})"
+                                            class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
+                                            title="Edit Pengguna"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+
+                                        @if ($user->id !== auth()->id())
+                                            <button
+                                                type="button"
+                                                wire:click="toggleActive({{ $user->id }})"
+                                                class="p-1.5 rounded-lg {{ $user->is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50' }} transition-colors cursor-pointer"
+                                                title="{{ $user->is_active ? 'Nonaktifkan Akun' : 'Aktifkan Akun' }}"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                                </svg>
+                                            </button>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    @endforeach
+                @else
+                    @forelse ($users as $user)
+                        <tr class="hover:bg-slate-50/80 transition-colors {{ !$user->is_active ? 'opacity-50 bg-slate-50/50' : '' }}">
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-full bg-[#0F2F57] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                        {{ strtoupper(substr($user->name, 0, 1)) }}
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-slate-900">{{ $user->name }}</p>
+                                        <p class="text-[11px] text-slate-400 font-mono">
+                                            {{ $user->username }}
+                                            @if ($user->unit)
+                                                · {{ $user->unit->kode }}
+                                            @endif
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p class="font-bold text-slate-900">{{ $user->name }}</p>
-                                    <p class="text-[11px] text-slate-400 font-mono">{{ $user->username }}</p>
-                                </div>
-                            </div>
-                        </td>
-
-                        {{-- Email --}}
-                        <td class="py-3.5 px-4 text-slate-600">
-                            {{ $user->email }}
-                        </td>
-
-                        {{-- Role --}}
-                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-[10px] bg-[#DCE5F6] text-[#001B3E]">
-                                {{ strtoupper($user->role) }}
-                            </span>
-                        </td>
-
-                        {{-- Divisi --}}
-                        <td class="py-3.5 px-4 text-slate-700">
-                            @if ($user->unit)
-                                <span class="font-semibold text-slate-900">{{ $user->unit->kode }}</span>
-                                <span class="text-slate-400 text-[11px]"> - {{ $user->unit->nama }}</span>
-                            @else
-                                <span class="text-slate-300">Belum diatur</span>
-                            @endif
-                        </td>
-
-                        {{-- Leveling --}}
-                        <td class="py-3.5 px-4 text-slate-700">
-                            @if ($user->leveling)
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                                    L{{ $user->leveling->urutan }} : {{ $user->leveling->nama }}
-                                </span>
-                            @else
-                                <span class="text-slate-300">Tidak ada</span>
-                            @endif
-                        </td>
-
-                        {{-- Jabatan & Flag --}}
-                        <td class="py-3.5 px-4 text-slate-700">
-                            <p class="font-medium text-slate-900">{{ $user->jabatan ?? '-' }}</p>
-                            @if ($user->is_petugas_input)
-                                <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 mt-0.5">
-                                    Petugas Keuangan
-                                </span>
-                            @endif
-                        </td>
-
-                        {{-- Status --}}
-                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
-                            @if ($user->is_active)
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    Aktif
-                                </span>
-                            @else
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
-                                    Nonaktif
-                                </span>
-                            @endif
-                        </td>
-
-                        {{-- Aksi --}}
-                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div class="inline-flex items-center gap-1.5 justify-end">
-                                <button
-                                    type="button"
-                                    wire:click="openResetPasswordModal({{ $user->id }})"
-                                    class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
-                                    title="Reset Password"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                                    </svg>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    wire:click="openEditModal({{ $user->id }})"
-                                    class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors"
-                                    title="Edit Pengguna"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                </button>
-
-                                @if ($user->id !== auth()->id())
-                                    <button
-                                        type="button"
-                                        wire:click="toggleActive({{ $user->id }})"
-                                        class="p-1.5 rounded-lg {{ $user->is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50' }} transition-colors"
-                                        title="{{ $user->is_active ? 'Nonaktifkan Akun' : 'Aktifkan Akun' }}"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                        </svg>
-                                    </button>
+                            </td>
+                            <td class="py-3.5 px-4 text-slate-700">
+                                <p class="font-medium text-slate-900">{{ $user->jabatan ?? '-' }}</p>
+                                @if ($user->atasan)
+                                    <p class="text-[11px] text-slate-400">Atasan: {{ $user->atasan->name }}</p>
                                 @endif
-                            </div>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="8" class="py-8 text-center text-slate-500">
-                            Tidak ada data pengguna yang sesuai.
-                        </td>
-                    </tr>
-                @endforelse
+                            </td>
+                            <td class="py-3.5 px-4 text-slate-700 whitespace-nowrap">
+                                @if ($user->leveling)
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                        L{{ $user->leveling->urutan }} : {{ $user->leveling->nama }}
+                                    </span>
+                                @else
+                                    <span class="text-slate-400 text-[11px]">Staf</span>
+                                @endif
+                            </td>
+                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold text-[10px] bg-[#DCE5F6] text-[#001B3E]">
+                                    {{ strtoupper($user->role) }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4 text-slate-600">{{ $user->email }}</td>
+                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold {{ $user->is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' }}">
+                                    {{ $user->is_active ? 'Aktif' : 'Nonaktif' }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                                <div class="inline-flex items-center gap-1.5 justify-end">
+                                    <button type="button" wire:click="openResetPasswordModal({{ $user->id }})" class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" title="Reset Password">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                    </button>
+                                    <button type="button" wire:click="openEditModal({{ $user->id }})" class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer" title="Edit Pengguna">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    </button>
+                                    @if ($user->id !== auth()->id())
+                                        <button type="button" wire:click="toggleActive({{ $user->id }})" class="p-1.5 rounded-lg {{ $user->is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50' }} transition-colors cursor-pointer" title="{{ $user->is_active ? 'Nonaktifkan Akun' : 'Aktifkan Akun' }}">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                                        </button>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="7" class="py-8 text-center text-slate-500">
+                                Tidak ada data pengguna yang sesuai.
+                            </td>
+                        </tr>
+                    @endforelse
+                @endif
             </tbody>
         </table>
     </div>
@@ -362,7 +625,7 @@
                     <button
                         type="button"
                         wire:click="$set('showModal', false)"
-                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -486,7 +749,7 @@
                                 Unit / Divisi Kerja
                             </label>
                             <x-searchable-select
-                                wire:model="form_unit_id"
+                                wire:model.live="form_unit_id"
                                 :options="$units"
                                 placeholder="Pilih Unit / Divisi Kerja..."
                                 null-label="Tanpa Divisi (Umum / Global)"
@@ -512,6 +775,27 @@
                         </div>
                     </div>
 
+                    {{-- Atasan Langsung --}}
+                    <div wire:key="atasan-select-{{ $editingId ?? 'new' }}-{{ $form_unit_id ?? 'none' }}">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">
+                            Atasan Langsung (Struktur Tim)
+                        </label>
+                        <x-searchable-select
+                            wire:model="form_atasan_id"
+                            :options="$atasanOptions"
+                            placeholder="Pilih Atasan Langsung (Koordinator / Manajer / Kadiv)..."
+                            null-label="Tanpa Atasan Langsung (Pimpinan Puncak)"
+                            search-placeholder="Cari nama atau jabatan atasan..."
+                            :nullable="true"
+                        />
+                        <p class="text-[11px] text-slate-400 mt-1">
+                            Menentukan pengelompokan tim dan urutan hierarki (contoh: Staf IT → Koordinator IT → Manajer Unit).
+                        </p>
+                        @error('form_atasan_id')
+                            <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                        @enderror
+                    </div>
+
                     {{-- Jabatan --}}
                     <div>
                         <label for="form_jabatan" class="block text-xs font-semibold text-slate-700 mb-1">
@@ -521,9 +805,12 @@
                             type="text"
                             id="form_jabatan"
                             wire:model="form_jabatan"
-                            placeholder="Contoh: Manager HRD / Staf TU Sekretariat"
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
+                            placeholder="Contoh: Manager Kelembagaan / Staf TU Sekretariat"
+                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('form_jabatan') border-red-500 @enderror"
                         />
+                        @error('form_jabatan')
+                            <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                        @enderror
                     </div>
 
                     {{-- Checkboxes --}}
@@ -552,7 +839,7 @@
                         <button
                             type="button"
                             wire:click="$set('showModal', false)"
-                            class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                            class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                         >
                             Batal
                         </button>
@@ -582,7 +869,7 @@
                     <button
                         type="button"
                         wire:click="$set('showResetPasswordModal', false)"
-                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                     >
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -617,7 +904,7 @@
                         <button
                             type="button"
                             wire:click="$set('showResetPasswordModal', false)"
-                            class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                            class="min-h-[44px] px-4 py-2.5 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                         >
                             Batal
                         </button>

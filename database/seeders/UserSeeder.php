@@ -21,12 +21,15 @@ class UserSeeder extends Seeder
         $divKeu = Unit::where('kode', 'DIV-KEU')->first();
         $untKeuKlr = Unit::where('kode', 'UNT-KEU-KLR')->first();
         $untKeuAkn = Unit::where('kode', 'UNT-KEU-AKN')->first();
+        $untKeuTrm = Unit::where('kode', 'UNT-KEU-TRM')->first();
 
         $divFnd = Unit::where('kode', 'DIV-FND')->first();
         $untFndInt = Unit::where('kode', 'UNT-FND-INT')->first();
         $untFndEks = Unit::where('kode', 'UNT-FND-EKS')->first();
 
+        $divPrg = Unit::where('kode', 'DIV-PRG')->first();
         $untPrgInt = Unit::where('kode', 'UNT-PRG-INT')->first();
+        $divWkf = Unit::where('kode', 'DIV-WKF')->first();
         $untWkfInt = Unit::where('kode', 'UNT-WKF-INT')->first();
 
         $untKpwJtg = Unit::where('kode', 'UNT-FND-KPW-JTG')->first();
@@ -76,7 +79,7 @@ class UserSeeder extends Seeder
                 'role' => 'unit',
                 'unit_id' => $untSekHum?->id,
                 'leveling_id' => $lvlManager?->id,
-                'jabatan' => 'Manager Humas, IT, dan GA',
+                'jabatan' => 'Manager Humas, GA, dan IT',
                 'status_kepegawaian' => 'Tetap',
                 'is_petugas_input' => false,
                 'is_active' => true,
@@ -102,7 +105,7 @@ class UserSeeder extends Seeder
                 'role' => 'unit',
                 'unit_id' => $untSekDkl?->id,
                 'leveling_id' => $lvlSupervisor?->id,
-                'jabatan' => 'Koordinator Sekretariat',
+                'jabatan' => 'Koordinator Diklat Litbang',
                 'status_kepegawaian' => 'Tetap',
                 'is_petugas_input' => false,
                 'is_active' => true,
@@ -154,7 +157,7 @@ class UserSeeder extends Seeder
                 'role' => 'unit',
                 'unit_id' => $untSekHum?->id,
                 'leveling_id' => $lvlSupervisor?->id,
-                'jabatan' => 'Koordinator Komunikasi',
+                'jabatan' => 'Koordinator Humas',
                 'status_kepegawaian' => 'Tetap',
                 'is_petugas_input' => false,
                 'is_active' => true,
@@ -182,6 +185,19 @@ class UserSeeder extends Seeder
                 'leveling_id' => null,
                 'jabatan' => 'Staf IT Support',
                 'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'Gibran Deniz Heryadi',
+                'username' => 'gibran.heryadi',
+                'email' => 'gibran.heryadi@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untSekHum?->id,
+                'leveling_id' => null,
+                'jabatan' => 'Relawan IT Developer',
+                'status_kepegawaian' => 'Relawan',
                 'is_petugas_input' => false,
                 'is_active' => true,
             ],
@@ -408,6 +424,19 @@ class UserSeeder extends Seeder
                 'is_petugas_input' => false,
                 'is_active' => true,
             ],
+            [
+                'name' => 'Manager Penerimaan Keuangan',
+                'username' => 'manager.keuangan.terima',
+                'email' => 'manager.terima@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'keuangan',
+                'unit_id' => $untKeuTrm?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Penerimaan Keuangan',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
 
             // 3. Divisi Fundraising & Partnership
             [
@@ -452,6 +481,19 @@ class UserSeeder extends Seeder
 
             // 4. Divisi Program
             [
+                'name' => 'Kepala Divisi Program',
+                'username' => 'kadiv.program',
+                'email' => 'kadiv.program@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $divPrg?->id,
+                'leveling_id' => $lvlKadiv?->id,
+                'jabatan' => 'Kepala Divisi Program LAZ Al Azhar',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
                 'name' => 'Manager Program LAZ Al Azhar',
                 'username' => 'manager.program',
                 'email' => 'manager.program@alazharpeduli.or.id',
@@ -472,10 +514,24 @@ class UserSeeder extends Seeder
                 'email' => 'direktur.wakaf@alazharpeduli.or.id',
                 'password' => $defaultPassword,
                 'role' => 'unit',
-                'unit_id' => $untWkfInt?->id,
+                'unit_id' => $divWkf?->id,
                 'leveling_id' => $lvlKadiv?->id,
                 'jabatan' => 'Kepala Divisi Wakaf / Direktur Wakaf',
                 'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'Manager Wakaf',
+                'username' => 'manager.wakaf',
+                'email' => 'manager.wakaf@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untWkfInt?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Unit Wakaf',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
                 'is_active' => true,
             ],
 
@@ -494,6 +550,19 @@ class UserSeeder extends Seeder
                 'is_active' => true,
             ],
             [
+                'name' => 'Manager Fundraising KPw Jawa Tengah',
+                'username' => 'manager.kpw.jtg',
+                'email' => 'manager.kpw.jtg@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untKpwJtg?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Fundraising KPw Jawa Tengah',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
                 'name' => 'Kepala KPw Jawa Timur',
                 'username' => 'kepala.kpw.jtm',
                 'email' => 'kpw.jtm@alazharpeduli.or.id',
@@ -502,6 +571,19 @@ class UserSeeder extends Seeder
                 'unit_id' => $untKpwJtm?->id,
                 'leveling_id' => $lvlSupervisor?->id,
                 'jabatan' => 'Kepala Kantor Perwakilan Jawa Timur',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'Manager Fundraising KPw Jawa Timur',
+                'username' => 'manager.kpw.jtm',
+                'email' => 'manager.kpw.jtm@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untKpwJtm?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Fundraising KPw Jawa Timur',
                 'status_kepegawaian' => 'Tetap',
                 'is_petugas_input' => false,
                 'is_active' => true,
@@ -520,6 +602,19 @@ class UserSeeder extends Seeder
                 'is_active' => true,
             ],
             [
+                'name' => 'Manager Fundraising KPw Sulawesi Selatan',
+                'username' => 'manager.kpw.ssl',
+                'email' => 'manager.kpw.ssl@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untKpwSsl?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Fundraising KPw Sulawesi Selatan',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
                 'name' => 'Kepala KPw Sumatera Barat',
                 'username' => 'kepala.kpw.smt',
                 'email' => 'kpw.smt@alazharpeduli.or.id',
@@ -533,6 +628,19 @@ class UserSeeder extends Seeder
                 'is_active' => true,
             ],
             [
+                'name' => 'Manager Fundraising KPw Sumatera Barat',
+                'username' => 'manager.kpw.smt',
+                'email' => 'manager.kpw.smt@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untKpwSmt?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Fundraising KPw Sumatera Barat',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
                 'name' => 'Kepala KPw Yogyakarta',
                 'username' => 'kepala.kpw.yog',
                 'email' => 'kpw.yog@alazharpeduli.or.id',
@@ -541,6 +649,19 @@ class UserSeeder extends Seeder
                 'unit_id' => $untKpwYog?->id,
                 'leveling_id' => $lvlSupervisor?->id,
                 'jabatan' => 'Kepala Kantor Perwakilan Yogyakarta',
+                'status_kepegawaian' => 'Tetap',
+                'is_petugas_input' => false,
+                'is_active' => true,
+            ],
+            [
+                'name' => 'Manager Fundraising KPw Yogyakarta',
+                'username' => 'manager.kpw.yog',
+                'email' => 'manager.kpw.yog@alazharpeduli.or.id',
+                'password' => $defaultPassword,
+                'role' => 'unit',
+                'unit_id' => $untKpwYog?->id,
+                'leveling_id' => $lvlManager?->id,
+                'jabatan' => 'Manager Fundraising KPw Yogyakarta',
                 'status_kepegawaian' => 'Tetap',
                 'is_petugas_input' => false,
                 'is_active' => true,
@@ -559,6 +680,79 @@ class UserSeeder extends Seeder
 
         foreach ($users as $user) {
             User::updateOrCreate(['username' => $user['username']], $user);
+        }
+
+        // Sinkronisasi relasi atasan langsung (reporting line)
+        $atasanByUsername = [
+            // Divisi Sekretariat — Diklat & Litbang
+            'dedy.irwansyah' => 'rahmatullah.sidik',
+            'lias' => 'dedy.irwansyah',
+            'ahmad.zaki' => 'lias',
+
+            // Divisi Sekretariat — Humas, GA, dan IT (1 unit)
+            'sigit.nugroho' => 'rahmatullah.sidik',
+            'rudiansah' => 'sigit.nugroho',
+            'stiyadi' => 'rudiansah',
+            'gibran.heryadi' => 'rudiansah',
+            'admin' => 'rudiansah',
+
+            'suryamin' => 'sigit.nugroho',
+            'hadi.cahyo' => 'suryamin',
+            'eko.mustakim' => 'suryamin',
+            'muh.sobran' => 'suryamin',
+            'ahmad.rizal' => 'suryamin',
+            'zaenal.mustofa' => 'suryamin',
+
+            'bayu.setiawan' => 'sigit.nugroho',
+            'nopen.setiawan' => 'bayu.setiawan',
+            'nadhilah.sifa' => 'bayu.setiawan',
+            'rosyadi' => 'bayu.setiawan',
+            'fauzi.suhada' => 'bayu.setiawan',
+            'fitri.wulandari' => 'bayu.setiawan',
+            'risdawati' => 'bayu.setiawan',
+
+            // Divisi Sekretariat — Kelembagaan
+            'deden.salim' => 'rahmatullah.sidik',
+            'anas.priyogi' => 'deden.salim',
+            'jihan.sahra' => 'anas.priyogi',
+            'subakti' => 'anas.priyogi',
+
+            // Divisi Keuangan
+            'rochadi.kohar' => 'direktur.keuangan',
+            'manager.keuangan.keluar' => 'direktur.keuangan',
+            'manager.keuangan.terima' => 'direktur.keuangan',
+
+            // Divisi Fundraising & Partnership (+ KPw)
+            'manager.fundraising.int' => 'direktur.laz',
+            'manager.fundraising.eks' => 'direktur.laz',
+            'manager.kpw.jtg' => 'direktur.laz',
+            'kepala.kpw.jtg' => 'manager.kpw.jtg',
+            'manager.kpw.jtm' => 'direktur.laz',
+            'kepala.kpw.jtm' => 'manager.kpw.jtm',
+            'manager.kpw.ssl' => 'direktur.laz',
+            'kepala.kpw.ssl' => 'manager.kpw.ssl',
+            'manager.kpw.smt' => 'direktur.laz',
+            'kepala.kpw.smt' => 'manager.kpw.smt',
+            'manager.kpw.yog' => 'direktur.laz',
+            'kepala.kpw.yog' => 'manager.kpw.yog',
+
+            // Divisi Program
+            'manager.program' => 'kadiv.program',
+
+            // Divisi Wakaf
+            'manager.wakaf' => 'direktur.wakaf',
+        ];
+
+        $idsByUsername = User::whereIn('username', array_unique(array_merge(
+            array_keys($atasanByUsername),
+            array_values($atasanByUsername)
+        )))->pluck('id', 'username');
+
+        foreach ($atasanByUsername as $username => $atasanUsername) {
+            if (isset($idsByUsername[$username], $idsByUsername[$atasanUsername])) {
+                User::where('id', $idsByUsername[$username])
+                    ->update(['atasan_id' => $idsByUsername[$atasanUsername]]);
+            }
         }
     }
 }

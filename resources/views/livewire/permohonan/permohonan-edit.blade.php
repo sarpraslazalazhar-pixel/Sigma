@@ -568,7 +568,17 @@
                             <span>Tingkat {{ $requiredApprover?->nama ?? 'Supervisor' }} (Leveling {{ $requiredApprover?->urutan ?? 1 }})</span>
                         </span>
                         <p class="text-[11px] text-slate-400 mt-0.5">
-                            Tahap 1 (Pemohon): Supervisor, Manajer, atau Kadiv (dapat diinput oleh TU) &bull; Tahap 2 (Pemeriksa): Kepala Divisi Sekretariat &bull; Tahap 3 (Penyetuju): Bagian Keuangan
+                            @if ($approvalChainPreview && $approvalChainPreview['auto_approve'])
+                                Diajukan oleh Kepala Divisi Keuangan &rarr; langsung berstatus Disetujui (Mengikat Anggaran).
+                            @elseif ($approvalChainPreview)
+                                Alur otomatis mengikuti jabatan pemohon:
+                                @if ($approvalChainPreview['step1'])
+                                    {{ $approvalChainPreview['step1']['label'] }} &rarr;
+                                @endif
+                                {{ $approvalChainPreview['step2']['label'] ?? 'Penyetuju Akhir' }}.
+                            @else
+                                Pilih Pejabat Pemohon untuk menentukan jenjang persetujuan.
+                            @endif
                         </p>
                     </div>
 
@@ -591,6 +601,18 @@
                             (maks. <strong>Rp {{ number_format($this->pemohonLimit, 0, ',', '.') }}</strong>).
                             Minta TU untuk mengubah Pejabat Pemohon ke tingkat yang lebih tinggi, atau minta Manajer/Kadiv membuat pengajuan langsung.
                         </span>
+                    </div>
+                @endif
+                @if ($approvalChainPreview && ! empty($approvalChainPreview['missing_approvers']))
+                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-xs text-red-800">
+                        <svg class="w-4 h-4 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 110 18A9 9 0 0112 3z"/>
+                        </svg>
+                        <div class="space-y-0.5">
+                            @foreach ($approvalChainPreview['missing_approvers'] as $missingMsg)
+                                <p>{{ $missingMsg }}</p>
+                            @endforeach
+                        </div>
                     </div>
                 @endif
             </div>
@@ -622,6 +644,9 @@
         </div>
         @error('pemohon_limit')
             <p class="text-xs text-red-600 text-right mt-1">{{ $message }}</p>
+        @enderror
+        @error('approval_chain')
+            <p class="text-xs text-red-600 text-right mt-1 font-medium">{{ $message }}</p>
         @enderror
     </div>
 </div>

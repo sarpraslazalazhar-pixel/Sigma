@@ -12,6 +12,7 @@ use App\Services\UmpWorkflow;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -21,7 +22,7 @@ use Livewire\WithFileUploads;
 use RuntimeException;
 
 #[Layout('layouts.app')]
-#[Title('Form UMP: SIGMA LAZ Al-Azhar')]
+#[Title('Form Laporan: SIGMA LAZ Al-Azhar')]
 class UmpDetail extends Component
 {
     use WithFileUploads;
@@ -32,16 +33,21 @@ class UmpDetail extends Component
      * Baris penggunaan dana (Bagian B) dikelompokkan per penerima.
      * Key: id record ump_penerima (string) atau 'pj' untuk baris milik PJ/tanpa penerima.
      *
-     * @var array<string, array<int, array{id: ?int, tgl: string, rincian: string, no_bukti: string, jumlah: int}>>
+     * @var array<string, array<int, array{id: ?int, tgl: string, rincian: string, no_bukti: string, jumlah: int, is_editing: bool}>>
      */
     public array $itemsByPenerima = [];
+
+    /**
+     * Berkas bukti sementara per baris (belum/sedang diunggah sebelum atau saat simpan baris).
+     *
+     * @var array<string, array<int, mixed>>
+     */
+    public array $pendingRowFiles = [];
 
     /** Daftar id user yang ditunjuk sebagai penerima (untuk form sinkronisasi). */
     public array $selectedPenerimaIds = [];
 
     public string $catatanKekurangan = '';
-
-    public $buktiPendukung = null;
 
     /** Berkas bukti transaksi per baris item. */
     public $buktiItem = null;
@@ -68,6 +74,7 @@ class UmpDetail extends Component
     {
         return Ump::with([
             'pencairan.permohonan.unit',
+            'pencairan.buktiTransfer',
             'pj',
             'items.lampiran',
             'penerima.user',
@@ -235,7 +242,7 @@ class UmpDetail extends Component
     public function submitApproval(): void
     {
         if (! $this->canApprove()) {
-            session()->flash('error', 'Anda tidak berwenang memproses persetujuan UMP pada tahap ini.');
+            session()->flash('error', 'Anda tidak berwenang memproses persetujuan Laporan pada tahap ini.');
 
             return;
         }
@@ -260,7 +267,7 @@ class UmpDetail extends Component
                     ? ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240']
                     : ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
             ], [
-                'scanFinalFile.required' => 'Scan fisik UMP bertanda tangan wajib diunggah sebelum status Selesai.',
+                'scanFinalFile.required' => 'Scan fisik Laporan bertanda tangan wajib diunggah sebelum status Selesai.',
                 'scanFinalFile.mimes' => 'Berkas scan harus berformat PDF, JPG, atau PNG.',
                 'scanFinalFile.max' => 'Ukuran berkas scan maksimal 10 MB.',
             ]);
@@ -276,13 +283,13 @@ class UmpDetail extends Component
                     'catatan' => $this->approvalNotes ?: null,
                     'scan_final' => $this->scanFinalFile,
                 ]);
-                $msg = 'Persetujuan UMP tercatat. Tahap berikutnya diproses sistem.';
+                $msg = 'Persetujuan Laporan tercatat. Tahap berikutnya diproses sistem.';
             } elseif ($action === 'perbaikan') {
                 $workflow->requestRevision($this->ump, $user, $this->approvalNotes);
-                $msg = 'UMP dikembalikan untuk perbaikan.';
+                $msg = 'Laporan dikembalikan untuk perbaikan.';
             } elseif ($action === 'batal') {
                 $workflow->cancel($this->ump, $user, $this->approvalNotes);
-                $msg = 'UMP berhasil dibatalkan.';
+                $msg = 'Laporan berhasil dibatalkan.';
             }
 
             session()->flash('success', $msg);
@@ -328,7 +335,158 @@ class UmpDetail extends Component
             'rincian' => '',
             'no_bukti' => '',
             'jumlah' => 0,
+            'is_editing' => true,
         ];
+    }
+
+    public function editBaris(string $penerimaKey, int $index): void
+    {
+        if (! $this->canEditSection($penerimaKey)) {
+            return;
+        }
+
+        if (! isset($this->itemsByPenerima[$penerimaKey][$index])) {
+            return;
+        }
+
+        $this->itemsByPenerima[$penerimaKey][$index]['is_editing'] = true;
+    }
+
+    public function batalEditBaris(string $penerimaKey, int $index): void
+    {
+        if (! $this->canEditSection($penerimaKey)) {
+            return;
+        }
+
+        $row = $this->itemsByPenerima[$penerimaKey][$index] ?? null;
+        if (! $row) {
+            return;
+        }
+
+        if (empty($row['id'])) {
+            $this->hapusBaris($penerimaKey, $index);
+
+            return;
+        }
+
+        $item = UmpItem::where('ump_id', $this->umpId)->find($row['id']);
+        if ($item) {
+            $this->itemsByPenerima[$penerimaKey][$index] = $this->formatItemRow($item);
+        } else {
+            $this->itemsByPenerima[$penerimaKey][$index]['is_editing'] = false;
+        }
+
+        unset($this->pendingRowFiles[$penerimaKey][$index]);
+        $this->clearRowValidationErrors($penerimaKey, $index);
+    }
+
+    public function simpanBaris(string $penerimaKey, int $index): void
+    {
+        if (! $this->canEditSection($penerimaKey)) {
+            session()->flash('error', 'Anda tidak berwenang mengubah baris pada bagian ini.');
+
+            return;
+        }
+
+        if (! isset($this->itemsByPenerima[$penerimaKey][$index])) {
+            return;
+        }
+
+        $rowPrefix = "itemsByPenerima.{$penerimaKey}.{$index}";
+        $fileKey = "pendingRowFiles.{$penerimaKey}.{$index}";
+
+        $this->validate([
+            "{$rowPrefix}.tgl" => ['required', 'date'],
+            "{$rowPrefix}.rincian" => ['required', 'string', 'min:3'],
+            "{$rowPrefix}.no_bukti" => ['nullable', 'string', 'max:100'],
+            "{$rowPrefix}.jumlah" => ['required', 'integer', 'min:1'],
+            $fileKey => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+        ], [
+            "{$rowPrefix}.tgl.required" => 'Tanggal pengeluaran wajib diisi.',
+            "{$rowPrefix}.tgl.date" => 'Tanggal pengeluaran tidak valid.',
+            "{$rowPrefix}.rincian.required" => 'Rincian pengeluaran wajib diisi.',
+            "{$rowPrefix}.rincian.min" => 'Rincian pengeluaran minimal 3 karakter.',
+            "{$rowPrefix}.jumlah.required" => 'Jumlah pengeluaran wajib diisi.',
+            "{$rowPrefix}.jumlah.min" => 'Jumlah pengeluaran harus lebih dari 0.',
+            "{$fileKey}.mimes" => 'Berkas harus berformat JPG, PNG, atau PDF.',
+            "{$fileKey}.max" => 'Ukuran berkas maksimal 5 MB.',
+        ]);
+
+        $row = $this->itemsByPenerima[$penerimaKey][$index];
+        $this->assertValidBudgetYear($row['tgl'] ?? null, "{$rowPrefix}.tgl");
+
+        $row['penerima_id'] = $penerimaKey === 'pj' ? null : (int) $penerimaKey;
+        $pendingFile = $this->pendingRowFiles[$penerimaKey][$index] ?? null;
+
+        try {
+            $savedItem = (new UmpWorkflow)->saveSingleItem(
+                $this->ump,
+                $row,
+                function (UmpItem $item) use ($pendingFile): void {
+                    if ($pendingFile) {
+                        $this->storeItemLampiran($item, $pendingFile);
+                    }
+                }
+            );
+        } catch (RuntimeException $e) {
+            session()->flash('error', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return;
+        }
+
+        $this->itemsByPenerima[$penerimaKey][$index] = $this->formatItemRow($savedItem);
+        unset($this->pendingRowFiles[$penerimaKey][$index]);
+        $this->clearRowValidationErrors($penerimaKey, $index);
+        $this->refreshUmpCache();
+
+        $msg = 'Baris penggunaan dana tersimpan dan terkunci.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+    }
+
+    public function updatedPendingRowFiles(mixed $value, string $key): void
+    {
+        $this->validateOnly("pendingRowFiles.{$key}", [
+            "pendingRowFiles.{$key}" => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+        ], [
+            "pendingRowFiles.{$key}.mimes" => 'Berkas harus berformat JPG, PNG, atau PDF.',
+            "pendingRowFiles.{$key}.max" => 'Ukuran berkas maksimal 5 MB.',
+        ]);
+    }
+
+    public function hapusPendingFile(string $penerimaKey, int $index): void
+    {
+        if (! $this->canEditSection($penerimaKey)) {
+            return;
+        }
+
+        unset($this->pendingRowFiles[$penerimaKey][$index]);
+        $this->resetErrorBag(["pendingRowFiles.{$penerimaKey}.{$index}"]);
+    }
+
+    public function hapusLampiranItem(int $lampiranId): void
+    {
+        $lampiran = Lampiran::where('attachable_type', UmpItem::class)->findOrFail($lampiranId);
+        $item = UmpItem::where('ump_id', $this->umpId)->findOrFail($lampiran->attachable_id);
+
+        $penerimaKey = $item->penerima_id ? (string) $item->penerima_id : 'pj';
+        if (! $this->canEditSection($penerimaKey)) {
+            session()->flash('error', 'Anda tidak berwenang menghapus bukti pada baris ini.');
+
+            return;
+        }
+
+        if ($lampiran->path) {
+            Storage::disk('local')->delete($lampiran->path);
+        }
+
+        $lampiran->delete();
+        $this->refreshUmpCache();
+
+        $msg = 'Bukti transaksi dihapus.';
+        session()->flash('success', $msg);
+        $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function hapusBaris(string $penerimaKey, int $index): void
@@ -341,20 +499,67 @@ class UmpDetail extends Component
             return;
         }
 
+        $row = $this->itemsByPenerima[$penerimaKey][$index];
+        $deletedSavedRow = ! empty($row['id']);
+
+        if ($deletedSavedRow) {
+            try {
+                (new UmpWorkflow)->deleteItem($this->ump, (int) $row['id']);
+            } catch (RuntimeException $e) {
+                session()->flash('error', $e->getMessage());
+                $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
+
+                return;
+            }
+
+            if ($this->buktiItemTarget === (int) $row['id']) {
+                $this->reset('buktiItem', 'buktiItemTarget');
+            }
+        }
+
+        $newPending = [];
+        $newIdx = 0;
+        foreach ($this->itemsByPenerima[$penerimaKey] as $oldIdx => $_row) {
+            if ($oldIdx === $index) {
+                continue;
+            }
+
+            if (isset($this->pendingRowFiles[$penerimaKey][$oldIdx])) {
+                $newPending[$newIdx] = $this->pendingRowFiles[$penerimaKey][$oldIdx];
+            }
+            $newIdx++;
+        }
+
+        if ($newPending === []) {
+            unset($this->pendingRowFiles[$penerimaKey]);
+        } else {
+            $this->pendingRowFiles[$penerimaKey] = $newPending;
+        }
+
         unset($this->itemsByPenerima[$penerimaKey][$index]);
         $this->itemsByPenerima[$penerimaKey] = array_values($this->itemsByPenerima[$penerimaKey]);
+        $this->refreshUmpCache();
+
+        if ($deletedSavedRow) {
+            $msg = 'Baris penggunaan dana dihapus.';
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+        }
     }
 
     public function simpanDraft(): void
     {
         if (! $this->isEditable) {
-            session()->flash('error', 'UMP tidak dalam status Draft / Perlu Perbaikan.');
+            session()->flash('error', 'Laporan tidak dalam status Draft / Perlu Perbaikan.');
 
             return;
         }
 
         try {
-            (new UmpWorkflow)->saveItems($this->ump, $this->cleanedItems());
+            $items = $this->cleanedItems();
+            (new UmpWorkflow)->saveItems($this->ump, $items, [], function ($item, array $row): void {
+                $this->persistPendingFileForRow($item, $row);
+            });
         } catch (RuntimeException $e) {
             session()->flash('error', $e->getMessage());
             $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
@@ -362,8 +567,9 @@ class UmpDetail extends Component
             return;
         }
 
+        $this->pendingRowFiles = [];
         $this->loadItems();
-        $msg = 'Draft UMP tersimpan. Saldo dan pembulatan diperbarui.';
+        $msg = 'Draft Laporan tersimpan. Saldo dan pembulatan diperbarui.';
         session()->flash('success', $msg);
         $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
@@ -371,7 +577,7 @@ class UmpDetail extends Component
     public function ajukanUMP(): void
     {
         if (! $this->isEditable) {
-            session()->flash('error', 'UMP tidak dalam status Draft / Perlu Perbaikan.');
+            session()->flash('error', 'Laporan tidak dalam status Draft / Perlu Perbaikan.');
 
             return;
         }
@@ -396,7 +602,9 @@ class UmpDetail extends Component
         $user = Auth::user();
 
         try {
-            $ump = (new UmpWorkflow)->saveItems($this->ump, $items, []);
+            $ump = (new UmpWorkflow)->saveItems($this->ump, $items, [], function ($item, array $row): void {
+                $this->persistPendingFileForRow($item, $row);
+            });
             (new UmpWorkflow)->submitByPj($ump, $user, $this->catatanKekurangan);
         } catch (RuntimeException $e) {
             session()->flash('error', $e->getMessage());
@@ -405,19 +613,20 @@ class UmpDetail extends Component
             return;
         }
 
+        $this->pendingRowFiles = [];
         $this->loadItems();
-        $msg = 'UMP berhasil diajukan dan menunggu tanda tangan Penanggung Jawab.';
+        $msg = 'Laporan berhasil diajukan dan menunggu tanda tangan Penanggung Jawab.';
         session()->flash('success', $msg);
         $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     /**
-     * Sinkronkan daftar penerima dana (hanya PJ / TU / keuangan / admin saat UMP editable).
+     * Sinkronkan daftar penerima dana (hanya PJ / TU / keuangan / admin saat Laporan editable).
      */
     public function syncPenerima(): void
     {
         if (! $this->isEditable) {
-            session()->flash('error', 'Daftar penerima hanya dapat diubah saat UMP Draft / Perlu Perbaikan.');
+            session()->flash('error', 'Daftar penerima hanya dapat diubah saat Laporan Draft / Perlu Perbaikan.');
 
             return;
         }
@@ -460,8 +669,8 @@ class UmpDetail extends Component
                 $penerimaUser,
                 'dokumen_diputuskan',
                 [
-                    'judul' => 'Anda Ditunjuk sebagai Penerima Dana UMP',
-                    'pesan' => 'Anda ditunjuk untuk melaporkan penggunaan dana pada UMP '.($this->ump->pencairan?->no_ppd ?? '#'.$this->ump->id).'.',
+                    'judul' => 'Anda Ditunjuk sebagai Penerima Dana Laporan',
+                    'pesan' => 'Anda ditunjuk untuk melaporkan penggunaan dana pada Laporan '.($this->ump->pencairan?->no_ppd ?? '#'.$this->ump->id).'.',
                     'url' => route('ump.detail', $this->ump->id),
                 ],
                 "ump_penerima_{$this->ump->id}_{$penerimaUserId}"
@@ -496,24 +705,10 @@ class UmpDetail extends Component
             return;
         }
 
-        $file = $this->buktiItem;
-        $path = $file->store('lampiran/ump-item', 'local');
-
-        Lampiran::create([
-            'attachable_type' => UmpItem::class,
-            'attachable_id' => $item->id,
-            'jenis' => 'bukti_tf',
-            'path' => $path,
-            'original_name' => $file->getClientOriginalName(),
-            'mime' => $file->getMimeType() ?? 'application/octet-stream',
-            'size' => $file->getSize() ?? 0,
-            'sha256' => hash_file('sha256', $file->getRealPath()),
-            'version' => 1,
-            'uploaded_by' => Auth::id(),
-        ]);
+        $this->storeItemLampiran($item, $this->buktiItem);
 
         $this->reset('buktiItem', 'buktiItemTarget');
-        $this->loadItems();
+        $this->refreshUmpCache();
         session()->flash('success', 'Bukti transaksi berhasil diunggah.');
         $this->dispatch('notify', ['type' => 'success', 'message' => 'Bukti transaksi berhasil diunggah.']);
     }
@@ -529,63 +724,42 @@ class UmpDetail extends Component
         $this->reset('buktiItem', 'buktiItemTarget');
     }
 
-    public function simpanBuktiPendukung(): void
-    {
-        if (! $this->isEditable) {
-            return;
-        }
-
-        $this->validate([
-            'buktiPendukung' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
-        ], [
-            'buktiPendukung.required' => 'Berkas bukti pendukung wajib dipilih.',
-            'buktiPendukung.mimes' => 'Berkas harus berformat JPG, PNG, atau PDF.',
-            'buktiPendukung.max' => 'Ukuran berkas maksimal 5 MB.',
-        ]);
-
-        $file = $this->buktiPendukung;
-        $path = $file->store('lampiran/ump', 'local');
-
-        Lampiran::create([
-            'attachable_type' => Ump::class,
-            'attachable_id' => $this->umpId,
-            'jenis' => 'bukti',
-            'path' => $path,
-            'original_name' => $file->getClientOriginalName(),
-            'mime' => $file->getMimeType() ?? 'application/octet-stream',
-            'size' => $file->getSize() ?? 0,
-            'sha256' => hash_file('sha256', $file->getRealPath()),
-            'version' => 1,
-            'uploaded_by' => Auth::id(),
-        ]);
-
-        $this->reset('buktiPendukung');
-        session()->flash('success', 'Bukti pendukung UMP berhasil diunggah.');
-    }
-
     /** Buang baris kosong, lalu validasi baris tersisa (FR-UMP-2). */
     protected function cleanedItems(): array
     {
         $flattened = [];
+        $remappedPending = [];
 
         foreach ($this->itemsByPenerima as $key => $rows) {
             $penerimaId = $key === 'pj' ? null : (int) $key;
+            $newIdx = 0;
 
-            foreach ($rows as $row) {
+            foreach ($rows as $origIdx => $row) {
+                $pendingFile = $this->pendingRowFiles[$key][$origIdx] ?? null;
                 $hasContent = trim((string) ($row['rincian'] ?? '')) !== ''
                     || (int) ($row['jumlah'] ?? 0) > 0
-                    || ! empty($row['tgl']);
+                    || ! empty($row['tgl'])
+                    || $pendingFile !== null;
 
                 if (! $hasContent) {
                     continue;
                 }
 
+                $sectionKey = (string) $key;
+                if ($pendingFile !== null) {
+                    $remappedPending[$sectionKey][$newIdx] = $pendingFile;
+                }
+
                 $row['penerima_id'] = $penerimaId;
+                $row['_row_ref'] = ['key' => $sectionKey, 'index' => $newIdx];
                 $flattened[] = $row;
+                $newIdx++;
             }
         }
 
+        $this->pendingRowFiles = $remappedPending;
         $this->itemsByPenerima = $this->regroupItems($flattened);
+        $this->ensureSectionKeys();
 
         if ($flattened === []) {
             return [];
@@ -597,6 +771,7 @@ class UmpDetail extends Component
             'itemsByPenerima.*.*.rincian' => ['required', 'string', 'min:3'],
             'itemsByPenerima.*.*.no_bukti' => ['nullable', 'string', 'max:100'],
             'itemsByPenerima.*.*.jumlah' => ['required', 'integer', 'min:1'],
+            'pendingRowFiles.*.*' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ], [
             'itemsByPenerima.*.*.tgl.required' => 'Tanggal pengeluaran wajib diisi.',
             'itemsByPenerima.*.*.tgl.date' => 'Tanggal pengeluaran tidak valid.',
@@ -604,6 +779,8 @@ class UmpDetail extends Component
             'itemsByPenerima.*.*.rincian.min' => 'Rincian pengeluaran minimal 3 karakter.',
             'itemsByPenerima.*.*.jumlah.required' => 'Jumlah pengeluaran wajib diisi.',
             'itemsByPenerima.*.*.jumlah.min' => 'Jumlah pengeluaran harus lebih dari 0.',
+            'pendingRowFiles.*.*.mimes' => 'Berkas harus berformat JPG, PNG, atau PDF.',
+            'pendingRowFiles.*.*.max' => 'Ukuran berkas maksimal 5 MB.',
         ]);
 
         // FR-UMP-7: item dates must fall within the budget year
@@ -653,27 +830,40 @@ class UmpDetail extends Component
 
     protected function loadItems(): void
     {
-        $ump = $this->ump;
-        // Segarkan atribut & relasi pada instance yang sama (computed $this->ump ter-cache per request),
-        // agar UI langsung menampilkan data tersimpan tanpa perlu refresh halaman.
-        $ump->refresh();
-        $ump->load(['items.lampiran', 'penerima.user']);
+        $ump = $this->refreshUmpCache();
 
         $grouped = $ump->items->groupBy(fn ($item) => $item->penerima_id ?: 'pj');
 
         $this->itemsByPenerima = [];
         foreach ($grouped as $key => $items) {
-            $this->itemsByPenerima[(string) $key] = $items->map(fn ($item) => [
-                'id' => $item->id,
-                'tgl' => $item->tgl?->toDateString() ?? '',
-                'rincian' => $item->rincian,
-                'no_bukti' => $item->no_bukti ?? '',
-                'jumlah' => (int) $item->jumlah,
-            ])->values()->all();
+            $this->itemsByPenerima[(string) $key] = $items->map(fn (UmpItem $item) => $this->formatItemRow($item))->values()->all();
         }
 
-        // Pastikan setiap penerima punya section meski belum ada baris.
-        foreach ($ump->penerima as $p) {
+        $this->ensureSectionKeys();
+        $this->selectedPenerimaIds = $ump->penerima->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * Format satu model UmpItem menjadi struktur state tabel Bagian B.
+     *
+     * @return array{id: int, tgl: string, rincian: string, no_bukti: string, jumlah: int, is_editing: bool}
+     */
+    protected function formatItemRow(UmpItem $item, bool $isEditing = false): array
+    {
+        return [
+            'id' => $item->id,
+            'tgl' => $item->tgl?->toDateString() ?? '',
+            'rincian' => $item->rincian,
+            'no_bukti' => $item->no_bukti ?? '',
+            'jumlah' => (int) $item->jumlah,
+            'is_editing' => $isEditing,
+        ];
+    }
+
+    /** Pastikan setiap section penerima dan 'pj' selalu memiliki key pada $itemsByPenerima. */
+    protected function ensureSectionKeys(): void
+    {
+        foreach ($this->ump->penerima as $p) {
             $key = (string) $p->id;
             if (! isset($this->itemsByPenerima[$key])) {
                 $this->itemsByPenerima[$key] = [];
@@ -685,8 +875,78 @@ class UmpDetail extends Component
         }
 
         ksort($this->itemsByPenerima);
+    }
 
-        $this->selectedPenerimaIds = $ump->penerima->pluck('user_id')->map(fn ($id) => (int) $id)->values()->all();
+    protected function refreshUmpCache(): Ump
+    {
+        $ump = $this->ump;
+        // Segarkan atribut & relasi pada instance yang sama (computed $this->ump ter-cache per request),
+        // agar UI langsung menampilkan data tersimpan tanpa perlu refresh halaman.
+        $ump->refresh();
+        $ump->load(['items.lampiran', 'penerima.user']);
+
+        return $ump;
+    }
+
+    protected function storeItemLampiran(UmpItem $item, mixed $file): Lampiran
+    {
+        $path = $file->store('lampiran/ump-item', 'local');
+
+        return Lampiran::create([
+            'attachable_type' => UmpItem::class,
+            'attachable_id' => $item->id,
+            'jenis' => 'bukti_tf',
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $file->getMimeType() ?? 'application/octet-stream',
+            'size' => $file->getSize() ?? 0,
+            'sha256' => hash_file('sha256', $file->getRealPath()),
+            'version' => 1,
+            'uploaded_by' => Auth::id(),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    protected function persistPendingFileForRow(UmpItem $item, array $row): void
+    {
+        $ref = $row['_row_ref'] ?? null;
+        if (! is_array($ref)) {
+            return;
+        }
+
+        $file = $this->pendingRowFiles[$ref['key']][$ref['index']] ?? null;
+        if ($file) {
+            $this->storeItemLampiran($item, $file);
+        }
+    }
+
+    protected function assertValidBudgetYear(?string $tgl, string $fieldPath): void
+    {
+        $tahun = $this->ump->pencairan?->permohonan?->kodeAnggaran?->tahunAnggaran?->tahun;
+        if (! $tahun || empty($tgl)) {
+            return;
+        }
+
+        if (Carbon::parse($tgl)->year !== (int) $tahun) {
+            $msg = "Tanggal pengeluaran harus berada dalam tahun anggaran {$tahun}.";
+            $this->addError($fieldPath, $msg);
+
+            throw ValidationException::withMessages([$fieldPath => $msg]);
+        }
+    }
+
+    protected function clearRowValidationErrors(string $penerimaKey, int $index): void
+    {
+        $prefix = "itemsByPenerima.{$penerimaKey}.{$index}";
+        $this->resetErrorBag([
+            "{$prefix}.tgl",
+            "{$prefix}.rincian",
+            "{$prefix}.no_bukti",
+            "{$prefix}.jumlah",
+            "pendingRowFiles.{$penerimaKey}.{$index}",
+        ]);
     }
 
     /**

@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\Approval;
 use App\Models\Setting;
 use App\Models\Ump;
+use App\Models\UmpItem;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class UmpWorkflow
@@ -36,9 +38,9 @@ class UmpWorkflow
     /**
      * Simpan meta & sinkronisasi baris penggunaan dana (Bagian B form UMP).
      */
-    public function saveItems(Ump $ump, array $itemsData, array $meta = []): Ump
+    public function saveItems(Ump $ump, array $itemsData, array $meta = [], ?callable $onItemSaved = null): Ump
     {
-        return DB::transaction(function () use ($ump, $itemsData, $meta) {
+        return DB::transaction(function () use ($ump, $itemsData, $meta, $onItemSaved) {
             $this->assertEditable($ump);
 
             $before = $ump->toArray();
@@ -55,28 +57,19 @@ class UmpWorkflow
                     continue;
                 }
 
-                $attributes = [
-                    'tgl' => $row['tgl'],
-                    'rincian' => $row['rincian'],
-                    'no_bukti' => $row['no_bukti'] ?? null,
-                    'jumlah' => $jumlah,
-                    'penerima_id' => ! empty($row['penerima_id']) ? (int) $row['penerima_id'] : null,
-                ];
+                $item = $this->upsertItem($ump, $row, $jumlah);
+                $keptIds[] = $item->id;
 
-                if (! empty($row['id'])) {
-                    $item = $ump->items()->whereKey($row['id'])->first();
-                    if ($item) {
-                        $item->update($attributes);
-                        $keptIds[] = $item->id;
-
-                        continue;
-                    }
+                if ($onItemSaved !== null) {
+                    $onItemSaved($item, $row);
                 }
-
-                $keptIds[] = $ump->items()->create($attributes)->id;
             }
 
-            $ump->items()->whereNotIn('id', $keptIds)->delete();
+            $removedItems = $ump->items()->with('lampiran')->whereNotIn('id', $keptIds)->get();
+            foreach ($removedItems as $removedItem) {
+                $this->deleteLampiranAttachments($removedItem);
+                $removedItem->delete();
+            }
 
             $this->calculateTotals($ump);
 
@@ -84,6 +77,90 @@ class UmpWorkflow
 
             return $ump;
         });
+    }
+
+    /**
+     * Simpan atau perbarui satu baris penggunaan dana tanpa menghapus baris lain.
+     */
+    public function saveSingleItem(Ump $ump, array $row, ?callable $afterSaved = null): UmpItem
+    {
+        return DB::transaction(function () use ($ump, $row, $afterSaved) {
+            $this->assertEditable($ump);
+
+            $jumlah = (int) ($row['jumlah'] ?? 0);
+            if (trim((string) ($row['rincian'] ?? '')) === '' || $jumlah <= 0) {
+                throw new RuntimeException('Rincian dan jumlah penggunaan dana harus diisi.');
+            }
+
+            $before = $ump->toArray();
+            $item = $this->upsertItem($ump, $row, $jumlah);
+
+            if ($afterSaved !== null) {
+                $afterSaved($item);
+            }
+
+            $this->calculateTotals($ump);
+
+            (new AuditLogger)->log('ump.item_saved', $ump, $before, $ump->fresh()->toArray());
+
+            return $item->fresh('lampiran');
+        });
+    }
+
+    /**
+     * Hapus satu baris penggunaan dana beserta lampiran buktinya dan hitung ulang total.
+     */
+    public function deleteItem(Ump $ump, int $itemId): Ump
+    {
+        return DB::transaction(function () use ($ump, $itemId) {
+            $this->assertEditable($ump);
+
+            $before = $ump->toArray();
+            $item = $ump->items()->with('lampiran')->whereKey($itemId)->first();
+
+            if ($item) {
+                $this->deleteLampiranAttachments($item);
+                $item->delete();
+            }
+
+            $this->calculateTotals($ump);
+
+            (new AuditLogger)->log('ump.item_deleted', $ump, $before, $ump->fresh()->toArray());
+
+            return $ump->fresh();
+        });
+    }
+
+    private function upsertItem(Ump $ump, array $row, int $jumlah): UmpItem
+    {
+        $attributes = [
+            'tgl' => $row['tgl'],
+            'rincian' => $row['rincian'],
+            'no_bukti' => $row['no_bukti'] ?? null,
+            'jumlah' => $jumlah,
+            'penerima_id' => ! empty($row['penerima_id']) ? (int) $row['penerima_id'] : null,
+        ];
+
+        if (! empty($row['id'])) {
+            $item = $ump->items()->whereKey($row['id'])->first();
+            if ($item) {
+                $item->update($attributes);
+
+                return $item;
+            }
+        }
+
+        return $ump->items()->create($attributes);
+    }
+
+    private function deleteLampiranAttachments(UmpItem $item): void
+    {
+        foreach ($item->lampiran as $lampiran) {
+            if ($lampiran->path) {
+                Storage::disk('local')->delete($lampiran->path);
+            }
+            $lampiran->delete();
+        }
     }
 
     /**
@@ -97,7 +174,7 @@ class UmpWorkflow
             $this->calculateTotals($ump);
 
             if ((int) $ump->items()->where('jumlah', '>', 0)->count() === 0) {
-                throw new RuntimeException('UMP harus memiliki minimal satu baris penggunaan dana dengan jumlah lebih dari 0.');
+                throw new RuntimeException('Laporan harus memiliki minimal satu baris penggunaan dana dengan jumlah lebih dari 0.');
             }
 
             if ((int) $ump->total_penggunaan > (int) $ump->jumlah_total && trim($catatan) === '') {
@@ -145,12 +222,12 @@ class UmpWorkflow
                     $kadiv,
                     'dokumen_menunggu_tindakan',
                     [
-                        'judul' => 'Dokumen UMP Menunggu Persetujuan',
+                        'judul' => 'Dokumen Laporan Menunggu Persetujuan',
                         'no_ppd' => $ump->pencairan?->no_ppd,
                         'jenis' => 'ump',
                         'entity_id' => $ump->id,
                         'url' => route('ump.detail', $ump->id),
-                        'pesan' => "Dokumen UMP No. PPD {$ump->pencairan?->no_ppd} memerlukan tanda tangan persetujuan.",
+                        'pesan' => "Dokumen Laporan No. PPD {$ump->pencairan?->no_ppd} memerlukan tanda tangan persetujuan.",
                     ],
                     "tunggu_ump_{$ump->id}_ttd_kadiv_{$siklus}"
                 );
@@ -228,10 +305,10 @@ class UmpWorkflow
                     $hasScan = true;
                 }
                 if (! $hasScan) {
-                    throw new RuntimeException('Scan fisik UMP bertanda tangan wajib diunggah sebelum status Selesai.');
+                    throw new RuntimeException('Scan fisik Laporan bertanda tangan wajib diunggah sebelum status Selesai.');
                 }
             } else {
-                throw new RuntimeException("UMP berstatus {$locked->status} tidak dalam antrean persetujuan.");
+                throw new RuntimeException("Laporan berstatus {$locked->status} tidak dalam antrean persetujuan.");
             }
 
             $before = $locked->toArray();
@@ -270,13 +347,13 @@ class UmpWorkflow
                     $locked->pj,
                     'dokumen_diputuskan',
                     [
-                        'judul' => 'Dokumen UMP Disetujui',
+                        'judul' => 'Dokumen Laporan Disetujui',
                         'no_ppd' => $locked->pencairan?->no_ppd,
                         'jenis' => 'ump',
                         'entity_id' => $locked->id,
                         'url' => route('ump.detail', $locked->id),
                         'keputusan' => 'disetujui',
-                        'pesan' => "Dokumen UMP No. PPD {$locked->pencairan?->no_ppd} telah disetujui pada tahap {$tahap}.",
+                        'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} telah disetujui pada tahap {$tahap}.",
                     ],
                     "putusan_ump_{$locked->id}_{$nextStatus}_{$siklus}"
                 );
@@ -292,12 +369,12 @@ class UmpWorkflow
                         $ku,
                         'dokumen_menunggu_tindakan',
                         [
-                            'judul' => 'Dokumen UMP Menunggu Persetujuan',
+                            'judul' => 'Dokumen Laporan Menunggu Persetujuan',
                             'no_ppd' => $locked->pencairan?->no_ppd,
                             'jenis' => 'ump',
                             'entity_id' => $locked->id,
                             'url' => route('ump.detail', $locked->id),
-                            'pesan' => "Dokumen UMP No. PPD {$locked->pencairan?->no_ppd} memerlukan verifikasi/persetujuan Keuangan.",
+                            'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} memerlukan verifikasi/persetujuan Keuangan.",
                         ],
                         "tunggu_ump_{$locked->id}_{$nextStatus}_{$siklus}"
                     );
@@ -350,7 +427,7 @@ class UmpWorkflow
             $locked = Ump::lockForUpdate()->findOrFail($ump->id);
 
             if (! in_array($locked->status, ['ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
-                throw new RuntimeException('Hanya UMP dalam proses persetujuan yang dapat diminta perbaikan.');
+                throw new RuntimeException('Hanya Laporan dalam proses persetujuan yang dapat diminta perbaikan.');
             }
 
             $before = $locked->toArray();
@@ -381,13 +458,13 @@ class UmpWorkflow
                     $locked->pj,
                     'dokumen_diputuskan',
                     [
-                        'judul' => 'Dokumen UMP Perlu Perbaikan',
+                        'judul' => 'Dokumen Laporan Perlu Perbaikan',
                         'no_ppd' => $locked->pencairan?->no_ppd,
                         'jenis' => 'ump',
                         'entity_id' => $locked->id,
                         'url' => route('ump.detail', $locked->id),
                         'keputusan' => 'perlu_perbaikan',
-                        'pesan' => "Dokumen UMP No. PPD {$locked->pencairan?->no_ppd} memerlukan perbaikan: {$alasan}",
+                        'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} memerlukan perbaikan: {$alasan}",
                     ],
                     "putusan_ump_{$locked->id}_perlu_perbaikan_{$siklus}"
                 );
@@ -406,7 +483,7 @@ class UmpWorkflow
             $locked = Ump::lockForUpdate()->findOrFail($ump->id);
 
             if ($locked->status === 'selesai' || $locked->status === 'dibatalkan') {
-                throw new RuntimeException('UMP tidak dapat dibatalkan pada status saat ini.');
+                throw new RuntimeException('Laporan tidak dapat dibatalkan pada status saat ini.');
             }
 
             $before = $locked->toArray();
@@ -437,7 +514,7 @@ class UmpWorkflow
     private function assertEditable(Ump $ump): void
     {
         if (! in_array($ump->status, ['draft', 'perlu_perbaikan'], true)) {
-            throw new RuntimeException("UMP berstatus {$ump->status} tidak dapat diubah. Hubungi Bagian Keuangan.");
+            throw new RuntimeException("Laporan berstatus {$ump->status} tidak dapat diubah. Hubungi Bagian Keuangan.");
         }
     }
 }

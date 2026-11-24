@@ -98,6 +98,10 @@ class PermohonanIndex extends Component
                 'label' => 'Dicairkan',
                 'class' => 'bg-teal-50 text-teal-700 border-teal-200',
             ],
+            'selesai' => [
+                'label' => 'Selesai',
+                'class' => 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            ],
             default => [
                 'label' => ucfirst($status),
                 'class' => 'bg-slate-100 text-slate-600 border-slate-200',
@@ -113,7 +117,8 @@ class PermohonanIndex extends Component
             ->when($this->tahunAnggaranId, function ($q) {
                 $q->whereHas('kodeAnggaran', fn ($k) => $k->where('tahun_anggaran_id', $this->tahunAnggaranId));
             })
-            ->when($this->search !== '', function ($q) {
+            ->when(trim($this->search) !== '', function ($q) {
+                $term = '%'.trim($this->search).'%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('no_pengajuan', 'like', $term)
                         ->orWhere('nama_kegiatan', 'like', $term)
@@ -141,11 +146,11 @@ class PermohonanIndex extends Component
 
         $permohonanList = $query->orderBy('id', 'desc')->paginate(15);
 
-        $unitsQuery = Unit::query();
+        $unitsQuery = Unit::with('parent');
         if ($user && ! in_array($user->role, ['admin', 'keuangan']) && $user->unit) {
             $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
         }
-        $units = $unitsQuery->orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
+        $units = Unit::formatDropdownOptions($unitsQuery->get());
 
         return view('livewire.permohonan.permohonan-index', [
             'permohonanList' => $permohonanList,

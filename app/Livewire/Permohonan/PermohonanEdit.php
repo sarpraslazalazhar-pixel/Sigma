@@ -19,13 +19,16 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use RuntimeException;
 
 #[Layout('layouts.app')]
 #[Title('Edit Permohonan Dana: SIGMA LAZ Al-Azhar')]
 class PermohonanEdit extends Component
 {
+    #[Locked]
     public int $permohonanId;
 
     public string $program = '';
@@ -58,12 +61,7 @@ class PermohonanEdit extends Component
         $user = Auth::user();
         $p = Permohonan::with(['items', 'user'])->findOrFail($id);
 
-        $isAuthorized = ($p->user_id === $user?->id)
-            || ($p->pengusul_id === $user?->id)
-            || ($user?->role === 'admin')
-            || (bool) $user?->is_petugas_input;
-
-        abort_unless($isAuthorized && in_array($p->status, ['draft', 'perlu_perbaikan'], true), 403, 'Dokumen ini tidak dapat diedit.');
+        abort_unless($user && $user->can('update', $p), 403, 'Dokumen ini tidak dapat diedit.');
 
         $this->program = $p->program ?? '';
         $this->nama_kegiatan = $p->nama_kegiatan ?? '';
@@ -130,7 +128,7 @@ class PermohonanEdit extends Component
     {
         $user = Auth::user();
 
-        return (bool) ($user && ($user->is_petugas_input || $user->role === 'admin' || $user->role === 'keuangan'));
+        return (bool) ($user && ($user->is_petugas_input || $user->isAdmin()));
     }
 
     public function getAtasNamaUserProperty(): ?User
@@ -150,9 +148,44 @@ class PermohonanEdit extends Component
 
     public function getPemohonLimitProperty(): ?int
     {
-        $batas = $this->atasNamaUser?->leveling?->batas_atas;
+        if (! $this->atasNamaUser) {
+            return null;
+        }
 
-        return $batas !== null ? (int) $batas : null;
+        return (new PermohonanWorkflow)->getSubmitterBatasAtas($this->atasNamaUser);
+    }
+
+    protected function enforceSubmitterIntegrity(?Permohonan $existing = null): void
+    {
+        if ($this->isTu) {
+            return;
+        }
+
+        $p = $existing ?? Permohonan::findOrFail($this->permohonanId);
+        $this->user_id = $p->user_id;
+        $this->unit_id = $p->unit_id;
+    }
+
+    public function getApprovalChainPreviewProperty(): ?array
+    {
+        $pemohon = $this->atasNamaUser;
+        if (! $pemohon) {
+            return null;
+        }
+
+        $chain = (new PermohonanWorkflow)->resolveApprovalChain($pemohon, $this->selectedUnit);
+
+        // Jika diajukan TU/Admin atas nama Kadiv Keuangan, tidak auto-approve (butuh konfirmasi Kadiv Keuangan)
+        if ($chain['mode'] === 'kadiv_keuangan' && $pemohon->id !== Auth::id()) {
+            $chain['auto_approve'] = false;
+            $chain['step2'] = [
+                'role_key' => 'kadiv_keuangan',
+                'label' => 'Kepala Divisi Keuangan',
+                'approver' => $pemohon,
+            ];
+        }
+
+        return $chain;
     }
 
     public function getIsOverPemohonLimitProperty(): bool
@@ -176,12 +209,24 @@ class PermohonanEdit extends Component
 
     public function updatedCreatorLevel(): void
     {
+        if (! $this->isTu) {
+            $this->enforceSubmitterIntegrity();
+
+            return;
+        }
+
         $this->user_id = null;
         $this->unit_id = null;
     }
 
     public function updatedUserId(?int $value): void
     {
+        if (! $this->isTu) {
+            $this->enforceSubmitterIntegrity();
+
+            return;
+        }
+
         if (! $value) {
             $this->unit_id = null;
 
@@ -292,14 +337,12 @@ class PermohonanEdit extends Component
 
     public function getRequiredApproverProperty(): ?Leveling
     {
-        $total = $this->totalDiminta;
+        $pemohon = $this->atasNamaUser;
+        if ($pemohon?->leveling) {
+            return $pemohon->leveling;
+        }
 
-        return Leveling::where('batas_bawah', '<=', $total)
-            ->where(function ($q) use ($total) {
-                $q->whereNull('batas_atas')->orWhere('batas_atas', '>=', $total);
-            })
-            ->orderBy('urutan', 'desc')
-            ->first();
+        return Leveling::where('urutan', 1)->first();
     }
 
     protected function validateForm(): void
@@ -351,7 +394,17 @@ class PermohonanEdit extends Component
         }
 
         if ($this->isTu) {
-            $rules['user_id'] = ['required', 'exists:users,id'];
+            $rules['user_id'] = [
+                'required',
+                'exists:users,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $selected = User::with('leveling')->find($value);
+                    $urutan = $selected?->leveling?->urutan ?? 0;
+                    if (! $selected || ! $selected->is_active || $urutan < 1 || $urutan > 3) {
+                        $fail('Pejabat pemohon harus pengguna aktif dengan tingkat Supervisor, Manajer, atau Kepala Divisi.');
+                    }
+                },
+            ];
         }
 
         if ($this->isOverBudget) {
@@ -373,6 +426,9 @@ class PermohonanEdit extends Component
 
     public function saveDraft(): void
     {
+        $existing = Permohonan::findOrFail($this->permohonanId);
+        abort_unless(Auth::user()?->can('update', $existing), 403, 'Dokumen ini tidak dapat diedit.');
+        $this->enforceSubmitterIntegrity($existing);
         $this->validateForm();
 
         $permohonan = DB::transaction(function () {
@@ -435,6 +491,10 @@ class PermohonanEdit extends Component
 
     public function submitNow(): void
     {
+        $existing = Permohonan::findOrFail($this->permohonanId);
+        abort_unless(Auth::user()?->can('update', $existing), 403, 'Dokumen ini tidak dapat diedit.');
+        $this->enforceSubmitterIntegrity($existing);
+
         if ($this->isOverPemohonLimit) {
             $pemohon = $this->atasNamaUser;
             $this->addError(
@@ -450,61 +510,77 @@ class PermohonanEdit extends Component
 
         $this->validateForm();
 
-        $permohonan = DB::transaction(function () {
-            $p = Permohonan::findOrFail($this->permohonanId);
-            $before = $p->toArray();
+        $chainPreview = $this->approvalChainPreview;
+        if ($chainPreview && ! empty($chainPreview['missing_approvers'])) {
+            $this->addError('approval_chain', implode(' ', $chainPreview['missing_approvers']));
 
-            $p->update([
-                'unit_id' => $this->unit_id,
-                'user_id' => $this->user_id ?: Auth::id(),
-                'kode_anggaran_id' => $this->kode_anggaran_id,
-                'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
-                'nama_kegiatan' => $this->nama_kegiatan,
-                'tgl_mulai' => $this->tgl_mulai,
-                'tgl_selesai' => $this->tgl_selesai ?: null,
-                'sumber_dana_id' => $this->sumber_dana_id,
-                'total_diminta' => $this->totalDiminta,
-                'catatan_over' => $this->isOverBudget ? $this->catatan_over : null,
-            ]);
+            return;
+        }
 
-            // Sync items
-            $existingItemIds = [];
-            foreach ($this->items as $item) {
-                if (! empty($item['id'])) {
-                    $pi = PermohonanItem::find($item['id']);
-                    if ($pi && $pi->permohonan_id === $p->id) {
-                        $pi->update([
-                            'uraian' => trim($item['uraian']),
-                            'asnaf_id' => $item['asnaf_id'] ?: null,
-                            'program_utama_id' => $item['program_utama_id'] ?: null,
-                            'jumlah_diminta' => (int) $item['jumlah_diminta'],
-                        ]);
-                        $existingItemIds[] = $pi->id;
+        try {
+            $permohonan = DB::transaction(function () {
+                $p = Permohonan::findOrFail($this->permohonanId);
+                $before = $p->toArray();
 
-                        continue;
+                $p->update([
+                    'unit_id' => $this->unit_id,
+                    'user_id' => $this->user_id ?: Auth::id(),
+                    'kode_anggaran_id' => $this->kode_anggaran_id,
+                    'program' => KodeAnggaran::find($this->kode_anggaran_id)?->nama ?: $this->program,
+                    'nama_kegiatan' => $this->nama_kegiatan,
+                    'tgl_mulai' => $this->tgl_mulai,
+                    'tgl_selesai' => $this->tgl_selesai ?: null,
+                    'sumber_dana_id' => $this->sumber_dana_id,
+                    'total_diminta' => $this->totalDiminta,
+                    'catatan_over' => $this->isOverBudget ? $this->catatan_over : null,
+                ]);
+
+                // Sync items
+                $existingItemIds = [];
+                foreach ($this->items as $item) {
+                    if (! empty($item['id'])) {
+                        $pi = PermohonanItem::find($item['id']);
+                        if ($pi && $pi->permohonan_id === $p->id) {
+                            $pi->update([
+                                'uraian' => trim($item['uraian']),
+                                'asnaf_id' => $item['asnaf_id'] ?: null,
+                                'program_utama_id' => $item['program_utama_id'] ?: null,
+                                'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                            ]);
+                            $existingItemIds[] = $pi->id;
+
+                            continue;
+                        }
                     }
+
+                    $created = PermohonanItem::create([
+                        'permohonan_id' => $p->id,
+                        'uraian' => trim($item['uraian']),
+                        'asnaf_id' => $item['asnaf_id'] ?: null,
+                        'program_utama_id' => $item['program_utama_id'] ?: null,
+                        'jumlah_diminta' => (int) $item['jumlah_diminta'],
+                    ]);
+                    $existingItemIds[] = $created->id;
                 }
 
-                $created = PermohonanItem::create([
-                    'permohonan_id' => $p->id,
-                    'uraian' => trim($item['uraian']),
-                    'asnaf_id' => $item['asnaf_id'] ?: null,
-                    'program_utama_id' => $item['program_utama_id'] ?: null,
-                    'jumlah_diminta' => (int) $item['jumlah_diminta'],
-                ]);
-                $existingItemIds[] = $created->id;
-            }
+                PermohonanItem::where('permohonan_id', $p->id)
+                    ->whereNotIn('id', $existingItemIds)
+                    ->delete();
 
-            PermohonanItem::where('permohonan_id', $p->id)
-                ->whereNotIn('id', $existingItemIds)
-                ->delete();
+                $workflow = new PermohonanWorkflow;
 
-            $workflow = new PermohonanWorkflow;
+                return $workflow->submit($p);
+            });
+        } catch (RuntimeException $e) {
+            $this->addError('approval_chain', $e->getMessage());
 
-            return $workflow->submit($p);
-        });
+            return;
+        }
 
-        session()->flash('success', "Permohonan dana {$permohonan->no_pengajuan} berhasil diajukan untuk proses persetujuan.");
+        $msg = $permohonan->status === 'disetujui_keuangan'
+            ? "Permohonan dana {$permohonan->no_pengajuan} berhasil diajukan dan langsung disetujui."
+            : "Permohonan dana {$permohonan->no_pengajuan} berhasil diajukan untuk proses persetujuan.";
+        session()->flash('success', $msg);
         $this->redirect(route('permohonan.detail', $permohonan->id), navigate: true);
     }
 
@@ -526,14 +602,7 @@ class PermohonanEdit extends Component
         $kodeAnggaranList = KodeAnggaran::sortHierarchically($rawLeaf);
 
         $programs = ProgramUtama::where('is_active', true)->orderBy('nama', 'asc')->get();
-        $units = Unit::with('parent')
-            ->orderBy('nama', 'asc')
-            ->get()
-            ->map(fn (Unit $u) => [
-                'id' => $u->id,
-                'kode' => $u->kode,
-                'nama' => $u->parent ? "{$u->parent->nama} — {$u->nama}" : $u->nama,
-            ]);
+        $units = Unit::formatDropdownOptions();
         $sumberDanaList = SumberDana::where('is_active', true)->orderBy('id', 'asc')->get();
         $asnafList = Asnaf::where('is_active', true)->orderBy('id', 'asc')->get();
 
@@ -582,6 +651,7 @@ class PermohonanEdit extends Component
             'totalDiminta' => $this->totalDiminta,
             'isTu' => $this->isTu,
             'creatorCandidates' => $creatorCandidates,
+            'approvalChainPreview' => $this->approvalChainPreview,
         ]);
     }
 }

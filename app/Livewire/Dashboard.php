@@ -9,6 +9,7 @@ use App\Models\TahunAnggaran;
 use App\Models\Ump;
 use App\Models\Unit;
 use App\Services\BudgetCalculator;
+use App\Services\PermohonanWorkflow;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -114,7 +115,7 @@ class Dashboard extends Component
     public function render()
     {
         $daftarTahun = TahunAnggaran::orderBy('tahun', 'desc')->get();
-        $daftarUnit = Unit::orderBy('nama', 'asc')->get();
+        $daftarUnit = Unit::formatDropdownOptions();
         $daftarSumberDana = SumberDana::where('is_active', true)->orderBy('nama', 'asc')->get();
         $rawKodeAnggaran = $this->tahunAnggaranId
             ? KodeAnggaran::where('tahun_anggaran_id', $this->tahunAnggaranId)->where('is_active', true)->get()
@@ -237,72 +238,14 @@ class Dashboard extends Component
         $levelingUrutan = $user->leveling?->urutan ?? 0;
         $isFinance = $user->role === 'keuangan' || $user->is_petugas_input || $user->role === 'admin';
         $isAdmin = $user->role === 'admin';
+        $workflow = new PermohonanWorkflow;
 
-        // Permohonan
-        $pmhDiajukan = Permohonan::with(['user', 'unit', 'levelingRequired'])
-            ->where('status', 'diajukan')
-            ->where(function ($q) use ($user, $levelingUrutan, $isAdmin) {
-                if ($isAdmin) {
-                    return;
-                }
-                $q->where('atasan_id', $user->id);
+        // Permohonan: gunakan Single Source of Truth dari PermohonanWorkflow
+        $allPmh = Permohonan::with(['user.leveling', 'user.unit.parent', 'unit.parent', 'levelingRequired'])
+            ->whereIn('status', ['diajukan', 'diketahui_kadiv'])
+            ->get()
+            ->filter(fn (Permohonan $p) => $workflow->canUserApprove($user, $p));
 
-                $divisiId = $user->unit?->getDivisiId();
-
-                if ($levelingUrutan >= 3) {
-                    $q->orWhere(function ($sub) use ($divisiId) {
-                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
-                        if ($divisiId) {
-                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
-                        }
-                    });
-                } elseif ($levelingUrutan == 2) {
-                    $q->orWhere(function ($sub) use ($user, $divisiId) {
-                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
-                        if ($divisiId) {
-                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
-                        } else {
-                            $sub->where('unit_id', $user->unit_id);
-                        }
-                    });
-                }
-            })->get();
-
-        $pmhFinance = Permohonan::with(['user', 'unit', 'levelingRequired'])
-            ->where('status', 'diketahui_kadiv')
-            ->where(function ($q) use ($user, $levelingUrutan, $isFinance, $isAdmin) {
-                if ($isAdmin) {
-                    return;
-                }
-
-                $conditions = false;
-
-                if ($levelingUrutan >= 3) {
-                    $divisiId = $user->unit?->getDivisiId();
-                    $q->where(function ($sub) use ($divisiId) {
-                        $sub->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '<=', 1));
-                        if ($divisiId) {
-                            $sub->whereHas('unit', fn ($u) => $u->where('id', $divisiId)->orWhere('parent_id', $divisiId));
-                        }
-                    });
-                    $conditions = true;
-                }
-
-                if ($isFinance) {
-                    if ($conditions) {
-                        $q->orWhereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
-                    } else {
-                        $q->whereHas('levelingRequired', fn ($l) => $l->where('urutan', '>=', 2));
-                    }
-                    $conditions = true;
-                }
-
-                if (! $conditions) {
-                    $q->whereRaw('0 = 1');
-                }
-            })->get();
-
-        $allPmh = $pmhDiajukan->concat($pmhFinance)->unique('id');
         foreach ($allPmh as $p) {
             $antrean->push([
                 'jenis' => 'permohonan',
@@ -354,8 +297,8 @@ class Dashboard extends Component
         foreach ($umpList as $u) {
             $antrean->push([
                 'jenis' => 'ump',
-                'no_dokumen' => $u->pencairan?->no_ppd ?? 'UMP',
-                'judul' => $u->tujuan ?? 'Laporan UMP',
+                'no_dokumen' => $u->pencairan?->no_ppd ?? 'Laporan',
+                'judul' => $u->tujuan ?? 'Laporan',
                 'pengaju' => $u->pj?->name ?? 'PJ',
                 'unit' => $u->pencairan?->permohonan?->unit?->nama ?? '',
                 'nominal' => $u->jumlah_total,

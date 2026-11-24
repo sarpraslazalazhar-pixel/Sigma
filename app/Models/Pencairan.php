@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Pencairan extends Model
 {
@@ -45,6 +46,17 @@ class Pencairan extends Model
     public function lampiran(): MorphMany
     {
         return $this->morphMany(Lampiran::class, 'attachable');
+    }
+
+    public function buktiTransfer(): MorphOne
+    {
+        return $this->morphOne(Lampiran::class, 'attachable')
+            ->ofMany([
+                'version' => 'max',
+                'id' => 'max',
+            ], function ($query): void {
+                $query->where('jenis', 'bukti_transfer');
+            });
     }
 
     public function verifikator(): BelongsTo

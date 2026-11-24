@@ -48,22 +48,23 @@ class MasterDataSeeder extends Seeder
             [
                 'nama' => 'Divisi Sekretariat',
                 'tipe' => 'divisi',
+                'urutan' => 1,
                 'parent_id' => null,
                 'sumber_dana_default_id' => $sumberDanaZakat->id,
                 'is_active' => true,
             ]
         );
-        $untSekKlm = Unit::updateOrCreate(
-            ['kode' => 'UNT-SEK-KLM'],
-            ['nama' => 'Unit Kelembagaan', 'tipe' => 'unit', 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
-        );
-        $untSekHum = Unit::updateOrCreate(
-            ['kode' => 'UNT-SEK-HUM'],
-            ['nama' => 'Unit Humas, GA, dan IT', 'tipe' => 'unit', 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
-        );
-        $untSekDkl = Unit::updateOrCreate(
+        Unit::updateOrCreate(
             ['kode' => 'UNT-SEK-DKL'],
-            ['nama' => 'Unit Diklat & Litbang', 'tipe' => 'unit', 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Diklat & Litbang', 'tipe' => 'unit', 'urutan' => 1, 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+        );
+        Unit::updateOrCreate(
+            ['kode' => 'UNT-SEK-HUM'],
+            ['nama' => 'Unit Humas, GA, dan IT', 'tipe' => 'unit', 'urutan' => 2, 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
+        );
+        Unit::updateOrCreate(
+            ['kode' => 'UNT-SEK-KLM'],
+            ['nama' => 'Unit Kelembagaan', 'tipe' => 'unit', 'urutan' => 3, 'parent_id' => $divSek->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
 
         // 2. DIV-KEU: Divisi Keuangan (Zakat / Amil)
@@ -72,6 +73,7 @@ class MasterDataSeeder extends Seeder
             [
                 'nama' => 'Divisi Keuangan',
                 'tipe' => 'divisi',
+                'urutan' => 2,
                 'parent_id' => null,
                 'sumber_dana_default_id' => $sumberDanaZakat->id,
                 'is_active' => true,
@@ -79,15 +81,15 @@ class MasterDataSeeder extends Seeder
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-KEU-KLR'],
-            ['nama' => 'Unit Pengeluaran', 'tipe' => 'unit', 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Pengeluaran', 'tipe' => 'unit', 'urutan' => 1, 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-KEU-AKN'],
-            ['nama' => 'Unit Anggaran & Akuntansi', 'tipe' => 'unit', 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Anggaran & Akuntansi', 'tipe' => 'unit', 'urutan' => 2, 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-KEU-TRM'],
-            ['nama' => 'Unit Penerimaan', 'tipe' => 'unit', 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Penerimaan', 'tipe' => 'unit', 'urutan' => 3, 'parent_id' => $divKeu->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
 
         // 3. DIV-FND: Divisi Fundraising & Partnership (Infak Umum)
@@ -96,6 +98,7 @@ class MasterDataSeeder extends Seeder
             [
                 'nama' => 'Divisi Fundraising & Partnership',
                 'tipe' => 'divisi',
+                'urutan' => 3,
                 'parent_id' => null,
                 'sumber_dana_default_id' => $sumberDanaInfakUmum->id,
                 'is_active' => true,
@@ -103,20 +106,20 @@ class MasterDataSeeder extends Seeder
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-FND-INT'],
-            ['nama' => 'Unit Internal Fundraising', 'tipe' => 'unit', 'parent_id' => $divFnd->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
+            ['nama' => 'Unit Internal Fundraising', 'tipe' => 'unit', 'urutan' => 1, 'parent_id' => $divFnd->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-FND-EKS'],
-            ['nama' => 'Unit Eksternal Fundraising', 'tipe' => 'unit', 'parent_id' => $divFnd->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
+            ['nama' => 'Unit Eksternal Fundraising', 'tipe' => 'unit', 'urutan' => 2, 'parent_id' => $divFnd->id, 'sumber_dana_default_id' => $sumberDanaInfakUmum->id, 'is_active' => true]
         );
 
         // Unit-unit Kantor Perwakilan Wilayah (KPw) di bawah Divisi Fundraising & Partnership
         $kpwUnits = [
-            ['kode' => 'UNT-FND-KPW-JTG', 'nama' => 'Unit KPw Jawa Tengah'],
-            ['kode' => 'UNT-FND-KPW-JTM', 'nama' => 'Unit KPw Jawa Timur'],
-            ['kode' => 'UNT-FND-KPW-SSL', 'nama' => 'Unit KPw Sulawesi Selatan'],
-            ['kode' => 'UNT-FND-KPW-SMT', 'nama' => 'Unit KPw Sumatera Barat'],
-            ['kode' => 'UNT-FND-KPW-YOG', 'nama' => 'Unit KPw Yogyakarta'],
+            ['kode' => 'UNT-FND-KPW-JTG', 'nama' => 'Unit KPw Jawa Tengah', 'urutan' => 3],
+            ['kode' => 'UNT-FND-KPW-JTM', 'nama' => 'Unit KPw Jawa Timur', 'urutan' => 4],
+            ['kode' => 'UNT-FND-KPW-SSL', 'nama' => 'Unit KPw Sulawesi Selatan', 'urutan' => 5],
+            ['kode' => 'UNT-FND-KPW-SMT', 'nama' => 'Unit KPw Sumatera Barat', 'urutan' => 6],
+            ['kode' => 'UNT-FND-KPW-YOG', 'nama' => 'Unit KPw Yogyakarta', 'urutan' => 7],
         ];
 
         foreach ($kpwUnits as $kpw) {
@@ -125,6 +128,7 @@ class MasterDataSeeder extends Seeder
                 [
                     'nama' => $kpw['nama'],
                     'tipe' => 'unit',
+                    'urutan' => $kpw['urutan'],
                     'parent_id' => $divFnd->id,
                     'sumber_dana_default_id' => $sumberDanaZakat->id,
                     'is_active' => true,
@@ -138,6 +142,7 @@ class MasterDataSeeder extends Seeder
             [
                 'nama' => 'Divisi Program',
                 'tipe' => 'divisi',
+                'urutan' => 4,
                 'parent_id' => null,
                 'sumber_dana_default_id' => $sumberDanaZakat->id,
                 'is_active' => true,
@@ -145,7 +150,7 @@ class MasterDataSeeder extends Seeder
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-PRG-INT'],
-            ['nama' => 'Unit Program', 'tipe' => 'unit', 'parent_id' => $divPrg->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Program', 'tipe' => 'unit', 'urutan' => 1, 'parent_id' => $divPrg->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
 
         // 5. DIV-WKF: Divisi Wakaf (Zakat)
@@ -154,6 +159,7 @@ class MasterDataSeeder extends Seeder
             [
                 'nama' => 'Divisi Wakaf',
                 'tipe' => 'divisi',
+                'urutan' => 5,
                 'parent_id' => null,
                 'sumber_dana_default_id' => $sumberDanaZakat->id,
                 'is_active' => true,
@@ -161,7 +167,7 @@ class MasterDataSeeder extends Seeder
         );
         Unit::updateOrCreate(
             ['kode' => 'UNT-WKF-INT'],
-            ['nama' => 'Unit Wakaf', 'tipe' => 'unit', 'parent_id' => $divWkf->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
+            ['nama' => 'Unit Wakaf', 'tipe' => 'unit', 'urutan' => 1, 'parent_id' => $divWkf->id, 'sumber_dana_default_id' => $sumberDanaZakat->id, 'is_active' => true]
         );
 
         // Pembersihan divisi legacy DIV-KPW-*

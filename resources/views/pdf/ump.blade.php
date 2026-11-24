@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Laporan UMP - {{ $ump->pencairan?->no_ppd ?? 'UMP' . $ump->id }}</title>
+    <title>Laporan - {{ $ump->pencairan?->no_ppd ?? 'LAP-' . $ump->id }}</title>
     <style>
         @page {
             size: a4 portrait;
@@ -148,7 +148,7 @@
                 </div>
                 <table class="meta-table">
                     <tr>
-                        <td style="width: 175px;">No. PPD / No. Uang Muka</td>
+                        <td style="width: 175px;">No. PPD</td>
                         <td style="width: 10px; text-align: center;">:</td>
                         <td>{{ $noPpdDisplay }}</td>
                     </tr>

@@ -9,18 +9,20 @@
                 Kelola dan pantau permohonan dana operasional serta kegiatan program LAZ Al-Azhar.
             </p>
         </div>
-        <div>
-            <a
-                href="{{ route('permohonan.create') }}"
-                wire:navigate
-                class="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer w-full sm:w-auto"
-            >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Buat Permohonan Baru</span>
-            </a>
-        </div>
+        @can('create-permohonan')
+            <div>
+                <a
+                    href="{{ route('permohonan.create') }}"
+                    wire:navigate
+                    class="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-[#1E60D5] hover:bg-[#0F2F57] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer w-full sm:w-auto"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Buat Permohonan Baru</span>
+                </a>
+            </div>
+        @endcan
     </div>
 
     {{-- Filter Panel --}}
@@ -64,6 +66,7 @@
                     <option value="ditolak">Ditolak</option>
                     <option value="dibatalkan">Dibatalkan</option>
                     <option value="dicairkan">Dicairkan</option>
+                    <option value="selesai">Selesai</option>
                 </select>
             </div>
 

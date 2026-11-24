@@ -14,7 +14,7 @@ use Livewire\Component;
 use Livewire\WithPagination;
 
 #[Layout('layouts.app')]
-#[Title('Laporan UMP: SIGMA LAZ Al-Azhar')]
+#[Title('Laporan: SIGMA LAZ Al-Azhar')]
 class UmpIndex extends Component
 {
     use WithPagination;
@@ -142,11 +142,11 @@ class UmpIndex extends Component
 
         $umpList = $query->orderBy('id', 'desc')->paginate(15);
 
-        $unitsQuery = Unit::query();
+        $unitsQuery = Unit::with('parent');
         if ($user && ! in_array($user->role, ['admin', 'keuangan'], true) && $user->unit) {
             $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
         }
-        $units = $unitsQuery->orderBy('nama', 'asc')->get(['id', 'nama', 'kode']);
+        $units = Unit::formatDropdownOptions($unitsQuery->get());
 
         // Scope metrics the same way as listing
         $metricsBase = Ump::query()

@@ -3,10 +3,10 @@
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <h1 class="text-xl sm:text-2xl font-bold text-[#0F2F57] tracking-tight">
-                Laporan UMP
+                Laporan
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Uang Muka Perjalanan dan realisasi penggunaan dana per pencairan PPD.
+                Laporan realisasi penggunaan dana per pencairan PPD.
             </p>
         </div>
     </div>
@@ -14,14 +14,14 @@
     {{-- Metrik Ringkasan --}}
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
-            <span class="text-[11px] text-slate-400 block">Total UMP Berjalan</span>
+            <span class="text-[11px] text-slate-400 block">Total Laporan Berjalan</span>
             <span class="text-xl font-bold text-[#0F2F57] block mt-1 tabular-nums">{{ number_format($metrics['berjalan'], 0, ',', '.') }}</span>
             <span class="text-[11px] text-slate-500 block mt-0.5">Belum berstatus Selesai</span>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
             <span class="text-[11px] text-slate-400 block">Total Dana Diterima</span>
             <span class="text-xl font-bold text-slate-900 block mt-1 tabular-nums">Rp {{ number_format($metrics['diterima'], 0, ',', '.') }}</span>
-            <span class="text-[11px] text-slate-500 block mt-0.5">Akumulasi jumlah_total UMP</span>
+            <span class="text-[11px] text-slate-500 block mt-0.5">Akumulasi total dana diterima</span>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
             <span class="text-[11px] text-slate-400 block">Total Realisasi Penggunaan</span>
@@ -58,7 +58,7 @@
 
             <div class="lg:col-span-3">
                 <label for="ump-filter-status" class="block text-xs font-semibold text-slate-700 mb-1">
-                    Status UMP
+                    Status Laporan
                 </label>
                 <select
                     id="ump-filter-status"
@@ -163,12 +163,12 @@
                     <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    <span>Buka Form UMP</span>
+                    <span>Buka Form Laporan</span>
                 </a>
             </div>
         @empty
             <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
-                Tidak ada UMP yang ditemukan.
+                Tidak ada Laporan yang ditemukan.
             </div>
         @endforelse
     </div>
@@ -244,14 +244,14 @@
                                 <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
-                                <span>Buka Form UMP</span>
+                                <span>Buka Form Laporan</span>
                             </a>
                         </td>
                     </tr>
                 @empty
                     <tr>
                         <td colspan="9" class="py-8 px-3 text-center text-slate-500 text-xs">
-                            Tidak ada UMP yang sesuai kriteria pencarian.
+                            Tidak ada Laporan yang sesuai kriteria pencarian.
                         </td>
                     </tr>
                 @endforelse

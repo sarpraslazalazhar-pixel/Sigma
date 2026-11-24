@@ -93,7 +93,7 @@ class LaporanMonitoringIndex extends Component
 
         return Excel::download(
             new RekapPpdUmpExport($this->tahunAnggaranId, $this->unitId),
-            "Rekap_PPD_dan_UMP_{$tahun}.xlsx"
+            "Rekap_PPD_dan_Laporan_{$tahun}.xlsx"
         );
     }
 
@@ -120,7 +120,7 @@ class LaporanMonitoringIndex extends Component
     public function render()
     {
         $daftarTahun = TahunAnggaran::orderBy('tahun', 'desc')->get();
-        $daftarUnit = Unit::orderBy('nama', 'asc')->get();
+        $daftarUnit = Unit::formatDropdownOptions();
 
         $calculator = new BudgetCalculator;
         $treeData = $this->tahunAnggaranId

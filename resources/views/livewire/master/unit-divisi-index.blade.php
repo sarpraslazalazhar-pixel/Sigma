@@ -6,7 +6,7 @@
                 Master Divisi & Unit
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Struktur organisasi pengelola anggaran LAZ Al Azhar (Divisi membawahi Unit kerja).
+                Struktur organisasi pengelola anggaran LAZ Al Azhar (Divisi membawahi Unit kerja) lengkap dengan urutan tampilan.
             </p>
         </div>
 
@@ -38,10 +38,20 @@
     {{-- VIEW 1: TAMPILAN MOBILE (Cards, < 1024px) --}}
     <div class="block lg:hidden space-y-3">
         @foreach ($allUnits as $u)
-            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3 {{ !$u->is_active ? 'opacity-60 bg-slate-50' : '' }}">
+            @php
+                $activeUsers = $u->users->where('is_active', true);
+                $leader = $u->tipe === 'divisi'
+                    ? $activeUsers->first(fn ($usr) => ($usr->leveling?->urutan ?? 0) >= 3)
+                    : $activeUsers->first(fn ($usr) => ($usr->leveling?->urutan ?? 0) === 2);
+                $supervisorCount = $activeUsers->filter(fn ($usr) => ($usr->leveling?->urutan ?? 0) === 1 && ! $usr->isAdmin())->count();
+            @endphp
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3 {{ $u->tipe === 'unit' ? 'ml-3 border-l-4 border-l-slate-300' : 'border-l-4 border-l-[#0F2F57]' }} {{ !$u->is_active ? 'opacity-60 bg-slate-50' : '' }}">
                 <div class="flex items-start justify-between gap-2">
-                    <div>
-                        <div class="flex items-center gap-2">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-md font-mono text-[10px] font-bold bg-slate-100 text-slate-600 tabular-nums">
+                                #{{ $u->urutan > 0 ? $u->urutan : '-' }}
+                            </span>
                             <span class="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-[#DCE5F6] text-[#001B3E]">
                                 {{ $u->kode }}
                             </span>
@@ -63,49 +73,97 @@
                             </p>
                         @endif
                     </div>
+
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button
+                            type="button"
+                            wire:click="moveUp({{ $u->id }})"
+                            class="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                            title="Naikkan urutan"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                            </svg>
+                        </button>
+                        <button
+                            type="button"
+                            wire:click="moveDown({{ $u->id }})"
+                            class="min-h-[40px] min-w-[40px] inline-flex items-center justify-center rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                            title="Turunkan urutan"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
                     <div class="p-2 rounded-xl bg-slate-50">
-                        <span class="text-[10px] text-slate-400 block">Sumber Dana Default</span>
-                        <span class="font-semibold text-slate-800 mt-0.5 block">
-                            {{ $u->sumberDanaDefault?->nama ?? 'Fleksibel' }}
+                        <span class="text-[10px] text-slate-400 block">
+                            {{ $u->tipe === 'divisi' ? 'Kepala Divisi' : 'Manajer Unit' }}
+                        </span>
+                        <span class="font-semibold text-slate-800 mt-0.5 block truncate">
+                            {{ $leader?->name ?? 'Belum ditetapkan' }}
                         </span>
                     </div>
                     <div class="p-2 rounded-xl bg-slate-50">
-                        <span class="text-[10px] text-slate-400 block">Personel Terkait</span>
-                        <span class="font-semibold text-slate-800 mt-0.5 block">
+                        <span class="text-[10px] text-slate-400 block">Personel</span>
+                        <span class="font-semibold text-slate-800 mt-0.5 block tabular-nums">
                             {{ $u->users->count() }} User
+                            @if ($supervisorCount > 0)
+                                <span class="text-[10px] font-normal text-slate-500">({{ $supervisorCount }} Spv)</span>
+                            @endif
+                        </span>
+                    </div>
+                    <div class="col-span-2 p-2 rounded-xl bg-slate-50">
+                        <span class="text-[10px] text-slate-400 block">Sumber Dana Default</span>
+                        <span class="font-semibold text-slate-800 mt-0.5 block">
+                            {{ $u->sumberDanaDefault?->nama ?? 'Fleksibel (Sesuai Pengajuan)' }}
                         </span>
                     </div>
                 </div>
 
-                <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
-                    @if ($u->tipe === 'divisi')
-                        <button
-                            type="button"
-                            wire:click="openCreateModal({{ $u->id }})"
-                            class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                    @if (auth()->user()?->role === 'admin')
+                        <a
+                            href="{{ route('master.users', ['unitFilter' => $u->id]) }}"
+                            wire:navigate
+                            class="min-h-[44px] inline-flex items-center px-3 py-2 rounded-xl text-xs font-semibold text-[#0F2F57] bg-[#DCE5F6]/70 hover:bg-[#DCE5F6] transition-colors"
                         >
-                            + Unit Anak
-                        </button>
+                            Lihat Tim →
+                        </a>
+                    @else
+                        <span></span>
                     @endif
 
-                    <button
-                        type="button"
-                        wire:click="openEditModal({{ $u->id }})"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                    >
-                        Edit
-                    </button>
+                    <div class="flex items-center gap-1.5">
+                        @if ($u->tipe === 'divisi')
+                            <button
+                                type="button"
+                                wire:click="openCreateModal({{ $u->id }})"
+                                class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                            >
+                                + Unit
+                            </button>
+                        @endif
 
-                    <button
-                        type="button"
-                        wire:click="toggleActive({{ $u->id }})"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-semibold {{ $u->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer"
-                    >
-                        {{ $u->is_active ? 'Nonaktif' : 'Aktif' }}
-                    </button>
+                        <button
+                            type="button"
+                            wire:click="openEditModal({{ $u->id }})"
+                            class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                            Edit
+                        </button>
+
+                        <button
+                            type="button"
+                            wire:click="toggleActive({{ $u->id }})"
+                            class="min-h-[44px] px-3 py-2 rounded-xl text-xs font-semibold {{ $u->is_active ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} transition-colors cursor-pointer"
+                        >
+                            {{ $u->is_active ? 'Nonaktif' : 'Aktif' }}
+                        </button>
+                    </div>
                 </div>
             </div>
         @endforeach
@@ -116,49 +174,100 @@
         <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
                 <tr>
+                    <th class="py-3.5 px-3 text-center w-24">Urutan</th>
                     <th class="py-3.5 px-4">Kode</th>
                     <th class="py-3.5 px-4">Nama Divisi / Unit</th>
-                    <th class="py-3.5 px-4 text-center">Tipe</th>
+                    <th class="py-3.5 px-4">Pimpinan & Struktur Tim</th>
                     <th class="py-3.5 px-4">Sumber Dana Default</th>
-                    <th class="py-3.5 px-4 text-center">Personel</th>
-                    <th class="py-3.5 px-4 text-center">Status</th>
+                    <th class="py-3.5 px-3 text-center">Status</th>
                     <th class="py-3.5 px-4 text-right">Aksi</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-                @foreach ($units as $divisi)
+                @foreach ($units as $divIndex => $divisi)
+                    @php
+                        $divKadiv = $divisi->users->where('is_active', true)->first(fn ($usr) => ($usr->leveling?->urutan ?? 0) >= 3);
+                        $divTotalUsers = $divisi->users->count() + $divisi->children->sum(fn ($c) => $c->users->count());
+                    @endphp
                     {{-- Row Induk (Divisi) --}}
-                    <tr class="bg-slate-50/40 hover:bg-slate-50 transition-colors {{ !$divisi->is_active ? 'opacity-50' : '' }}">
-                        <td class="py-3.5 px-4 font-mono font-bold text-slate-900">
-                            <span class="px-2 py-0.5 rounded-md bg-[#DCE5F6] text-[#001B3E]">
+                    <tr class="bg-[#DCE5F6]/30 hover:bg-[#DCE5F6]/50 transition-colors {{ !$divisi->is_active ? 'opacity-50' : '' }}">
+                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                            <div class="inline-flex items-center gap-1">
+                                <span class="font-mono font-bold text-[#0F2F57] tabular-nums w-5 text-center">
+                                    {{ $divisi->urutan > 0 ? $divisi->urutan : '-' }}
+                                </span>
+                                <button
+                                    type="button"
+                                    wire:click="moveUp({{ $divisi->id }})"
+                                    @disabled($loop->first)
+                                    class="p-1 rounded-md text-slate-500 hover:text-[#0F2F57] hover:bg-white/80 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                    title="Naikkan urutan divisi"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="moveDown({{ $divisi->id }})"
+                                    @disabled($loop->last)
+                                    class="p-1 rounded-md text-slate-500 hover:text-[#0F2F57] hover:bg-white/80 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                    title="Turunkan urutan divisi"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                            <span class="px-2 py-0.5 rounded-md bg-[#0F2F57] text-white">
                                 {{ $divisi->kode }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 font-bold text-slate-900">
-                            {{ $divisi->nama }}
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-[#0F2F57]">{{ $divisi->nama }}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    Divisi
+                                </span>
+                            </div>
                         </td>
-                        <td class="py-3.5 px-4 text-center">
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                Divisi
-                            </span>
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center justify-between gap-2">
+                                <div>
+                                    <p class="font-semibold text-slate-900">
+                                        {{ $divKadiv?->name ?? 'Kepala Divisi belum diatur' }}
+                                    </p>
+                                    <p class="text-[11px] text-slate-500 tabular-nums">
+                                        {{ $divisi->children->count() }} Unit · {{ $divTotalUsers }} Personel total
+                                    </p>
+                                </div>
+                                @if (auth()->user()?->role === 'admin')
+                                    <a
+                                        href="{{ route('master.users', ['unitFilter' => $divisi->id]) }}"
+                                        wire:navigate
+                                        class="px-2.5 py-1 rounded-full text-[11px] font-semibold text-[#0F2F57] bg-white hover:bg-[#DCE5F6] border border-slate-200 transition-colors shrink-0"
+                                    >
+                                        Lihat Tim →
+                                    </a>
+                                @endif
+                            </div>
                         </td>
-                        <td class="py-3.5 px-4 text-slate-500">
+                        <td class="py-3.5 px-4 text-slate-600">
                             {{ $divisi->sumberDanaDefault?->nama ?? 'Sesuai Pengajuan' }}
                         </td>
-                        <td class="py-3.5 px-4 text-center text-slate-700 tabular-nums">
-                            {{ $divisi->users->count() }} User
-                        </td>
-                        <td class="py-3.5 px-4 text-center">
+                        <td class="py-3.5 px-3 text-center whitespace-nowrap">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold {{ $divisi->is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' }}">
                                 {{ $divisi->is_active ? 'Aktif' : 'Nonaktif' }}
                             </span>
                         </td>
-                        <td class="py-3.5 px-4 text-right">
+                        <td class="py-3.5 px-4 text-right whitespace-nowrap">
                             <div class="inline-flex items-center gap-1.5 justify-end">
                                 <button
                                     type="button"
                                     wire:click="openCreateModal({{ $divisi->id }})"
-                                    class="p-1.5 rounded-lg text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer"
+                                    class="p-1.5 rounded-lg text-blue-700 hover:bg-white transition-colors cursor-pointer"
                                     title="Tambah Unit Anak"
                                 >
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,7 +277,7 @@
                                 <button
                                     type="button"
                                     wire:click="openEditModal({{ $divisi->id }})"
-                                    class="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    class="p-1.5 rounded-lg text-slate-600 hover:bg-white transition-colors cursor-pointer"
                                     title="Edit Divisi"
                                 >
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,8 +300,43 @@
 
                     {{-- Rows Anak (Unit) --}}
                     @foreach ($divisi->children as $unit)
+                        @php
+                            $activeUnitUsers = $unit->users->where('is_active', true);
+                            $unitManager = $activeUnitUsers->first(fn ($usr) => ($usr->leveling?->urutan ?? 0) === 2);
+                            $unitSpvCount = $activeUnitUsers->filter(fn ($usr) => ($usr->leveling?->urutan ?? 0) === 1 && ! $usr->isAdmin())->count();
+                            $unitStaffCount = $activeUnitUsers->filter(fn ($usr) => ($usr->leveling?->urutan ?? 0) === 0)->count();
+                        @endphp
                         <tr class="hover:bg-slate-50 transition-colors {{ !$unit->is_active ? 'opacity-50' : '' }}">
-                            <td class="py-3.5 px-4 font-mono text-slate-700 pl-8">
+                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
+                                <div class="inline-flex items-center gap-1">
+                                    <span class="font-mono text-slate-500 tabular-nums w-5 text-center">
+                                        {{ $unit->urutan > 0 ? $unit->urutan : '-' }}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        wire:click="moveUp({{ $unit->id }})"
+                                        @disabled($loop->first)
+                                        class="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                        title="Naikkan urutan unit"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        wire:click="moveDown({{ $unit->id }})"
+                                        @disabled($loop->last)
+                                        class="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                        title="Turunkan urutan unit"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4 font-mono text-slate-700 pl-8 whitespace-nowrap">
                                 <span class="inline-flex items-center gap-1.5">
                                     <span class="text-slate-300">└</span>
                                     <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
@@ -200,26 +344,50 @@
                                     </span>
                                 </span>
                             </td>
-                            <td class="py-3.5 px-4 font-medium text-slate-800">
-                                {{ $unit->nama }}
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-medium text-slate-800">{{ $unit->nama }}</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                        Unit
+                                    </span>
+                                </div>
                             </td>
-                            <td class="py-3.5 px-4 text-center">
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                    Unit
-                                </span>
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div>
+                                        <p class="font-medium text-slate-800">
+                                            {{ $unitManager?->name ?? 'Manajer belum diatur' }}
+                                        </p>
+                                        <p class="text-[11px] text-slate-500 tabular-nums">
+                                            {{ $unit->users->count() }} User
+                                            @if ($unitSpvCount > 0)
+                                                · {{ $unitSpvCount }} Supervisor
+                                            @endif
+                                            @if ($unitStaffCount > 0)
+                                                · {{ $unitStaffCount }} Staf
+                                            @endif
+                                        </p>
+                                    </div>
+                                    @if (auth()->user()?->role === 'admin')
+                                        <a
+                                            href="{{ route('master.users', ['unitFilter' => $unit->id]) }}"
+                                            wire:navigate
+                                            class="px-2.5 py-1 rounded-full text-[11px] font-semibold text-slate-600 hover:text-[#0F2F57] hover:bg-slate-100 transition-colors shrink-0"
+                                        >
+                                            Lihat Tim →
+                                        </a>
+                                    @endif
+                                </div>
                             </td>
                             <td class="py-3.5 px-4 text-slate-600">
                                 {{ $unit->sumberDanaDefault?->nama ?? 'Sesuai Pengajuan' }}
                             </td>
-                            <td class="py-3.5 px-4 text-center text-slate-700 tabular-nums">
-                                {{ $unit->users->count() }} User
-                            </td>
-                            <td class="py-3.5 px-4 text-center">
+                            <td class="py-3.5 px-3 text-center whitespace-nowrap">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold {{ $unit->is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' }}">
                                     {{ $unit->is_active ? 'Aktif' : 'Nonaktif' }}
                                 </span>
                             </td>
-                            <td class="py-3.5 px-4 text-right">
+                            <td class="py-3.5 px-4 text-right whitespace-nowrap">
                                 <div class="inline-flex items-center gap-1.5 justify-end">
                                     <button
                                         type="button"
@@ -273,19 +441,39 @@
                 </div>
 
                 <form wire:submit="save" action="#" onsubmit="return false;" class="p-6 space-y-4">
-                    {{-- Tipe --}}
-                    <div>
-                        <label for="form_tipe" class="block text-xs font-semibold text-slate-700 mb-1">
-                            Tipe Organisasi *
-                        </label>
-                        <select
-                            id="form_tipe"
-                            wire:model.live="form_tipe"
-                            class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
-                        >
-                            <option value="divisi">Divisi (Tingkat Induk)</option>
-                            <option value="unit">Unit (Tingkat Anak di bawah Divisi)</option>
-                        </select>
+                    {{-- Tipe & Urutan --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="sm:col-span-2">
+                            <label for="form_tipe" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Tipe Organisasi *
+                            </label>
+                            <select
+                                id="form_tipe"
+                                wire:model.live="form_tipe"
+                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
+                            >
+                                <option value="divisi">Divisi (Tingkat Induk)</option>
+                                <option value="unit">Unit (Tingkat Anak di bawah Divisi)</option>
+                            </select>
+                        </div>
+
+                        <div class="sm:col-span-1">
+                            <label for="form_urutan" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Urutan *
+                            </label>
+                            <input
+                                type="number"
+                                id="form_urutan"
+                                wire:model="form_urutan"
+                                min="0"
+                                max="9999"
+                                class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs font-mono tabular-nums text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('form_urutan') border-red-500 @enderror"
+                                required
+                            />
+                            @error('form_urutan')
+                                <p class="text-xs text-red-600 mt-1 font-medium">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
 
                     {{-- Parent Divisi (jika unit anak) --}}
@@ -296,7 +484,7 @@
                             </label>
                             <select
                                 id="form_parent_id"
-                                wire:model="form_parent_id"
+                                wire:model.live="form_parent_id"
                                 class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-800 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden"
                                 required
                             >
@@ -321,7 +509,7 @@
                                 type="text"
                                 id="form_kode"
                                 wire:model="form_kode"
-                                placeholder="DIV-SEK / UNT-IT"
+                                placeholder="DIV-SEK / UNT-SEK-HUM"
                                 class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs font-mono font-bold uppercase text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('form_kode') border-red-500 @enderror"
                                 required
                             />
@@ -338,7 +526,7 @@
                                 type="text"
                                 id="form_nama"
                                 wire:model="form_nama"
-                                placeholder="Contoh: Divisi Kelembagaan"
+                                placeholder="Contoh: Unit Humas, GA, dan IT"
                                 class="w-full min-h-[44px] rounded-xl border border-slate-300 text-xs text-slate-900 px-3 py-2 bg-white focus:border-[#1E60D5] focus:outline-hidden @error('form_nama') border-red-500 @enderror"
                                 required
                             />

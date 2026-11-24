@@ -18,7 +18,6 @@ use Database\Seeders\KodeAnggaranSeeder;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -94,12 +93,11 @@ class PermohonanItGaApprovalTest extends TestCase
     {
         $workflow = new PermohonanWorkflow;
 
-        // 1. Koordinator IT mengajukan pengadaan laptop & server
+        // 1. Kadiv mengajukan pengadaan laptop & server (> Rp 10jt) -> langsung menunggu Kadiv Keuangan
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-IT-001',
             'unit_id' => $this->unitIt->id,
-            'user_id' => $this->tuSekretariat->id,
-            'atasan_id' => $this->managerHumas->id,
+            'user_id' => $this->kadivUser->id,
             'kode_anggaran_id' => $this->posSaranaIt->id,
             'program' => 'Operasional Kesekretariatan',
             'nama_kegiatan' => 'Pengadaan Laptop dan Server IT',
@@ -120,17 +118,11 @@ class PermohonanItGaApprovalTest extends TestCase
 
         $this->assertStringStartsWith('UNT-SEK-HUM-PMH-', $permohonan->no_pengajuan);
 
-        // 2. Tahap 1: dokumen menunggu pemeriksaan Kepala Divisi Sekretariat
-        $this->assertEquals('diajukan', $permohonan->status);
-
-        // 3. Tahap 2: Kepala Divisi Sekretariat (Rahmatullah Sidik) memeriksa
-        $workflow->approve($permohonan, $this->kadivUser, [
-            'catatan' => 'Diperiksa Kadiv Sekretariat / Dirops',
-        ]);
-        $permohonan->refresh();
+        // 2. Pengajuan Kadiv langsung berstatus diketahui_kadiv (menunggu Kadiv Keuangan)
         $this->assertEquals('diketahui_kadiv', $permohonan->status);
+        $this->assertNull($permohonan->atasan_id);
 
-        // 4. Tahap 3: Keuangan (Rochadi Kohar) menyetujui
+        // 3. Tahap Akhir: Kadiv Keuangan menyetujui
         $workflow->approve($permohonan, $this->financeUser, [
             'items' => [$item->id => 24000000],
             'catatan' => 'Disetujui Keuangan Rp 24.000.000',
@@ -182,20 +174,16 @@ class PermohonanItGaApprovalTest extends TestCase
         $permohonan->refresh();
         $this->assertEquals('diajukan', $permohonan->status);
 
-        // Disetujui oleh Kadiv langsung -> langsung berstatus 'diketahui_kadiv' (Tahap 2 dilewati)
+        // Disetujui oleh Kadiv langsung -> langsung berstatus 'diketahui_kadiv' (menunggu Kadiv Keuangan)
         $workflow->approve($permohonan, $this->kadivUser, [
             'catatan' => 'Disetujui langsung oleh Kadiv',
         ]);
         $permohonan->refresh();
         $this->assertEquals('diketahui_kadiv', $permohonan->status);
 
-        // Tahap Keuangan melalui petugas input TU Sekretariat
-        Livewire::actingAs($this->tuSekretariat)
+        // Tahap Akhir langsung disetujui oleh Kadiv Keuangan tanpa wajib scan/bukti
+        Livewire::actingAs($this->financeUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->set('proxySignerName', 'Direktur Keuangan')
-            ->set('proxySignerJabatan', 'Kepala Divisi Keuangan / Direktur Keuangan')
-            ->set('proxySignedAt', now()->toDateString())
-            ->set('proxyScanFile', UploadedFile::fake()->create('scan_it_approval.pdf', 100, 'application/pdf'))
             ->set("approvedItemAmounts.{$item->id}", 10000000)
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();

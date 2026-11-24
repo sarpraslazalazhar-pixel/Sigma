@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Dashboard;
 use App\Livewire\Permohonan\PermohonanCreate;
 use App\Livewire\Permohonan\PermohonanDetail;
+use App\Livewire\Permohonan\PermohonanEdit;
+use App\Livewire\Permohonan\PermohonanIndex;
 use App\Models\Asnaf;
 use App\Models\KodeAnggaran;
+use App\Models\Leveling;
 use App\Models\Pencairan;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
@@ -19,7 +23,7 @@ use App\Services\PermohonanWorkflow;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -218,7 +222,7 @@ class PermohonanUiTest extends TestCase
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-TEST-001',
             'unit_id' => $this->unitKlm->id,
-            'user_id' => $this->staffUser->id,
+            'user_id' => $this->managerUser->id,
             'kode_anggaran_id' => $this->leafNode->id,
             'program' => 'Program Sosial',
             'nama_kegiatan' => 'Santunan Rutin Yatim',
@@ -230,26 +234,24 @@ class PermohonanUiTest extends TestCase
         PermohonanItem::create([
             'permohonan_id' => $permohonan->id,
             'uraian' => 'Paket Sembako',
-            'jumlah_diminta' => 15000000,
+            'jumlah_diminta' => 8000000,
         ]);
 
         (new PermohonanWorkflow)->submit($permohonan);
         $this->assertEquals('diajukan', $permohonan->fresh()->status);
 
-        // Akses halaman detail oleh Kepala Divisi Sekretariat
+        // Akses halaman detail oleh Kepala Divisi
         $this->actingAs($this->kadivUser)
             ->get("/permohonan/{$permohonan->id}")
             ->assertStatus(200)
             ->assertSee('Santunan Rutin Yatim')
             ->assertSee('Setujui Dokumen');
 
-        // Tahap 2: Kepala Divisi Sekretariat memeriksa (default penanda tangan sudah terisi)
+        // Tahap 1 (Manajer -> Kadiv Divisi): dicatat otomatis atas nama approver login
         Livewire::actingAs($this->kadivUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
             ->call('openAction', 'setuju')
-            ->assertSet('pemeriksaName', $this->kadivUser->name)
-            ->assertSet('pemeriksaJabatan', $this->kadivUser->jabatan)
-            ->set('actionNotes', 'Diperiksa Kepala Divisi Sekretariat')
+            ->set('actionNotes', 'Diperiksa Kepala Divisi')
             ->call('submitAction')
             ->assertHasNoErrors()
             ->assertSet('showActionModal', false);
@@ -265,12 +267,12 @@ class PermohonanUiTest extends TestCase
         ]);
     }
 
-    public function test_stage_two_requires_wet_signature_identity(): void
+    public function test_revision_and_reject_require_action_notes(): void
     {
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-TEST-003',
             'unit_id' => $this->unitKlm->id,
-            'user_id' => $this->staffUser->id,
+            'user_id' => $this->managerUser->id,
             'kode_anggaran_id' => $this->leafNode->id,
             'program' => 'Program Sosial',
             'nama_kegiatan' => 'Santunan Anak Yatim',
@@ -289,18 +291,18 @@ class PermohonanUiTest extends TestCase
 
         Livewire::actingAs($this->kadivUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->call('openAction', 'setuju')
-            ->set('pemeriksaName', '')
-            ->set('pemeriksaJabatan', '')
-            ->set('pemeriksaSignedAt', '')
+            ->call('openAction', 'perbaikan')
+            ->set('actionNotes', '')
             ->call('submitAction')
-            ->assertHasErrors(['pemeriksaName', 'pemeriksaJabatan', 'pemeriksaSignedAt']);
+            ->assertHasErrors(['actionNotes']);
 
         $this->assertEquals('diajukan', $permohonan->fresh()->status);
     }
 
-    public function test_proxy_keuangan_approval_mode(): void
+    public function test_final_approval_by_kadiv_keuangan_uses_item_table_without_scan_or_fr_prx(): void
     {
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
+
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-TEST-002',
             'unit_id' => $this->unitKlm->id,
@@ -320,26 +322,30 @@ class PermohonanUiTest extends TestCase
         ]);
 
         (new PermohonanWorkflow)->submit($permohonan);
-
-        // Disetujui kadiv langsung
         (new PermohonanWorkflow)->approve($permohonan, $this->kadivUser);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
 
-        // User staff TU Sekretariat memiliki is_petugas_input = true
-        Livewire::actingAs($this->staffUser)
+        // Staf keuangan non-Kadiv tidak berwenang melakukan persetujuan akhir
+        Livewire::actingAs($this->financeUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->assertSee('Persetujuan Akhir Kadiv Keuangan (Pencatatan Fisik / Input Terpusat)')
-            ->set('proxySignerName', 'Direktur Keuangan')
-            ->set('proxySignerJabatan', 'Kepala Divisi Keuangan / Direktur Keuangan')
-            ->set('proxySignedAt', now()->toDateString())
-            ->set('proxyScanFile', UploadedFile::fake()->create('bukti_kadiv_keu.pdf', 100, 'application/pdf'))
+            ->assertDontSee('Setujui Permohonan (Ikat Dana)');
+
+        // Kadiv Keuangan menyetujui langsung dengan tabel nominal per item (tanpa FR-PRX dan tanpa upload bukti)
+        Livewire::actingAs($kadivKeuangan)
+            ->test(PermohonanDetail::class, ['id' => $permohonan->id])
+            ->assertSee('Persetujuan Akhir — Kepala Divisi Keuangan')
+            ->assertDontSee('FR-PRX')
+            ->assertDontSee('Pencatatan Fisik')
+            ->assertDontSee('Unggah Scan Dokumen')
             ->set("approvedItemAmounts.{$item->id}", 9500000)
+            ->set('proxyNotes', 'Disetujui sesuai revisi anggaran')
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();
 
         $approved = $permohonan->fresh();
         $this->assertEquals('disetujui_keuangan', $approved->status);
         $this->assertEquals(9500000, $approved->total_disetujui);
+        $this->assertEquals(9500000, $item->fresh()->jumlah_disetujui);
     }
 
     public function test_cetak_pdf_returns_application_pdf(): void
@@ -440,7 +446,7 @@ class PermohonanUiTest extends TestCase
         $response = $this->actingAs($this->staffUser)->get("/permohonan/{$permohonan->id}");
         $response->assertStatus(200);
         $response->assertSee('Cetak Bukti PPD (PDF)');
-        $response->assertSee('Lihat UMP');
+        $response->assertSee('Lihat Laporan');
     }
 
     public function test_tu_must_select_pejabat_pemohon(): void
@@ -487,10 +493,11 @@ class PermohonanUiTest extends TestCase
         $this->assertEquals('diajukan', $pmh->status);
     }
 
-    public function test_tu_can_submit_and_record_approvals_in_detail(): void
+    public function test_tu_can_submit_and_approvals_proceed_without_wet_signature_or_scan(): void
     {
         // User staff TU Sekretariat memiliki is_petugas_input = true
         $tuUser = $this->staffUser;
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
         $this->assertTrue($tuUser->is_petugas_input);
 
         // 1. TU membuat permohonan atas nama Pejabat Pemohon (Manager)
@@ -515,16 +522,18 @@ class PermohonanUiTest extends TestCase
         $this->assertEquals($this->managerUser->unit_id, $pmh->unit_id);
         $this->assertEquals('diajukan', $pmh->status);
 
-        // 2. TU mencatat pemeriksaan Tahap 2 atas nama Kepala Divisi Sekretariat
+        // Pengusul TU tidak dapat menyetujui permohonan pada tahap Kadiv
         Livewire::actingAs($tuUser)
             ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->set('actionType', 'setuju')
+            ->call('submitAction')
+            ->assertStatus(403);
+
+        // 2. Kepala Divisi menyetujui Tahap 1 secara langsung (tanpa form tanda tangan fisik)
+        Livewire::actingAs($this->kadivUser)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
             ->call('openAction', 'setuju')
-            ->assertSee('Pilih Pejabat Pemeriksa')
-            ->set('pemeriksaId', $this->kadivUser->id)
-            ->assertSet('pemeriksaName', $this->kadivUser->name)
-            ->assertSet('pemeriksaJabatan', $this->kadivUser->jabatan)
-            ->set('pemeriksaSignedAt', now()->toDateString())
-            ->set('actionNotes', 'Tanda tangan fisik Kadiv Sekretariat dicatat')
+            ->set('actionNotes', 'Disetujui oleh Kepala Divisi')
             ->call('submitAction')
             ->assertHasNoErrors()
             ->assertSet('showActionModal', false);
@@ -538,20 +547,14 @@ class PermohonanUiTest extends TestCase
             'keputusan' => 'setuju',
             'approver_id' => $this->kadivUser->id,
             'signer_name' => $this->kadivUser->name,
-            'recorded_by' => $tuUser->id,
         ]);
 
-        // 3. TU di tahap Keuangan memilih preset penanda tangan keuangan dan menyetujui
+        // 3. Kadiv Keuangan langsung menyetujui Tahap Akhir melalui tabel nominal per item (tanpa scan bukti)
         $item = $pmh->items->first();
-        Livewire::actingAs($tuUser)
+        Livewire::actingAs($kadivKeuangan)
             ->test(PermohonanDetail::class, ['id' => $pmh->id])
-            ->assertSee('Pilihan Cepat Penanda Tangan')
-            ->set('financeSignerPreset', 'Direktur Keuangan|Direktur Keuangan')
-            ->assertSet('proxySignerName', 'Direktur Keuangan')
-            ->assertSet('proxySignerJabatan', 'Direktur Keuangan')
+            ->assertDontSee('FR-PRX')
             ->set("approvedItemAmounts.{$item->id}", 3000000)
-            ->set('proxySignedAt', now()->toDateString())
-            ->set('proxyScanFile', UploadedFile::fake()->create('bukti_persetujuan.pdf', 100, 'application/pdf'))
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();
 
@@ -563,9 +566,8 @@ class PermohonanUiTest extends TestCase
             'approvable_id' => $pmh->id,
             'tahap' => 'keuangan',
             'keputusan' => 'setuju',
-            'signer_name' => 'Direktur Keuangan',
-            'signer_jabatan' => 'Direktur Keuangan',
-            'recorded_by' => $tuUser->id,
+            'approver_id' => $kadivKeuangan->id,
+            'signer_name' => $kadivKeuangan->name,
         ]);
     }
 
@@ -640,15 +642,17 @@ class PermohonanUiTest extends TestCase
         $this->assertDatabaseHas('permohonan', ['nama_kegiatan' => 'Draft Over Limit OK', 'user_id' => $supervisor->id, 'status' => 'draft']);
     }
 
-    public function test_final_approval_requires_uploaded_scan_file(): void
+    public function test_final_approval_validates_item_amounts_without_requiring_scan_file(): void
     {
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
+
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'DRAFT-SCAN-001',
             'unit_id' => $this->unitKlm->id,
-            'user_id' => $this->staffUser->id,
+            'user_id' => $this->managerUser->id,
             'kode_anggaran_id' => $this->leafNode->id,
             'program' => 'Program Sosial',
-            'nama_kegiatan' => 'Santunan Scan Test',
+            'nama_kegiatan' => 'Santunan Nominal Item Test',
             'tgl_mulai' => now()->toDateString(),
             'sumber_dana_id' => $this->sumberDanaInfak->id,
             'status' => 'diketahui_kadiv',
@@ -656,19 +660,33 @@ class PermohonanUiTest extends TestCase
 
         $item = PermohonanItem::create([
             'permohonan_id' => $permohonan->id,
-            'uraian' => 'Item Scan Test',
+            'uraian' => 'Item Uji Nominal',
             'jumlah_diminta' => 5000000,
         ]);
 
-        Livewire::actingAs($this->staffUser)
+        // Melebihi jumlah_diminta harus ditolak
+        Livewire::actingAs($kadivKeuangan)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->set('proxySignerName', 'Direktur Keuangan')
-            ->set('proxySignerJabatan', 'Direktur Keuangan')
-            ->set('proxySignedAt', now()->toDateString())
-            ->set("approvedItemAmounts.{$item->id}", 5000000)
-            ->set('proxyScanFile', null)
+            ->set("approvedItemAmounts.{$item->id}", 6000000)
             ->call('submitKeuanganApproval')
-            ->assertHasErrors(['proxyScanFile']);
+            ->assertHasErrors(["approvedItemAmounts.{$item->id}"]);
+
+        // Total 0 harus ditolak
+        Livewire::actingAs($kadivKeuangan)
+            ->test(PermohonanDetail::class, ['id' => $permohonan->id])
+            ->set("approvedItemAmounts.{$item->id}", 0)
+            ->call('submitKeuanganApproval')
+            ->assertHasErrors(['approvedItemAmounts']);
+
+        // Valid nominal tanpa scan file -> sukses
+        Livewire::actingAs($kadivKeuangan)
+            ->test(PermohonanDetail::class, ['id' => $permohonan->id])
+            ->set("approvedItemAmounts.{$item->id}", 4500000)
+            ->call('submitKeuanganApproval')
+            ->assertHasNoErrors();
+
+        $this->assertEquals('disetujui_keuangan', $permohonan->fresh()->status);
+        $this->assertEquals(4500000, $permohonan->fresh()->total_disetujui);
     }
 
     public function test_supervisor_level_final_approval_by_kadiv_divisi(): void
@@ -695,18 +713,17 @@ class PermohonanUiTest extends TestCase
         (new PermohonanWorkflow)->approve($permohonan, $this->managerUser);
         $this->assertEquals('diketahui_kadiv', $permohonan->fresh()->status);
 
-        // Tahap akhir untuk supervisor level: Persetujuan Akhir Kepala Divisi
+        // Tahap akhir untuk supervisor level: Persetujuan Akhir — Kepala Divisi Sekretariat (tanpa bukti scan)
         Livewire::actingAs($this->kadivUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->assertSee('Persetujuan Akhir Kepala Divisi (Pencatatan Fisik / Input Terpusat)')
-            ->assertSet('proxySignerName', $this->kadivUser->name)
-            ->set('proxySignedAt', now()->toDateString())
-            ->set('proxyScanFile', UploadedFile::fake()->create('scan_kadiv_divisi.pdf', 100, 'application/pdf'))
+            ->assertSee('Persetujuan Akhir — Kepala Divisi Sekretariat')
+            ->assertDontSee('FR-PRX')
+            ->set("approvedItemAmounts.{$item->id}", 1400000)
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors();
 
         $this->assertEquals('disetujui_keuangan', $permohonan->fresh()->status);
-        $this->assertEquals(1500000, $permohonan->fresh()->total_disetujui);
+        $this->assertEquals(1400000, $permohonan->fresh()->total_disetujui);
     }
 
     public function test_submit_permohonan_updates_ui_without_refresh(): void
@@ -766,12 +783,11 @@ class PermohonanUiTest extends TestCase
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
             ->assertSee('Menunggu Persetujuan')
             ->call('openAction', 'setuju')
-            ->set('pemeriksaSignedAt', now()->toDateString())
             ->call('submitAction')
             ->assertSee('Menunggu Persetujuan Akhir');
     }
 
-    public function test_keuangan_approval_updates_ui_and_clears_file_input(): void
+    public function test_keuangan_approval_updates_ui_cleanly(): void
     {
         $permohonan = Permohonan::create([
             'no_pengajuan' => 'REACT-KEU-001',
@@ -797,11 +813,9 @@ class PermohonanUiTest extends TestCase
 
         Livewire::actingAs($this->kadivUser)
             ->test(PermohonanDetail::class, ['id' => $permohonan->id])
-            ->set('proxySignedAt', now()->toDateString())
-            ->set('proxyScanFile', UploadedFile::fake()->create('scan.pdf', 100, 'application/pdf'))
+            ->set("approvedItemAmounts.{$item->id}", 2000000)
             ->call('submitKeuanganApproval')
             ->assertHasNoErrors()
-            ->assertSet('proxyScanFile', null)
             ->assertSee('Disetujui');
     }
 
@@ -881,5 +895,363 @@ class PermohonanUiTest extends TestCase
             'tujuan' => $permohonan->nama_kegiatan,
         ]);
         $this->assertEquals('dicairkan', $permohonan->fresh()->status);
+    }
+
+    public function test_permohonan_index_search_viewer_hiding_and_selesai_ui(): void
+    {
+        Permohonan::create([
+            'no_pengajuan' => 'SEK-PMH-2026-7777',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Selesai',
+            'nama_kegiatan' => 'Kegiatan Selesai Cari',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'selesai',
+            'total_diminta' => 1000000,
+            'total_disetujui' => 1000000,
+        ]);
+
+        // Pencarian di PermohonanIndex tidak crash ($term bug fixed)
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanIndex::class)
+            ->set('search', 'Kegiatan Selesai Cari')
+            ->assertSee('SEK-PMH-2026-7777')
+            ->assertSee('Selesai');
+
+        // Viewer tidak melihat tombol Buat Permohonan Baru dan mendapat 403 di /permohonan/buat
+        $viewer = User::create([
+            'name' => 'Viewer Tes',
+            'username' => 'viewer.tes',
+            'email' => 'viewer.tes@alazharpeduli.or.id',
+            'password' => 'password',
+            'role' => 'viewer',
+            'unit_id' => $this->unitKlm->id,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($viewer)
+            ->get('/permohonan')
+            ->assertOk()
+            ->assertDontSee('Buat Permohonan Baru');
+
+        $this->actingAs($viewer)
+            ->get('/permohonan/buat')
+            ->assertStatus(403);
+    }
+
+    public function test_keuangan_role_submits_directly_without_tu_panel_and_kadiv_keuangan_auto_approves(): void
+    {
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
+
+        Livewire::actingAs($this->financeUser)
+            ->test(PermohonanCreate::class)
+            ->assertSet('isTu', false)
+            ->assertSet('user_id', $this->financeUser->id)
+            ->assertDontSee('Pengajuan oleh Petugas TU');
+
+        Livewire::actingAs($kadivKeuangan)
+            ->test(PermohonanCreate::class)
+            ->assertSet('isTu', false)
+            ->assertSet('user_id', $kadivKeuangan->id)
+            ->set('nama_kegiatan', 'Pengajuan Langsung Kadiv Keuangan')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'Peralatan Audit')
+            ->set('items.0.jumlah_diminta', '12000000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $pmh = Permohonan::where('nama_kegiatan', 'Pengajuan Langsung Kadiv Keuangan')->firstOrFail();
+        $this->assertEquals('disetujui_keuangan', $pmh->status);
+        $this->assertEquals(12000000, $pmh->total_disetujui);
+        $this->assertEquals(12000000, $pmh->items()->first()->jumlah_disetujui);
+    }
+
+    public function test_security_boundaries_pdf_pengusul_direct_actions_and_dashboard_queue(): void
+    {
+        $supervisor = User::where('username', 'anas.priyogi')->firstOrFail();
+        $siblingManager = User::where('username', 'sigit.nugroho')->firstOrFail();
+        $otherDivUser = User::where('username', 'manager.program')->firstOrFail();
+        $otherDivTu = User::create([
+            'name' => 'TU Program',
+            'username' => 'tu.program',
+            'email' => 'tu.program@alazharpeduli.or.id',
+            'password' => 'password',
+            'role' => 'unit',
+            'unit_id' => $otherDivUser->unit_id,
+            'is_petugas_input' => true,
+            'is_active' => true,
+        ]);
+
+        $pmh = Permohonan::create([
+            'no_pengajuan' => 'SEC-BOUND-001',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $supervisor->id,
+            'pengusul_id' => $otherDivTu->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sosial',
+            'nama_kegiatan' => 'Pengajuan Pengusul Lintas Divisi',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $pmh->id,
+            'uraian' => 'Item Aman',
+            'jumlah_diminta' => 1000000,
+        ]);
+
+        (new PermohonanWorkflow)->submit($pmh);
+
+        // 1. pengusul_id dari divisi lain dapat mengakses detail & PDF, user divisi lain bukan pengusul ditolak 403
+        $this->actingAs($otherDivTu)->get("/permohonan/{$pmh->id}")->assertOk();
+        $this->actingAs($otherDivTu)->get("/permohonan/{$pmh->id}/cetak-pdf")->assertOk();
+        $this->actingAs($otherDivUser)->get("/permohonan/{$pmh->id}/cetak-pdf")->assertStatus(403);
+
+        // 2. Dashboard antrean hanya menampilkan ke Manajer Unit exact (deden.salim), bukan sibling (sigit) atau Kadiv
+        Livewire::actingAs($this->managerUser)->test(Dashboard::class)->assertSee('SEC-BOUND-001');
+        Livewire::actingAs($siblingManager)->test(Dashboard::class)->assertDontSee('SEC-BOUND-001');
+        Livewire::actingAs($this->kadivUser)->test(Dashboard::class)->assertDontSee('SEC-BOUND-001');
+
+        // 3. Direct Livewire submitAction / submitKeuanganApproval ditolak 403 bagi user tidak berwenang
+        Livewire::actingAs($siblingManager)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->set('actionType', 'setuju')
+            ->call('submitAction')
+            ->assertStatus(403);
+
+        Livewire::actingAs($this->kadivUser)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->call('submitKeuanganApproval')
+            ->assertStatus(403);
+    }
+
+    public function test_non_tu_cannot_tamper_user_id_or_change_pemohon_and_staff_mounts_as_self(): void
+    {
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
+        $supervisor = User::where('username', 'anas.priyogi')->firstOrFail();
+
+        // 1. M2: Staff tanpa leveling di unit tanpa Supervisor tetap mount atas nama dirinya sendiri
+        $divSek = Unit::where('kode', 'DIV-SEK')->firstOrFail();
+        $unitNoSpv = Unit::create([
+            'parent_id' => $divSek->id,
+            'kode' => 'UNT-SEK-NOSPV',
+            'nama' => 'Unit Tanpa Supervisor',
+            'tipe' => 'unit',
+        ]);
+        $managerLevel = Leveling::where('urutan', 2)->firstOrFail();
+        $managerUnit = User::create([
+            'name' => 'Manajer Unit Tanpa SPV',
+            'username' => 'manager.nospv',
+            'email' => 'manager.nospv@alazharpeduli.or.id',
+            'password' => 'password',
+            'role' => 'unit',
+            'leveling_id' => $managerLevel->id,
+            'unit_id' => $unitNoSpv->id,
+            'is_active' => true,
+        ]);
+        $plainStaff = User::create([
+            'name' => 'Staf Biasa Tanpa Leveling',
+            'username' => 'staff.biasa.nospv',
+            'email' => 'staff.biasa.nospv@alazharpeduli.or.id',
+            'password' => 'password',
+            'role' => 'unit',
+            'leveling_id' => null,
+            'unit_id' => $unitNoSpv->id,
+            'is_active' => true,
+        ]);
+
+        Livewire::actingAs($plainStaff)
+            ->test(PermohonanCreate::class)
+            ->assertSet('user_id', $plainStaff->id)
+            ->assertSet('unit_id', $unitNoSpv->id)
+            ->assertSet('pemohonLimit', 2000000)
+            ->set('items.0.jumlah_diminta', '2500000')
+            ->assertSet('isOverPemohonLimit', true)
+            ->set('nama_kegiatan', 'Pengajuan Staf Biasa')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'ATK Unit')
+            ->set('items.0.jumlah_diminta', '1500000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $staffPmh = Permohonan::where('nama_kegiatan', 'Pengajuan Staf Biasa')->firstOrFail();
+        $this->assertEquals($plainStaff->id, $staffPmh->user_id);
+        $this->assertEquals('diajukan', $staffPmh->status);
+        $this->assertEquals($managerUnit->id, $staffPmh->atasan_id);
+
+        // 2. C1: Non-TU mencoba memanipulasi user_id -> direktur.keuangan di PermohonanCreate diblokir / dikembalikan ke dirinya
+        Livewire::actingAs($supervisor)
+            ->test(PermohonanCreate::class)
+            ->set('user_id', $kadivKeuangan->id)
+            ->set('unit_id', $kadivKeuangan->unit_id)
+            ->assertSet('user_id', $supervisor->id)
+            ->set('nama_kegiatan', 'Tamper Create Non TU')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'Item')
+            ->set('items.0.jumlah_diminta', '1000000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $tamperCreate = Permohonan::where('nama_kegiatan', 'Tamper Create Non TU')->firstOrFail();
+        $this->assertEquals($supervisor->id, $tamperCreate->user_id);
+        $this->assertEquals('diajukan', $tamperCreate->status);
+
+        // 3. C1: Non-TU mencoba memanipulasi user_id di PermohonanEdit & membuka modal Alih Pejabat di PermohonanDetail
+        $draft = Permohonan::create([
+            'no_pengajuan' => 'DRAFT-C1-001',
+            'unit_id' => $supervisor->unit_id,
+            'user_id' => $supervisor->id,
+            'pengusul_id' => $supervisor->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program',
+            'nama_kegiatan' => 'Draft Tamper Edit',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+            'total_diminta' => 1000000,
+        ]);
+        PermohonanItem::create([
+            'permohonan_id' => $draft->id,
+            'uraian' => 'Item Draft',
+            'jumlah_diminta' => 1000000,
+        ]);
+
+        Livewire::actingAs($supervisor)
+            ->test(PermohonanDetail::class, ['id' => $draft->id])
+            ->assertDontSee('Alih Pejabat Pemohon')
+            ->call('openChangePemohonModal')
+            ->assertStatus(403);
+
+        Livewire::actingAs($supervisor)
+            ->test(PermohonanDetail::class, ['id' => $draft->id])
+            ->set('newPemohonId', $kadivKeuangan->id)
+            ->call('updatePejabatPemohon')
+            ->assertStatus(403);
+
+        Livewire::actingAs($supervisor)
+            ->test(PermohonanEdit::class, ['id' => $draft->id])
+            ->set('user_id', $kadivKeuangan->id)
+            ->set('unit_id', $kadivKeuangan->unit_id)
+            ->assertSet('user_id', $supervisor->id)
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $draft->refresh();
+        $this->assertEquals($supervisor->id, $draft->user_id);
+        $this->assertEquals('diajukan', $draft->status);
+    }
+
+    public function test_tu_submitting_for_kadiv_keuangan_via_ui_requires_kadiv_keuangan_confirmation(): void
+    {
+        $kadivKeuangan = User::where('username', 'direktur.keuangan')->firstOrFail();
+
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanCreate::class)
+            ->set('user_id', $kadivKeuangan->id)
+            ->assertDontSee('Disetujui Otomatis')
+            ->set('nama_kegiatan', 'TU Untuk Kadiv Keuangan UI')
+            ->set('tgl_mulai', now()->toDateString())
+            ->set('sumber_dana_id', $this->sumberDanaInfak->id)
+            ->set('kode_anggaran_id', $this->leafNode->id)
+            ->set('items.0.uraian', 'Perangkat Keuangan')
+            ->set('items.0.jumlah_diminta', '15000000')
+            ->call('submitNow')
+            ->assertHasNoErrors();
+
+        $pmh = Permohonan::where('nama_kegiatan', 'TU Untuk Kadiv Keuangan UI')->firstOrFail();
+        $this->assertEquals('diketahui_kadiv', $pmh->status);
+        $this->assertNull($pmh->total_disetujui);
+
+        // TU pengusul tidak boleh mengonfirmasi persetujuan
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->assertSet('canApprove', false)
+            ->call('submitKeuanganApproval')
+            ->assertStatus(403);
+
+        // Kadiv Keuangan masuk untuk mengonfirmasi persetujuan akhir
+        Livewire::actingAs($kadivKeuangan)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->assertSet('canApprove', true)
+            ->set('proxyNotes', 'Disetujui oleh Kadiv Keuangan')
+            ->call('submitKeuanganApproval')
+            ->assertHasNoErrors();
+
+        $this->assertEquals('disetujui_keuangan', $pmh->fresh()->status);
+        $this->assertEquals(15000000, $pmh->fresh()->total_disetujui);
+    }
+
+    public function test_permohonan_detail_and_edit_lock_permohonan_id_against_idor_tampering(): void
+    {
+        $managerProgram = User::where('username', 'manager.program')->firstOrFail();
+
+        $divSekPmh = Permohonan::create([
+            'no_pengajuan' => 'IDOR-SEK-001',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->kadivUser->id,
+            'pengusul_id' => $this->kadivUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sekretariat',
+            'nama_kegiatan' => 'Rahasia Divisi Sekretariat',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'diajukan',
+            'total_diminta' => 5000000,
+        ]);
+
+        $divSekDraft = Permohonan::create([
+            'no_pengajuan' => 'IDOR-SEK-DRAFT',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->kadivUser->id,
+            'pengusul_id' => $this->kadivUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sekretariat',
+            'nama_kegiatan' => 'Draft Rahasia Divisi Sekretariat',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+            'total_diminta' => 5000000,
+        ]);
+
+        $ownPmh = Permohonan::create([
+            'no_pengajuan' => 'OWN-PRG-001',
+            'unit_id' => $managerProgram->unit_id,
+            'user_id' => $managerProgram->id,
+            'pengusul_id' => $managerProgram->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sendiri',
+            'nama_kegiatan' => 'Permohonan Milik Program',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+            'total_diminta' => 3000000,
+        ]);
+
+        try {
+            Livewire::actingAs($managerProgram)
+                ->test(PermohonanDetail::class, ['id' => $ownPmh->id])
+                ->set('permohonanId', $divSekPmh->id);
+            $this->fail('Expected CannotUpdateLockedPropertyException for PermohonanDetail::$permohonanId');
+        } catch (CannotUpdateLockedPropertyException $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
+
+        try {
+            Livewire::actingAs($managerProgram)
+                ->test(PermohonanEdit::class, ['id' => $ownPmh->id])
+                ->set('permohonanId', $divSekDraft->id);
+            $this->fail('Expected CannotUpdateLockedPropertyException for PermohonanEdit::$permohonanId');
+        } catch (CannotUpdateLockedPropertyException $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
     }
 }

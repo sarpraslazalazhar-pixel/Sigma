@@ -121,7 +121,7 @@ class UmpApprovalAndRealizationTest extends TestCase
             $workflow->approve($this->ump, $this->financeUser, []);
             $this->fail('Approve tanpa scan final seharusnya gagal.');
         } catch (RuntimeException $e) {
-            $this->assertStringContainsString('scan fisik ump', strtolower($e->getMessage()));
+            $this->assertStringContainsString('scan fisik laporan', strtolower($e->getMessage()));
         }
 
         $workflow->approve($this->ump, $this->financeUser, [

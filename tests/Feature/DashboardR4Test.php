@@ -96,8 +96,8 @@ class DashboardR4Test extends TestCase
             'kode_anggaran_id' => $this->leafNode->id,
             'program' => 'Program Bantuan',
             'unit_id' => $this->unitKlm->id,
-            'user_id' => $this->staffUser->id,
-            'atasan_id' => $this->managerUser->id,
+            'user_id' => $this->managerUser->id,
+            'atasan_id' => $this->kadivUser->id,
             'sumber_dana_id' => $this->sumberDana->id,
             'nama_kegiatan' => 'Kegiatan Dashboard Test',
             'latar_belakang' => 'Testing Dashboard',
@@ -227,7 +227,7 @@ class DashboardR4Test extends TestCase
             ->assertOk()
             ->assertSee('Rekap Anggaran (RAB)')
             ->assertSee('Rekap Permohonan Dana')
-            ->assertSee('Rekap PPD & UMP', false)
+            ->assertSee('Rekap PPD & Laporan')
             ->assertSee('Realisasi Bulanan Matrix')
             ->call('exportRekapAnggaran')
             ->call('exportRekapPermohonan')
@@ -236,7 +236,7 @@ class DashboardR4Test extends TestCase
 
         Excel::assertDownloaded("Rekap_Anggaran_{$this->ta->tahun}.xlsx");
         Excel::assertDownloaded("Rekap_Permohonan_{$this->ta->tahun}.xlsx");
-        Excel::assertDownloaded("Rekap_PPD_dan_UMP_{$this->ta->tahun}.xlsx");
+        Excel::assertDownloaded("Rekap_PPD_dan_Laporan_{$this->ta->tahun}.xlsx");
         Excel::assertDownloaded("Rekap_Realisasi_Bulanan_{$this->ta->tahun}.xlsx");
     }
 

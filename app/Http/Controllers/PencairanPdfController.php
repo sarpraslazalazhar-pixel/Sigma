@@ -18,7 +18,7 @@ class PencairanPdfController extends Controller
             'permohonan.items.asnaf',
             'permohonan.items.programUtama',
             'permohonan.approvals',
-            'ump',
+            'ump.pj.leveling',
         ])->findOrFail($id);
 
         $logoPath = public_path('images/logo-alazhar.png');

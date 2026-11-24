@@ -7,6 +7,7 @@ use App\Livewire\Master\TahunAnggaranIndex;
 use App\Livewire\Master\UnitDivisiIndex;
 use App\Models\KodeAnggaran;
 use App\Models\TahunAnggaran;
+use App\Models\Unit;
 use App\Models\User;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
@@ -305,5 +306,42 @@ class MasterUiTest extends TestCase
             // Tutup semua
             ->call('collapseAll')
             ->assertSet('expandedNodes', []);
+    }
+
+    public function test_units_sort_hierarchically_and_can_be_reordered(): void
+    {
+        $sortedCodes = Unit::sortHierarchically()->pluck('kode')->all();
+
+        // Divisi Sekretariat diikuti langsung ketiga unit anaknya sesuai urutan: DKL -> HUM -> KLM, lalu DIV-KEU
+        $this->assertSame(
+            ['DIV-SEK', 'UNT-SEK-DKL', 'UNT-SEK-HUM', 'UNT-SEK-KLM', 'DIV-KEU'],
+            array_slice($sortedCodes, 0, 5)
+        );
+
+        $untHum = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
+
+        // Naikkan Unit Humas, GA, dan IT ke urutan 1 di bawah DIV-SEK
+        Livewire::actingAs($this->adminUser)
+            ->test(UnitDivisiIndex::class)
+            ->call('moveUp', $untHum->id)
+            ->assertHasNoErrors();
+
+        $reorderedCodes = Unit::sortHierarchically()->pluck('kode')->all();
+        $this->assertSame(
+            ['DIV-SEK', 'UNT-SEK-HUM', 'UNT-SEK-DKL', 'UNT-SEK-KLM'],
+            array_slice($reorderedCodes, 0, 4)
+        );
+
+        // Kembalikan lagi dengan moveDown
+        Livewire::actingAs($this->adminUser)
+            ->test(UnitDivisiIndex::class)
+            ->call('moveDown', $untHum->id)
+            ->assertHasNoErrors();
+
+        $restoredCodes = Unit::sortHierarchically()->pluck('kode')->all();
+        $this->assertSame(
+            ['DIV-SEK', 'UNT-SEK-DKL', 'UNT-SEK-HUM', 'UNT-SEK-KLM'],
+            array_slice($restoredCodes, 0, 4)
+        );
     }
 }

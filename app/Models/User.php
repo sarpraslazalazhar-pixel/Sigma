@@ -20,6 +20,7 @@ use Illuminate\Support\Collection;
     'password',
     'role',
     'unit_id',
+    'atasan_id',
     'leveling_id',
     'jabatan',
     'status_kepegawaian',
@@ -31,6 +32,11 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    /**
+     * Kedalaman tampilan pohon organisasi pada hasil `sortHierarchically()` (tidak disimpan ke database).
+     */
+    public int $hierarchyDepth = 0;
 
     /**
      * Get the attributes that should be cast.
@@ -50,6 +56,149 @@ class User extends Authenticatable
     public function unit(): BelongsTo
     {
         return $this->belongsTo(Unit::class, 'unit_id');
+    }
+
+    public function atasan(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'atasan_id');
+    }
+
+    public function bawahan(): HasMany
+    {
+        return $this->hasMany(self::class, 'atasan_id');
+    }
+
+    /**
+     * Dapatkan seluruh ID bawahan (langsung maupun tidak langsung) secara aman terhadap siklus.
+     *
+     * @return array<int>
+     */
+    public function getDescendantIds(): array
+    {
+        $descendants = [];
+        $visited = [$this->id => true];
+        $frontier = [$this->id];
+
+        while ($frontier !== []) {
+            $childIds = static::query()
+                ->whereIn('atasan_id', $frontier)
+                ->pluck('id')
+                ->all();
+
+            $nextFrontier = [];
+            foreach ($childIds as $childId) {
+                $childId = (int) $childId;
+                if (isset($visited[$childId])) {
+                    continue;
+                }
+
+                $visited[$childId] = true;
+                $descendants[] = $childId;
+                $nextFrontier[] = $childId;
+            }
+
+            $frontier = $nextFrontier;
+        }
+
+        return $descendants;
+    }
+
+    /**
+     * Urutkan koleksi pengguna berdasarkan hierarki Divisi → Unit → Pohon Atasan-Bawahan.
+     *
+     * @param  Collection<int, User>  $users
+     * @param  Collection<int, Unit>|null  $sortedUnits
+     * @return Collection<int, User>
+     */
+    public static function sortHierarchically(Collection $users, ?Collection $sortedUnits = null): Collection
+    {
+        if ($users->isEmpty()) {
+            return collect();
+        }
+
+        $orderedUnits = $sortedUnits ?? Unit::sortHierarchically();
+        $unitOrderIds = $orderedUnits->pluck('id')->all();
+        $groupedByUnit = $users->groupBy(fn (User $u) => $u->unit_id ?? 0);
+
+        $siblingSortFn = static function (User $a, User $b): int {
+            $activeCmp = ($a->is_active ? 0 : 1) <=> ($b->is_active ? 0 : 1);
+            if ($activeCmp !== 0) {
+                return $activeCmp;
+            }
+
+            $adminCmp = ($a->isAdmin() ? 1 : 0) <=> ($b->isAdmin() ? 1 : 0);
+            if ($adminCmp !== 0) {
+                return $adminCmp;
+            }
+
+            $lvlA = (int) ($a->leveling?->urutan ?? 0);
+            $lvlB = (int) ($b->leveling?->urutan ?? 0);
+            if ($lvlA !== $lvlB) {
+                return $lvlB <=> $lvlA;
+            }
+
+            $jabCmp = strnatcasecmp((string) ($a->jabatan ?? ''), (string) ($b->jabatan ?? ''));
+            if ($jabCmp !== 0) {
+                return $jabCmp;
+            }
+
+            return strnatcasecmp($a->name, $b->name);
+        };
+
+        $orderedGroupKeys = [];
+        foreach ($unitOrderIds as $uid) {
+            if ($groupedByUnit->has($uid)) {
+                $orderedGroupKeys[] = $uid;
+            }
+        }
+        foreach ($groupedByUnit->keys() as $groupKey) {
+            if (! in_array($groupKey, $orderedGroupKeys, true)) {
+                $orderedGroupKeys[] = $groupKey;
+            }
+        }
+
+        $result = collect();
+
+        foreach ($orderedGroupKeys as $groupKey) {
+            /** @var Collection<int, User> $group */
+            $group = $groupedByUnit->get($groupKey, collect());
+            $groupUserIds = $group->pluck('id')->flip();
+            $childrenByAtasan = $group->groupBy('atasan_id');
+
+            $roots = $group
+                ->filter(fn (User $u) => $u->atasan_id === null || ! isset($groupUserIds[$u->atasan_id]))
+                ->sort($siblingSortFn)
+                ->values();
+
+            $visited = [];
+
+            $walk = function (User $node, int $depth) use (&$walk, &$result, &$visited, $childrenByAtasan, $siblingSortFn): void {
+                if (isset($visited[$node->id])) {
+                    return;
+                }
+
+                $visited[$node->id] = true;
+                $node->hierarchyDepth = $depth;
+                $result->push($node);
+
+                $children = $childrenByAtasan->get($node->id, collect())->sort($siblingSortFn);
+                foreach ($children as $child) {
+                    $walk($child, $depth + 1);
+                }
+            };
+
+            foreach ($roots as $root) {
+                $walk($root, 0);
+            }
+
+            foreach ($group->sort($siblingSortFn) as $remaining) {
+                if (! isset($visited[$remaining->id])) {
+                    $walk($remaining, 0);
+                }
+            }
+        }
+
+        return $result->values();
     }
 
     public function leveling(): BelongsTo

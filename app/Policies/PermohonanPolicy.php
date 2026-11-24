@@ -3,16 +3,20 @@
 namespace App\Policies;
 
 use App\Models\Permohonan;
-use App\Models\Setting;
 use App\Models\User;
+use App\Services\PermohonanWorkflow;
 
 class PermohonanPolicy
 {
     /**
-     * Super-admin bypass: Admin memiliki akses ke seluruh operasi.
+     * Super-admin bypass: Admin memiliki akses ke seluruh operasi kecuali persetujuan permohonan (delegasi ke policy & workflow).
      */
     public function before(User $user, string $ability): ?bool
     {
+        if (in_array($ability, ['approveKadiv', 'approveKeuangan'], true)) {
+            return null;
+        }
+
         if ($user->isAdmin()) {
             return true;
         }
@@ -33,12 +37,18 @@ class PermohonanPolicy
      * Hanya boleh dilihat oleh:
      * - Admin
      * - Bagian Keuangan
-     * - Pengaju / Pembuat sendiri
+     * - Petugas input TU
+     * - Pemohon / Pengusul sendiri
      * - Pengguna dari divisi yang sama
      */
     public function view(User $user, Permohonan $permohonan): bool
     {
-        if ($user->isKeuangan() || $user->isKadivSekretariat() || $user->is_petugas_input || $permohonan->user_id === $user->id) {
+        if (
+            $user->isKeuangan()
+            || $user->is_petugas_input
+            || $permohonan->user_id === $user->id
+            || $permohonan->pengusul_id === $user->id
+        ) {
             return true;
         }
 
@@ -74,36 +84,26 @@ class PermohonanPolicy
      */
     public function cancel(User $user, Permohonan $permohonan): bool
     {
-        $isOwner = $permohonan->user_id === $user->id;
+        $isOwnerOrPengusul = $permohonan->user_id === $user->id
+            || $permohonan->pengusul_id === $user->id;
 
-        return $isOwner && in_array($permohonan->status, ['draft', 'diajukan', 'diketahui_kadiv', 'perlu_perbaikan'], true);
+        return $isOwnerOrPengusul && in_array($permohonan->status, ['draft', 'diajukan', 'diketahui_kadiv', 'perlu_perbaikan'], true);
     }
 
     /**
-     * Memeriksa dokumen pada Tahap 2 (Kepala Divisi).
+     * Memeriksa dokumen pada tahap pertama (status diajukan).
      */
     public function approveKadiv(User $user, Permohonan $permohonan): bool
     {
-        if ($permohonan->user_id === $user->id) {
-            return false;
-        }
         if ($permohonan->status !== 'diajukan') {
             return false;
         }
 
-        $docDivisiId = $permohonan->unit?->getDivisiId();
-        $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
-
-        if ($levelingUrutan <= 1) {
-            return ($user->isManager() || $user->isKadiv())
-                && $user->canAccessDivision($docDivisiId);
-        }
-
-        return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
+        return (new PermohonanWorkflow)->canUserApprove($user, $permohonan);
     }
 
     /**
-     * Menyetujui dokumen pada Tahap 3 (Bagian Keuangan / Kadiv Divisi untuk Supervisor level).
+     * Menyetujui dokumen pada tahap akhir (status diketahui_kadiv).
      */
     public function approveKeuangan(User $user, Permohonan $permohonan): bool
     {
@@ -111,21 +111,7 @@ class PermohonanPolicy
             return false;
         }
 
-        $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
-
-        if ($levelingUrutan <= 1) {
-            // Supervisor level: Kadiv Divisi (same division)
-            $docDivisiId = $permohonan->unit?->getDivisiId();
-
-            return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
-        }
-
-        // Manager/Kadiv level: Kadiv Keuangan or petugas input
-        $isKadivKeuangan = $user->isKadivKeuangan();
-        $isPetugasInput = (bool) $user->is_petugas_input;
-        $modeAtasNama = Setting::get('keuangan.mode', 'atas_nama') === 'atas_nama';
-
-        return $isKadivKeuangan || ($isPetugasInput && $modeAtasNama);
+        return (new PermohonanWorkflow)->canUserApprove($user, $permohonan);
     }
 
     /**

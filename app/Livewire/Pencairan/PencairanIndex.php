@@ -4,6 +4,7 @@ namespace App\Livewire\Pencairan;
 
 use App\Exports\RekapPpdUmpExport;
 use App\Models\Pencairan;
+use App\Models\Setting;
 use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
 use App\Models\Unit;
@@ -17,6 +18,7 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
@@ -26,6 +28,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 #[Title('Pencairan PPD: SIGMA LAZ Al-Azhar')]
 class PencairanIndex extends Component
 {
+    use WithFileUploads;
     use WithPagination;
 
     public string $search = '';
@@ -74,6 +77,16 @@ class PencairanIndex extends Component
     public ?int $selectedPencairanId = null;
 
     public string $alasanBatal = '';
+
+    public bool $buktiTransferModalOpen = false;
+
+    public ?int $buktiTransferPencairanId = null;
+
+    public string $buktiTransferNoPpd = '';
+
+    public bool $buktiTransferHasExisting = false;
+
+    public $buktiTransferFile = null;
 
     public function updatingSearch(): void
     {
@@ -153,6 +166,83 @@ class PencairanIndex extends Component
         }
     }
 
+    public function canManageBuktiTransfer(): bool
+    {
+        $user = Auth::user();
+        if (! $user || ! $user->is_active) {
+            return false;
+        }
+
+        return $user->role === 'admin' || $user->role === 'keuangan' || (bool) $user->is_petugas_input;
+    }
+
+    public function bukaModalBuktiTransfer(int $id): void
+    {
+        abort_unless($this->canManageBuktiTransfer(), 403, 'Anda tidak berwenang mengunggah bukti transfer pencairan.');
+
+        $pencairan = Pencairan::with('buktiTransfer')->findOrFail($id);
+        abort_if($pencairan->status === 'dibatalkan', 422, 'Bukti transfer tidak dapat diunggah untuk PPD yang sudah dibatalkan.');
+
+        $this->buktiTransferPencairanId = $pencairan->id;
+        $this->buktiTransferNoPpd = $pencairan->no_ppd;
+        $this->buktiTransferHasExisting = $pencairan->buktiTransfer !== null;
+        $this->buktiTransferFile = null;
+        $this->resetErrorBag('buktiTransferFile');
+        $this->buktiTransferModalOpen = true;
+    }
+
+    public function tutupModalBuktiTransfer(): void
+    {
+        $this->buktiTransferModalOpen = false;
+        $this->buktiTransferPencairanId = null;
+        $this->buktiTransferNoPpd = '';
+        $this->buktiTransferHasExisting = false;
+        $this->buktiTransferFile = null;
+        $this->resetErrorBag('buktiTransferFile');
+    }
+
+    public function simpanBuktiTransfer(): void
+    {
+        abort_unless($this->canManageBuktiTransfer(), 403, 'Anda tidak berwenang mengunggah bukti transfer pencairan.');
+
+        $maxKb = max(100, (int) (Setting::get('lampiran.max_kb', 5120) ?: 5120));
+        $maxMbLabel = $this->formatMaxKbLabel($maxKb);
+
+        $this->validate([
+            'buktiTransferFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', "max:{$maxKb}"],
+        ], [
+            'buktiTransferFile.required' => 'Berkas bukti transfer wajib dipilih.',
+            'buktiTransferFile.file' => 'Berkas bukti transfer tidak valid.',
+            'buktiTransferFile.mimes' => 'Bukti transfer harus berformat PDF, JPG, PNG, atau WEBP.',
+            'buktiTransferFile.max' => "Ukuran berkas bukti transfer maksimal {$maxMbLabel}.",
+        ]);
+
+        $pencairan = Pencairan::findOrFail($this->buktiTransferPencairanId);
+
+        try {
+            $lampiran = (new PermohonanWorkflow)->simpanBuktiTransfer(
+                $pencairan,
+                Auth::user(),
+                $this->buktiTransferFile
+            );
+            $msg = "Bukti transfer PPD {$pencairan->no_ppd} (v{$lampiran->version}) berhasil disimpan.";
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+            $this->tutupModalBuktiTransfer();
+        } catch (RuntimeException $e) {
+            $this->addError('buktiTransferFile', $e->getMessage());
+        }
+    }
+
+    private function formatMaxKbLabel(int $maxKb): string
+    {
+        if ($maxKb % 1024 === 0) {
+            return ($maxKb / 1024).' MB';
+        }
+
+        return number_format($maxKb / 1024, 1, ',', '.').' MB';
+    }
+
     public function exportExcel(): BinaryFileResponse
     {
         $user = Auth::user();
@@ -173,7 +263,7 @@ class PencairanIndex extends Component
 
         return Excel::download(
             new RekapPpdUmpExport($taId, $unitId),
-            "Rekap_PPD_dan_UMP_{$tahun}.xlsx"
+            "Rekap_PPD_dan_Laporan_{$tahun}.xlsx"
         );
     }
 
@@ -184,11 +274,11 @@ class PencairanIndex extends Component
 
         $ppd = null;
         if ($this->fokusPpd !== null) {
-            $ppd = Pencairan::with(['permohonan.unit', 'lampiran'])->findOrFail($this->fokusPpd);
+            $ppd = Pencairan::with(['permohonan.unit', 'lampiran', 'buktiTransfer'])->findOrFail($this->fokusPpd);
             abort_unless($ppd->permohonan && $user?->can('view', $ppd->permohonan), 403);
         }
 
-        $query = Pencairan::with(['permohonan.unit', 'permohonan.user', 'ump.pj'])
+        $query = Pencairan::with(['permohonan.unit', 'permohonan.user', 'ump.pj', 'buktiTransfer'])
             ->orderBy('tgl_cair', 'desc');
 
         if ($this->tahunAnggaranId && $this->tahunFilter === '') {
@@ -251,16 +341,18 @@ class PencairanIndex extends Component
         }
 
         $pencairans = $query->paginate(15);
-        $unitsQuery = Unit::query();
+        $unitsQuery = Unit::with('parent');
         if (! $isGlobal && $user?->unit) {
             $unitsQuery->whereIn('id', $user->unit->getSameDivisiUnitIds());
         }
-        $units = $unitsQuery->orderBy('nama')->get();
+        $units = Unit::formatDropdownOptions($unitsQuery->get());
         $sumberDanas = SumberDana::where('is_active', true)->orderBy('id')->get();
         $daftarTahun = TahunAnggaran::orderBy('tahun', 'desc')->pluck('tahun')->all();
         if (empty($daftarTahun)) {
             $daftarTahun = [(int) date('Y')];
         }
+
+        $maxKb = max(100, (int) (Setting::get('lampiran.max_kb', 5120) ?: 5120));
 
         return view('livewire.pencairan.pencairan-index', [
             'pencairans' => $pencairans,
@@ -273,6 +365,8 @@ class PencairanIndex extends Component
             'sumberDanas' => $sumberDanas,
             'daftarTahun' => $daftarTahun,
             'canManage' => $isGlobal,
+            'canManageBuktiTransfer' => $this->canManageBuktiTransfer(),
+            'maxLampiranLabel' => $this->formatMaxKbLabel($maxKb),
         ]);
     }
 }

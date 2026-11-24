@@ -6,7 +6,7 @@
                 Pencairan PPD (Perintah Pencairan Dana)
             </h1>
             <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                Daftar pencairan kas dan transfer bank yang diterbitkan beserta status pertanggungjawaban UMP
+                Daftar pencairan kas dan transfer bank yang diterbitkan beserta status laporan penggunaan dana
             </p>
         </div>
         <div class="flex items-center gap-2">
@@ -51,7 +51,31 @@
                 <a href="{{ route('pencairan.cetak-pdf', $ppd->id) }}" class="inline-flex min-h-11 max-w-full items-center rounded-full border border-slate-500 px-4 text-sm font-semibold text-[#0F2F57]">
                     Buka PDF PPD
                 </a>
-                @foreach ($ppd->lampiran as $lampiran)
+                @if ($ppd->buktiTransfer)
+                    <a
+                        href="{{ route('lampiran.show', $ppd->buktiTransfer->id) }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full bg-[#DCE5F6] px-4 text-sm font-semibold text-[#001B3E] hover:bg-[#CBD8F1] transition-colors"
+                    >
+                        <span>Lihat Bukti TF</span>
+                        <span class="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-bold text-[#0F2F57]">v{{ $ppd->buktiTransfer->version }}</span>
+                    </a>
+                @elseif ($ppd->status === 'dicairkan')
+                    <span class="inline-flex min-h-11 items-center rounded-full border border-slate-300 bg-slate-50 px-4 text-xs font-medium text-slate-500">
+                        Belum Ada Bukti TF
+                    </span>
+                @endif
+                @if ($canManageBuktiTransfer && $ppd->status === 'dicairkan')
+                    <button
+                        type="button"
+                        wire:click="bukaModalBuktiTransfer({{ $ppd->id }})"
+                        class="inline-flex min-h-11 items-center rounded-full {{ $ppd->buktiTransfer ? 'border border-[#727782] text-[#0F2F57] hover:bg-slate-50' : 'bg-[#0F2F57] text-white hover:bg-[#1E60D5]' }} px-4 text-sm font-semibold transition-colors cursor-pointer"
+                    >
+                        {{ $ppd->buktiTransfer ? 'Ganti TF' : 'Unggah Bukti TF' }}
+                    </button>
+                @endif
+                @foreach ($ppd->lampiran->where('jenis', '!=', 'bukti_transfer') as $lampiran)
                     <a href="{{ route('lampiran.show', $lampiran->id) }}" class="inline-flex min-h-11 max-w-full items-center break-all rounded-full border border-slate-500 px-4 text-sm text-[#0F2F57]">
                         {{ $lampiran->original_name }}
                     </a>
@@ -80,15 +104,15 @@
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">Kewajiban UMP Berjalan</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-700">Laporan Berjalan</span>
             <p class="text-xl sm:text-2xl font-bold tracking-tight text-amber-800 mt-1 tabular-nums">
                 {{ number_format($umpBerjalan, 0, ',', '.') }}
             </p>
-            <p class="text-[10px] text-slate-400 mt-2">Belum selesai di-LPJ</p>
+            <p class="text-[10px] text-slate-400 mt-2">Belum selesai dilaporkan</p>
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-blue-700">UMP Tuntas Selesai</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-blue-700">Laporan Tuntas Selesai</span>
             <p class="text-xl sm:text-2xl font-bold tracking-tight text-blue-900 mt-1 tabular-nums">
                 {{ number_format($umpSelesai, 0, ',', '.') }}
             </p>
@@ -138,12 +162,12 @@
             </div>
 
             <div>
-                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Status UMP</label>
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Status Laporan</label>
                 <select
                     wire:model.live="umpStatusFilter"
                     class="w-full text-xs rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-2.5 text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-hidden"
                 >
-                    <option value="">Semua Status UMP</option>
+                    <option value="">Semua Status Laporan</option>
                     <option value="draft">Draft</option>
                     <option value="menunggu_kadiv">Menunggu Kepala Divisi</option>
                     <option value="menunggu_keuangan">Menunggu Keuangan</option>
@@ -206,8 +230,128 @@
         </div>
     </div>
 
-    {{-- Table List --}}
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+    {{-- Mobile Cards (< 1024px) --}}
+    <div class="lg:hidden space-y-3">
+        @forelse ($pencairans as $item)
+            @php
+                $ump = $item->ump;
+                $isBatal = $item->status === 'dibatalkan';
+                $buktiTf = $item->buktiTransfer;
+            @endphp
+            <article class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3 {{ $isBatal ? 'opacity-65 bg-slate-50/70' : '' }}" wire:key="pencairan-card-{{ $item->id }}">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <a href="{{ route('pencairan.index', ['ppd' => $item->id]) }}" wire:navigate
+                            class="inline-flex min-h-[44px] items-center font-mono text-sm font-bold text-[#0F2F57] underline underline-offset-4 break-all">
+                            {{ $item->no_ppd }}
+                        </a>
+                        <p class="text-[11px] text-slate-500 tabular-nums">
+                            Tgl Cair: {{ \Carbon\Carbon::parse($item->tgl_cair)->format('d/m/Y') }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1 shrink-0">
+                        @if ($isBatal)
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                Dibatalkan
+                            </span>
+                        @else
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-[#006C4C] border border-emerald-200">
+                                Dicairkan
+                            </span>
+                        @endif
+                        @if ($ump)
+                            <a href="{{ route('ump.detail', $ump->id) }}" wire:navigate
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold {{ $ump->status === 'selesai' ? 'bg-[#DCE5F6] text-[#001B3E]' : 'bg-amber-50 text-amber-800 border border-amber-200' }}">
+                                Laporan: {{ ucfirst(str_replace('_', ' ', $ump->status)) }}
+                            </a>
+                        @endif
+                    </div>
+                </div>
+
+                <div class="space-y-1 text-xs border-t border-slate-100 pt-3">
+                    <a href="{{ route('permohonan.detail', $item->permohonan_id) }}" wire:navigate
+                        class="font-semibold text-[#1E60D5] hover:underline block">
+                        {{ $item->permohonan?->no_pengajuan ?? '-' }}
+                    </a>
+                    <p class="font-medium text-slate-800">{{ $item->permohonan?->nama_kegiatan ?? '-' }}</p>
+                    <p class="text-[11px] text-slate-500">
+                        {{ $item->permohonan?->unit?->nama ?? '-' }} &bull; PJ: {{ $ump?->pj?->name ?? ($item->permohonan?->user?->name ?? '-') }}
+                    </p>
+                    <p class="text-sm font-bold text-[#0F2F57] tabular-nums pt-1">
+                        Rp {{ number_format($item->jumlah, 0, ',', '.') }}
+                    </p>
+                </div>
+
+                <div class="border-t border-slate-100 pt-3 space-y-2">
+                    <div class="flex items-center justify-between gap-2 text-xs">
+                        <span class="text-[11px] font-semibold text-slate-500">Bukti Transfer</span>
+                        @if ($buktiTf)
+                            <span class="text-[11px] font-medium text-[#006C4C] truncate max-w-[200px]">
+                                v{{ $buktiTf->version }} &bull; {{ $buktiTf->original_name }}
+                            </span>
+                        @elseif (! $isBatal)
+                            <span class="inline-flex items-center rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                                Belum Ada Bukti TF
+                            </span>
+                        @else
+                            <span class="text-[11px] text-slate-400">-</span>
+                        @endif
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <a
+                            href="{{ route('pencairan.cetak-pdf', $item->id) }}"
+                            target="_blank"
+                            class="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                            <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>PDF</span>
+                        </a>
+
+                        @if ($buktiTf)
+                            <a
+                                href="{{ route('lampiran.show', $buktiTf->id) }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-[#DCE5F6] px-4 text-xs font-semibold text-[#001B3E] hover:bg-[#CBD8F1] transition-colors"
+                            >
+                                <span>Lihat Bukti TF</span>
+                            </a>
+                        @endif
+
+                        @if ($canManageBuktiTransfer && ! $isBatal)
+                            <button
+                                type="button"
+                                wire:click="bukaModalBuktiTransfer({{ $item->id }})"
+                                class="inline-flex min-h-[44px] items-center gap-1.5 rounded-full {{ $buktiTf ? 'border border-[#727782] bg-white text-[#0F2F57] hover:bg-slate-50' : 'bg-[#0F2F57] text-white hover:bg-[#1E60D5]' }} px-4 text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                                <span>{{ $buktiTf ? 'Ganti TF' : 'Unggah Bukti TF' }}</span>
+                            </button>
+                        @endif
+
+                        @if ($canManage && ! $isBatal && ($ump?->status !== 'selesai'))
+                            <button
+                                type="button"
+                                wire:click="bukaModalBatal({{ $item->id }})"
+                                class="inline-flex min-h-[44px] items-center rounded-full border border-rose-200 bg-rose-50/70 px-4 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                            >
+                                Batal
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </article>
+        @empty
+            <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-400">
+                Tidak ada data pencairan PPD yang sesuai kriteria.
+            </div>
+        @endforelse
+    </div>
+
+    {{-- Desktop Table List (>= 1024px) --}}
+    <div class="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs text-slate-700 divide-y divide-slate-200">
                 <thead class="bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
@@ -218,7 +362,8 @@
                         <th class="py-3 px-3.5">Unit / PJ</th>
                         <th class="py-3 px-3.5 text-right">Nominal PPD</th>
                         <th class="py-3 px-3.5 text-center">Status PPD</th>
-                        <th class="py-3 px-3.5 text-center">Status UMP</th>
+                        <th class="py-3 px-3.5 text-center">Status Laporan</th>
+                        <th class="py-3 px-3.5 text-center">Bukti TF</th>
                         <th class="py-3 px-3.5 text-center">Aksi</th>
                     </tr>
                 </thead>
@@ -227,8 +372,9 @@
                         @php
                             $ump = $item->ump;
                             $isBatal = $item->status === 'dibatalkan';
+                            $buktiTf = $item->buktiTransfer;
                         @endphp
-                        <tr class="hover:bg-slate-50/80 transition-colors {{ $isBatal ? 'opacity-60 bg-slate-50/50' : '' }}">
+                        <tr class="hover:bg-slate-50/80 transition-colors {{ $isBatal ? 'opacity-60 bg-slate-50/50' : '' }}" wire:key="pencairan-row-{{ $item->id }}">
                             <td class="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap">
                                 <span class="flex items-center gap-1.5">
                                     <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,6 +405,7 @@
                                         {{ $item->permohonan->sumberDana->nama }}
                                     </span>
                                 @endif
+                            </td>
                             <td class="py-3 px-3.5 min-w-[140px]">
                                 <p class="font-medium text-slate-900">{{ $item->permohonan?->unit?->nama ?? '-' }}</p>
                                 <p class="text-[11px] text-slate-500 mt-0.5">PJ: {{ $ump?->pj?->name ?? ($item->permohonan?->user?->name ?? '-') }}</p>
@@ -291,6 +438,46 @@
                                 @endif
                             </td>
                             <td class="py-3 px-3.5 text-center whitespace-nowrap">
+                                <div class="flex flex-col items-center justify-center gap-1">
+                                    @if ($buktiTf)
+                                        <a
+                                            href="{{ route('lampiran.show', $buktiTf->id) }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title="{{ $buktiTf->original_name }}"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#DCE5F6] hover:bg-[#CBD8F1] text-[#001B3E] text-[11px] font-semibold transition-colors"
+                                        >
+                                            <span>Lihat Bukti TF</span>
+                                            <span class="text-[10px] opacity-80">v{{ $buktiTf->version }}</span>
+                                        </a>
+                                        @if ($canManageBuktiTransfer && ! $isBatal)
+                                            <button
+                                                type="button"
+                                                wire:click="bukaModalBuktiTransfer({{ $item->id }})"
+                                                class="text-[11px] font-semibold text-[#1E60D5] hover:text-[#0F2F57] hover:underline cursor-pointer"
+                                            >
+                                                Ganti TF
+                                            </button>
+                                        @endif
+                                    @elseif (! $isBatal)
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-medium">
+                                            Belum Ada Bukti TF
+                                        </span>
+                                        @if ($canManageBuktiTransfer)
+                                            <button
+                                                type="button"
+                                                wire:click="bukaModalBuktiTransfer({{ $item->id }})"
+                                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0F2F57] hover:bg-[#1E60D5] text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                                            >
+                                                Unggah Bukti TF
+                                            </button>
+                                        @endif
+                                    @else
+                                        <span class="text-slate-400 text-[11px]">-</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td class="py-3 px-3.5 text-center whitespace-nowrap">
                                 <div class="flex items-center justify-center gap-1.5">
                                     {{-- Cetak PDF --}}
                                     <a
@@ -321,7 +508,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="py-10 text-center text-slate-400">
+                            <td colspan="9" class="py-10 text-center text-slate-400">
                                 Tidak ada data pencairan PPD yang sesuai kriteria.
                             </td>
                         </tr>
@@ -336,6 +523,87 @@
             </div>
         @endif
     </div>
+
+    @if ($pencairans->hasPages())
+        <div class="lg:hidden bg-white rounded-2xl border border-slate-200 p-4">
+            {{ $pencairans->links() }}
+        </div>
+    @endif
+
+    {{-- Modal Unggah / Perbarui Bukti Transfer PPD --}}
+    @if ($buktiTransferModalOpen)
+        <div class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div
+                @click.outside="$wire.tutupModalBuktiTransfer()"
+                class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-[#0F2F57]">
+                            {{ $buktiTransferHasExisting ? 'Perbarui Bukti Transfer PPD' : 'Unggah Bukti Transfer PPD' }}
+                        </h2>
+                        <p class="text-xs text-slate-500 font-mono mt-0.5">{{ $buktiTransferNoPpd }}</p>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="tutupModalBuktiTransfer"
+                        class="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form wire:submit="simpanBuktiTransfer" class="space-y-4">
+                    <div>
+                        <label for="indexBuktiTransferFile" class="block text-xs font-semibold text-slate-700 mb-1">
+                            Berkas Bukti Transfer (PDF, JPG, PNG, WEBP) <span class="text-rose-500">*</span>
+                        </label>
+                        <input
+                            type="file"
+                            id="indexBuktiTransferFile"
+                            wire:model="buktiTransferFile"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            class="w-full min-h-[44px] text-xs rounded-xl border border-slate-300 bg-white text-slate-800 file:mr-3 file:min-h-[44px] file:px-4 file:border-0 file:bg-[#DCE5F6] file:text-[#001B3E] file:font-semibold hover:file:bg-[#CBD8F1] cursor-pointer @error('buktiTransferFile') border-rose-500 @enderror"
+                        />
+                        <p class="text-[11px] text-slate-400 mt-1">
+                            Maksimal {{ $maxLampiranLabel }}. Unggahan baru otomatis menambah nomor versi.
+                        </p>
+                        <div wire:loading wire:target="buktiTransferFile" class="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-[#1E60D5]">
+                            <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                            <span>Mengunggah berkas...</span>
+                        </div>
+                        @error('buktiTransferFile')
+                            <p class="text-[11px] text-rose-600 font-semibold mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                            type="button"
+                            wire:click="tutupModalBuktiTransfer"
+                            class="min-h-[44px] px-4 py-2 rounded-full border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        >
+                            Batal
+                        </button>
+                        <button
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="simpanBuktiTransfer,buktiTransferFile"
+                            class="min-h-[44px] px-5 py-2 rounded-full text-xs font-semibold text-white bg-[#0F2F57] hover:bg-[#1E60D5] transition-colors shadow-xs cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            <span wire:loading.remove wire:target="simpanBuktiTransfer">Simpan Bukti TF</span>
+                            <span wire:loading wire:target="simpanBuktiTransfer" class="inline-flex items-center gap-1.5">
+                                <svg class="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                                <span>Menyimpan...</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 
     {{-- Modal Pembatalan PPD --}}
     @if ($batalModalOpen)

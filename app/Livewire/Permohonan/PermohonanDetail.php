@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Permohonan;
 
-use App\Models\Lampiran;
 use App\Models\Pencairan;
 use App\Models\Permohonan;
 use App\Models\Setting;
@@ -11,8 +10,8 @@ use App\Services\AuditLogger;
 use App\Services\PermohonanWorkflow;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -24,6 +23,7 @@ class PermohonanDetail extends Component
 {
     use WithFileUploads;
 
+    #[Locked]
     public int $permohonanId;
 
     // Standard Approval Actions Modal
@@ -33,29 +33,10 @@ class PermohonanDetail extends Component
 
     public string $actionNotes = '';
 
-    // Pencatatan tanda tangan fisik basah pemeriksa (Tahap 2 - Kepala Divisi)
-    public ?int $pemeriksaId = null;
-
-    public string $pemeriksaName = '';
-
-    public string $pemeriksaJabatan = '';
-
-    public string $pemeriksaSignedAt = '';
-
-    public string $financeSignerPreset = '';
-
-    // Proxy Form Persetujuan Akhir (Kadiv / Keuangan)
+    // Form Persetujuan Akhir (Kadiv Divisi / Kadiv Keuangan)
     public array $approvedItemAmounts = [];
 
-    public string $proxySignerName = '';
-
-    public string $proxySignerJabatan = '';
-
-    public string $proxySignedAt = '';
-
     public string $proxyNotes = '';
-
-    public $proxyScanFile = null;
 
     // Modal Cairkan Dana (Penerbitan PPD)
     public bool $showCairkanModal = false;
@@ -68,6 +49,13 @@ class PermohonanDetail extends Component
 
     public array $penerimaIds = [];
 
+    public $buktiTransferFile = null;
+
+    // Modal Unggah / Perbarui Bukti Transfer PPD
+    public bool $showBuktiTransferModal = false;
+
+    public $buktiTransferUpload = null;
+
     // Modal Alih Pejabat Pemohon (Draft / Perlu Perbaikan)
     public bool $showChangePemohonModal = false;
 
@@ -76,50 +64,10 @@ class PermohonanDetail extends Component
     public function mount(int $id): void
     {
         $this->permohonanId = $id;
-        $this->pemeriksaSignedAt = now()->toDateString();
-
         $user = Auth::user();
-        $permohonan = Permohonan::with(['items', 'unit', 'levelingRequired'])->findOrFail($id);
+        $permohonan = Permohonan::with(['items', 'unit.parent', 'user.leveling', 'pengusul'])->findOrFail($id);
 
-        $levelingUrutan = $permohonan->levelingRequired?->urutan ?? 1;
-        $workflow = new PermohonanWorkflow;
-        if ($permohonan->status === 'diajukan') {
-            $signer = $levelingUrutan <= 1 ? $permohonan->unit?->getManager() : $workflow->getKadivDivisi($permohonan);
-        } elseif ($permohonan->status === 'diketahui_kadiv' && $levelingUrutan <= 1) {
-            $signer = $workflow->getKadivDivisi($permohonan);
-        } else {
-            $signer = User::where('is_active', true)->where('role', 'keuangan')->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))->first()
-                ?? User::where('is_active', true)->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))->first();
-        }
-
-        $this->proxySignedAt = now()->toDateString();
-        if ($levelingUrutan <= 1) {
-            $finalKadiv = $workflow->getKadivDivisi($permohonan);
-        } else {
-            $finalKadiv = User::where('is_active', true)->where('role', 'keuangan')->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))->first()
-                ?? User::where('is_active', true)->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))->first();
-        }
-
-        if ($finalKadiv) {
-            $this->proxySignerName = $finalKadiv->name;
-            $this->proxySignerJabatan = $finalKadiv->jabatan ?? ($levelingUrutan <= 1 ? 'Kepala Divisi' : 'Kepala Divisi Keuangan');
-            $this->financeSignerPreset = "{$this->proxySignerName}|{$this->proxySignerJabatan}";
-        } else {
-            $this->financeSignerPreset = 'manual';
-        }
-
-        $this->pemeriksaId = $signer?->id;
-        $this->pemeriksaName = $signer?->name ?? '';
-        $this->pemeriksaJabatan = $signer?->jabatan ?? '';
-
-        if ($user && ! $user->hasRole(['admin', 'keuangan']) && ! $user->is_petugas_input) {
-            $docDivisiId = $permohonan->unit?->getDivisiId();
-            $userDivisiId = $user->unit?->getDivisiId();
-            $sameDivisi = ($docDivisiId !== null && $userDivisiId !== null && $docDivisiId === $userDivisiId);
-            $isOwner = ($permohonan->user_id === $user->id);
-
-            abort_unless($sameDivisi || $isOwner, 403, 'Anda tidak memiliki hak akses untuk melihat permohonan dari divisi lain.');
-        }
+        abort_unless($user && $user->can('view', $permohonan), 403, 'Anda tidak memiliki hak akses untuk melihat permohonan dari divisi lain.');
 
         foreach ($permohonan->items as $item) {
             $this->approvedItemAmounts[$item->id] = $item->jumlah_disetujui ?? $item->jumlah_diminta;
@@ -128,9 +76,10 @@ class PermohonanDetail extends Component
 
     public function getPermohonanProperty(): Permohonan
     {
-        return Permohonan::with([
-            'unit',
+        $permohonan = Permohonan::with([
+            'unit.parent',
             'user.leveling',
+            'user.unit.parent',
             'pengusul.leveling',
             'atasan',
             'kodeAnggaran',
@@ -141,7 +90,22 @@ class PermohonanDetail extends Component
             'approvals.approver',
             'lampiran.uploadedBy',
             'pencairan.ump.pj',
+            'pencairan.buktiTransfer.uploadedBy',
         ])->findOrFail($this->permohonanId);
+
+        abort_unless(Auth::user()?->can('view', $permohonan), 403, 'Anda tidak memiliki hak akses untuk melihat permohonan dari divisi lain.');
+
+        return $permohonan;
+    }
+
+    /**
+     * Rantai persetujuan aktif untuk permohonan ini.
+     *
+     * @return array<string, mixed>
+     */
+    public function getApprovalChainProperty(): array
+    {
+        return (new PermohonanWorkflow)->resolveApprovalChainForPermohonan($this->permohonan);
     }
 
     public function getStatusBadgeProperty(): array
@@ -181,6 +145,10 @@ class PermohonanDetail extends Component
                 'label' => 'Dicairkan',
                 'class' => 'bg-teal-50 text-teal-700 border-teal-200',
             ],
+            'selesai' => [
+                'label' => 'Selesai',
+                'class' => 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            ],
             default => [
                 'label' => ucfirst($status),
                 'class' => 'bg-slate-100 text-slate-600 border-slate-200',
@@ -195,33 +163,7 @@ class PermohonanDetail extends Component
 
     public function getCanProxyFinanceApproveProperty(): bool
     {
-        $user = Auth::user();
-        if (! $user) {
-            return false;
-        }
-
-        $p = $this->permohonan;
-        if ($p->status !== 'diketahui_kadiv') {
-            return false;
-        }
-
-        $levelingUrutan = $p->levelingRequired?->urutan ?? 1;
-        $docDivisiId = $p->unit?->getDivisiId();
-
-        $isAdmin = $user->role === 'admin';
-        $isPetugas = (bool) $user->is_petugas_input;
-
-        if ($levelingUrutan <= 1) {
-            $isKadivDivisi = $user->isKadiv() && $user->canAccessDivision($docDivisiId);
-
-            return $isAdmin || $isPetugas || $isKadivDivisi;
-        }
-
-        $isKadivKeuangan = $user->isKadivKeuangan();
-        $isFinanceRole = $user->role === 'keuangan';
-        $modeAtasNama = Setting::get('keuangan.mode', 'atas_nama') === 'atas_nama';
-
-        return $isAdmin || $isKadivKeuangan || ($isFinanceRole && $modeAtasNama) || ($isPetugas && $modeAtasNama);
+        return $this->isFinanceStage && $this->canApprove;
     }
 
     public function getCanCairkanProperty(): bool
@@ -236,46 +178,24 @@ class PermohonanDetail extends Component
         return $this->permohonan->status === 'disetujui_keuangan' && $isAuthorized;
     }
 
+    public function getCanUploadBuktiTransferProperty(): bool
+    {
+        $user = Auth::user();
+        if (! $user || ! $user->is_active) {
+            return false;
+        }
+
+        return $user->role === 'keuangan' || $user->role === 'admin' || (bool) $user->is_petugas_input;
+    }
+
     public function getCanApproveProperty(): bool
     {
         $user = Auth::user();
-        $p = $this->permohonan;
-
         if (! $user) {
             return false;
         }
 
-        $isTuRecorder = (bool) $user->is_petugas_input || $user->role === 'admin';
-
-        if ($p->user_id === $user->id && $user->role !== 'admin' && ! $isTuRecorder) {
-            return false;
-        }
-
-        $docDivisiId = $p->unit?->getDivisiId();
-        $levelingUrutan = $p->levelingRequired?->urutan ?? 1;
-
-        if ($p->status === 'diajukan') {
-            if ($isTuRecorder) {
-                return true;
-            }
-
-            if ($levelingUrutan <= 1) {
-                return ($user->isManager() || $user->isKadiv())
-                    && $user->canAccessDivision($docDivisiId);
-            }
-
-            return $user->isKadiv() && $user->canAccessDivision($docDivisiId);
-        }
-
-        if ($p->status === 'diketahui_kadiv') {
-            if ($levelingUrutan <= 1) {
-                return $isTuRecorder || ($user->isKadiv() && $user->canAccessDivision($docDivisiId));
-            }
-
-            return $this->canProxyFinanceApprove;
-        }
-
-        return false;
+        return (new PermohonanWorkflow)->canUserApprove($user, $this->permohonan);
     }
 
     public function getCanCancelProperty(): bool
@@ -287,7 +207,9 @@ class PermohonanDetail extends Component
             return false;
         }
 
-        $isOwnerOrAdmin = ($p->user_id === $user->id) || ($user->role === 'admin');
+        $isOwnerOrAdmin = ($p->user_id === $user->id)
+            || ($p->pengusul_id === $user->id)
+            || $user->isAdmin();
 
         return $isOwnerOrAdmin && in_array($p->status, ['draft', 'diajukan', 'diketahui_kadiv', 'perlu_perbaikan'], true);
     }
@@ -326,6 +248,20 @@ class PermohonanDetail extends Component
         return $isAuthorized && in_array($p->status, ['draft', 'perlu_perbaikan'], true);
     }
 
+    public function getCanChangePemohonProperty(): bool
+    {
+        $user = Auth::user();
+        $p = $this->permohonan;
+
+        if (! $user) {
+            return false;
+        }
+
+        $isTuOrAdmin = $user->isAdmin() || (bool) $user->is_petugas_input;
+
+        return $isTuOrAdmin && in_array($p->status, ['draft', 'perlu_perbaikan'], true);
+    }
+
     public function getPemohonCandidatesProperty(): array
     {
         return User::with(['unit.parent', 'leveling'])
@@ -356,7 +292,7 @@ class PermohonanDetail extends Component
 
     public function openChangePemohonModal(): void
     {
-        abort_unless($this->canEditDraft, 403, 'Anda tidak berwenang mengubah pemohon dokumen ini.');
+        abort_unless($this->canChangePemohon, 403, 'Hanya Admin atau Petugas TU yang berwenang mengalihkan pejabat pemohon.');
         $this->newPemohonId = $this->permohonan->user_id;
         $this->showChangePemohonModal = true;
     }
@@ -369,10 +305,20 @@ class PermohonanDetail extends Component
 
     public function updatePejabatPemohon(): void
     {
-        abort_unless($this->canEditDraft, 403, 'Anda tidak berwenang mengubah pemohon dokumen ini.');
+        abort_unless($this->canChangePemohon, 403, 'Hanya Admin atau Petugas TU yang berwenang mengalihkan pejabat pemohon.');
 
         $this->validate([
-            'newPemohonId' => ['required', 'exists:users,id'],
+            'newPemohonId' => [
+                'required',
+                'exists:users,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $selected = User::with('leveling')->find($value);
+                    $urutan = $selected?->leveling?->urutan ?? 0;
+                    if (! $selected || ! $selected->is_active || $urutan < 1 || $urutan > 3) {
+                        $fail('Pejabat pemohon baru harus pengguna aktif dengan tingkat Supervisor, Manajer, atau Kepala Divisi.');
+                    }
+                },
+            ],
         ], [
             'newPemohonId.required' => 'Pejabat pemohon baru wajib dipilih.',
         ]);
@@ -380,8 +326,8 @@ class PermohonanDetail extends Component
         $p = $this->permohonan;
         $newPejabat = User::with(['unit', 'leveling'])->findOrFail($this->newPemohonId);
 
-        $batasAtas = $newPejabat->leveling?->batas_atas;
-        if ($batasAtas !== null && $p->total_diminta > (int) $batasAtas) {
+        $batasAtas = (new PermohonanWorkflow)->getSubmitterBatasAtas($newPejabat);
+        if ($batasAtas !== null && $p->total_diminta > $batasAtas) {
             $this->addError(
                 'newPemohonId',
                 'Total pengajuan (Rp '.number_format($p->total_diminta, 0, ',', '.').") melebihi batas kewenangan {$newPejabat->name} sebagai ".($newPejabat->jabatan ?? $newPejabat->leveling?->nama ?? 'Pejabat').' (maks. Rp '.number_format($batasAtas, 0, ',', '.').').'
@@ -409,33 +355,15 @@ class PermohonanDetail extends Component
 
     public function openAction(string $type): void
     {
-        $this->actionType = $type;
-        $this->actionNotes = '';
-
-        if ($type === 'setuju' && ! $this->pemeriksaId) {
-            $p = $this->permohonan;
-            $levelingUrutan = $p->levelingRequired?->urutan ?? 1;
-            $workflow = new PermohonanWorkflow;
-
-            if ($p->status === 'diajukan') {
-                $signer = $levelingUrutan <= 1 ? $p->unit?->getManager() : $workflow->getKadivDivisi($p);
-            } elseif ($p->status === 'diketahui_kadiv' && $levelingUrutan <= 1) {
-                $signer = $workflow->getKadivDivisi($p);
-            } else {
-                $signer = User::where('is_active', true)->where('role', 'keuangan')->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))->first()
-                    ?? User::getPejabatKadiv()->first();
-            }
-
-            if (! $signer) {
-                $signer = User::getKadivSekretariat() ?? User::getPejabatKadiv()->first();
-            }
-
-            $this->pemeriksaId = $signer?->id;
-            $this->pemeriksaName = $signer?->name ?? '';
-            $this->pemeriksaJabatan = $signer?->jabatan ?? '';
-            $this->pemeriksaSignedAt = now()->toDateString();
+        if ($type === 'batal') {
+            abort_unless($this->canCancel, 403, 'Anda tidak berwenang membatalkan permohonan ini.');
+        } else {
+            abort_unless($this->canApprove, 403, 'Anda tidak berwenang melakukan tindakan pada tahap ini.');
         }
 
+        $this->actionType = $type;
+        $this->actionNotes = '';
+        $this->resetErrorBag('actionNotes');
         $this->showActionModal = true;
     }
 
@@ -446,30 +374,22 @@ class PermohonanDetail extends Component
         $this->actionNotes = '';
     }
 
-    public function updatedPemeriksaId(?int $value): void
-    {
-        $signer = $value ? User::with('leveling')->find($value) : null;
-        $this->pemeriksaName = $signer?->name ?? '';
-        $this->pemeriksaJabatan = $signer?->jabatan ?? '';
-    }
-
-    public function updatedFinanceSignerPreset(string $value): void
-    {
-        if ($value === '' || $value === 'manual') {
-            return;
-        }
-
-        [$name, $jabatan] = array_pad(explode('|', $value, 2), 2, '');
-        $this->proxySignerName = $name;
-        $this->proxySignerJabatan = $jabatan;
-    }
-
     public function submitAction(): void
     {
         $workflow = new PermohonanWorkflow;
         $user = Auth::user();
 
-        if (in_array($this->actionType, ['perbaikan', 'tolak', 'batal'])) {
+        if ($this->actionType === 'batal') {
+            abort_unless($this->canCancel, 403, 'Anda tidak berwenang membatalkan permohonan ini.');
+        } elseif ($this->actionType === 'setuju') {
+            abort_unless($this->canApprove && $this->permohonan->status === 'diajukan', 403, 'Anda tidak berwenang menyetujui permohonan pada tahap ini.');
+        } elseif (in_array($this->actionType, ['perbaikan', 'tolak'], true)) {
+            abort_unless($this->canApprove, 403, 'Anda tidak berwenang melakukan tindakan pada tahap ini.');
+        } else {
+            abort(400, 'Tindakan tidak dikenal.');
+        }
+
+        if (in_array($this->actionType, ['perbaikan', 'tolak', 'batal'], true)) {
             $this->validate([
                 'actionNotes' => ['required', 'string', 'min:5'],
             ], [
@@ -479,47 +399,30 @@ class PermohonanDetail extends Component
         }
 
         $msg = '';
-        if ($this->actionType === 'setuju') {
-            $this->validate([
-                'pemeriksaName' => ['required', 'string', 'max:255'],
-                'pemeriksaJabatan' => ['required', 'string', 'max:255'],
-                'pemeriksaSignedAt' => ['required', 'date'],
-            ], [
-                'pemeriksaName.required' => 'Nama penanda tangan fisik pemeriksa wajib diisi.',
-                'pemeriksaJabatan.required' => 'Jabatan penanda tangan fisik pemeriksa wajib diisi.',
-                'pemeriksaSignedAt.required' => 'Tanggal tanda tangan fisik basah wajib diisi.',
-            ]);
-
-            $p = $this->permohonan;
-            $statusSebelum = $p->status;
-            $levelingUrutan = $p->levelingRequired?->urutan ?? 1;
-
-            $workflow->approve($p, $user, [
-                'catatan' => $this->actionNotes ?: null,
-                'signer_user_id' => $this->pemeriksaId,
-                'signer_name' => $this->pemeriksaName,
-                'signer_jabatan' => $this->pemeriksaJabatan,
-                'signed_at' => $this->pemeriksaSignedAt,
-            ]);
-
-            if ($statusSebelum === 'diajukan') {
-                if ($levelingUrutan <= 1) {
-                    $msg = 'Pemeriksaan tercatat. Permohonan diteruskan ke Kepala Divisi.';
-                } else {
-                    $msg = 'Pemeriksaan tercatat. Permohonan diteruskan ke Kadiv Keuangan.';
-                }
-            } else {
-                $msg = 'Permohonan disetujui.';
+        try {
+            if ($this->actionType === 'setuju') {
+                $p = $this->permohonan;
+                $chain = $this->approvalChain;
+                $workflow->approve($p, $user, [
+                    'catatan' => $this->actionNotes ?: null,
+                ]);
+                $nextLabel = $chain['step2']['label'] ?? 'Penyetuju Akhir';
+                $msg = "Pemeriksaan tercatat. Permohonan diteruskan ke {$nextLabel}.";
+            } elseif ($this->actionType === 'perbaikan') {
+                $workflow->requestRevision($this->permohonan, $user, $this->actionNotes);
+                $msg = 'Permohonan dikembalikan untuk perbaikan.';
+            } elseif ($this->actionType === 'tolak') {
+                $workflow->reject($this->permohonan, $user, $this->actionNotes);
+                $msg = 'Permohonan berhasil ditolak.';
+            } elseif ($this->actionType === 'batal') {
+                $workflow->cancel($this->permohonan, $user, $this->actionNotes);
+                $msg = 'Permohonan berhasil dibatalkan.';
             }
-        } elseif ($this->actionType === 'perbaikan') {
-            $workflow->requestRevision($this->permohonan, $user, $this->actionNotes);
-            $msg = 'Permohonan dikembalikan untuk perbaikan.';
-        } elseif ($this->actionType === 'tolak') {
-            $workflow->reject($this->permohonan, $user, $this->actionNotes);
-            $msg = 'Permohonan berhasil ditolak.';
-        } elseif ($this->actionType === 'batal') {
-            $workflow->cancel($this->permohonan, $user, $this->actionNotes);
-            $msg = 'Permohonan berhasil dibatalkan.';
+        } catch (RuntimeException $e) {
+            $this->addError('actionNotes', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return;
         }
 
         unset($this->permohonan);
@@ -531,74 +434,71 @@ class PermohonanDetail extends Component
 
     public function submitKeuanganApproval(): void
     {
+        abort_unless($this->canProxyFinanceApprove, 403, 'Anda tidak berwenang memberikan persetujuan akhir pada permohonan ini.');
+
         foreach ($this->approvedItemAmounts as $id => $val) {
             if (is_string($val)) {
-                $clean = preg_replace('/\D/', '', $val);
-                $this->approvedItemAmounts[$id] = $clean !== '' ? (int) $clean : 0;
+                $trimmed = trim($val);
+                if (preg_match('/^-\d+$/', $trimmed)) {
+                    $this->approvedItemAmounts[$id] = (int) $trimmed;
+                } else {
+                    $clean = preg_replace('/\D/', '', $trimmed);
+                    $this->approvedItemAmounts[$id] = $clean !== '' ? (int) $clean : 0;
+                }
             }
         }
 
         $p = $this->permohonan;
-        $levelingUrutan = $p->levelingRequired?->urutan ?? 1;
+        $rules = [
+            'proxyNotes' => ['nullable', 'string', 'max:1000'],
+        ];
+        $messages = [];
 
-        $this->validate([
-            'proxySignerName' => ['required', 'string', 'max:255'],
-            'proxySignerJabatan' => ['required', 'string', 'max:255'],
-            'proxySignedAt' => ['required', 'date'],
-            'approvedItemAmounts.*' => ['required', 'integer', 'min:0'],
-            'proxyScanFile' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,bin', 'extensions:pdf,jpg,jpeg,png', 'max:10240'],
-        ], [
-            'proxySignerName.required' => 'Nama penanda tangan Kepala Divisi wajib diisi.',
-            'proxySignerJabatan.required' => 'Jabatan penanda tangan Kepala Divisi wajib diisi.',
-            'proxySignedAt.required' => 'Tanggal tanda tangan fisik wajib diisi.',
-            'approvedItemAmounts.*.required' => 'Nominal disetujui wajib diisi.',
-            'proxyScanFile.required' => 'Berkas scan bukti form bertanda tangan wajib diunggah.',
-            'proxyScanFile.mimes' => 'Berkas scan harus berformat PDF, JPG, atau PNG.',
-            'proxyScanFile.max' => 'Ukuran berkas scan maksimal 10 MB.',
-        ]);
+        foreach ($p->items as $item) {
+            $rules["approvedItemAmounts.{$item->id}"] = ['required', 'integer', 'min:0', "max:{$item->jumlah_diminta}"];
+            $messages["approvedItemAmounts.{$item->id}.required"] = "Nominal disetujui untuk \"{$item->uraian}\" wajib diisi.";
+            $messages["approvedItemAmounts.{$item->id}.integer"] = "Nominal disetujui untuk \"{$item->uraian}\" harus berupa angka.";
+            $messages["approvedItemAmounts.{$item->id}.min"] = "Nominal disetujui untuk \"{$item->uraian}\" tidak boleh negatif.";
+            $messages["approvedItemAmounts.{$item->id}.max"] = "Nominal disetujui untuk \"{$item->uraian}\" maksimal Rp ".number_format($item->jumlah_diminta, 0, ',', '.').'.';
+        }
 
-        DB::transaction(function () use ($p, $levelingUrutan) {
-            // Simpan file scan (wajib)
-            if ($this->proxyScanFile) {
-                $path = $this->proxyScanFile->store('lampiran/scan_final', 'public');
-                Lampiran::create([
-                    'attachable_type' => Permohonan::class,
-                    'attachable_id' => $p->id,
-                    'jenis' => 'scan_final',
-                    'path' => $path,
-                    'original_name' => $this->proxyScanFile->getClientOriginalName(),
-                    'mime' => $this->proxyScanFile->getMimeType() ?? 'application/pdf',
-                    'size' => $this->proxyScanFile->getSize() ?? 0,
-                    'sha256' => hash_file('sha256', $this->proxyScanFile->getRealPath()),
-                    'version' => 1,
-                    'uploaded_by' => Auth::id(),
-                ]);
-            }
+        $this->validate($rules, $messages);
 
-            $defaultCatatan = $levelingUrutan <= 1
-                ? 'Persetujuan akhir Kepala Divisi dicatat sistem'
-                : 'Persetujuan akhir Kadiv Keuangan dicatat sistem';
+        $totalApproved = 0;
+        foreach ($p->items as $item) {
+            $totalApproved += (int) ($this->approvedItemAmounts[$item->id] ?? 0);
+        }
 
-            // Submit approval ke workflow
+        if ($totalApproved <= 0) {
+            $this->addError('approvedItemAmounts', 'Total nominal yang disetujui harus lebih dari Rp 0.');
+
+            return;
+        }
+
+        $chain = $this->approvalChain;
+        $step2Label = $chain['step2']['label'] ?? 'Penyetuju Akhir';
+
+        try {
             $workflow = new PermohonanWorkflow;
             $workflow->approve($p, Auth::user(), [
                 'items' => $this->approvedItemAmounts,
-                'signer_name' => $this->proxySignerName,
-                'signer_jabatan' => $this->proxySignerJabatan,
-                'catatan' => $this->proxyNotes ?: $defaultCatatan,
+                'catatan' => $this->proxyNotes ?: "Disetujui oleh {$step2Label}",
             ]);
-        });
+        } catch (RuntimeException $e) {
+            $this->addError('approvedItemAmounts', $e->getMessage());
+            $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
+
+            return;
+        }
 
         unset($this->permohonan);
-        $this->reset('proxyScanFile');
+        $this->reset('proxyNotes');
 
         foreach ($this->permohonan->items as $item) {
             $this->approvedItemAmounts[$item->id] = $item->jumlah_disetujui ?? $item->jumlah_diminta;
         }
 
-        $msg = $levelingUrutan <= 1
-            ? 'Persetujuan akhir Kepala Divisi berhasil dicatat. Dokumen berstatus DISETUJUI.'
-            : 'Persetujuan akhir Kadiv Keuangan berhasil dicatat. Dana kini berstatus TERIKAT.';
+        $msg = "Persetujuan akhir {$step2Label} berhasil dicatat. Dana kini berstatus TERIKAT.";
 
         session()->flash('success', $msg);
         $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
@@ -606,10 +506,13 @@ class PermohonanDetail extends Component
 
     public function submitPermohonan(): void
     {
+        abort_unless($this->canResubmit, 403, 'Anda tidak berwenang mengajukan permohonan ini.');
+
         try {
             $workflow = new PermohonanWorkflow;
             $workflow->submit($this->permohonan);
         } catch (RuntimeException $e) {
+            session()->flash('error', $e->getMessage());
             $this->dispatch('notify', ['type' => 'error', 'message' => $e->getMessage()]);
 
             return;
@@ -617,13 +520,17 @@ class PermohonanDetail extends Component
 
         unset($this->permohonan);
 
-        $msg = "Permohonan dana {$this->permohonan->no_pengajuan} berhasil diajukan.";
+        $msg = $this->permohonan->status === 'disetujui_keuangan'
+            ? "Permohonan dana {$this->permohonan->no_pengajuan} berhasil diajukan dan langsung disetujui."
+            : "Permohonan dana {$this->permohonan->no_pengajuan} berhasil diajukan.";
         session()->flash('success', $msg);
         $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
     }
 
     public function openCairkanModal(): void
     {
+        abort_unless($this->canCairkan, 403, 'Anda tidak berwenang menerbitkan pencairan dana.');
+
         $p = $this->permohonan;
         $this->tglCair = now()->toDateString();
         $year = date('Y');
@@ -636,20 +543,27 @@ class PermohonanDetail extends Component
             $candidate = sprintf('PPD/%s%s/%04d', $year, $month, $seq);
         }
         $this->noPpd = $candidate;
-        $manager = $p->unit?->getManager();
-        $this->pjId = $manager?->id ?? ($this->pjCandidates()[0]['id'] ?? null);
+        $defaultPj = (new PermohonanWorkflow)->resolveDefaultPj($p);
+        $this->pjId = $defaultPj?->id ?? ($this->pjCandidates()[0]['id'] ?? null);
         $this->penerimaIds = [];
+        $this->buktiTransferFile = null;
         $this->showCairkanModal = true;
     }
 
     public function closeCairkanModal(): void
     {
         $this->showCairkanModal = false;
+        $this->buktiTransferFile = null;
         $this->resetErrorBag();
     }
 
     public function submitCairkan(): void
     {
+        abort_unless($this->canCairkan, 403, 'Anda tidak berwenang menerbitkan pencairan dana.');
+
+        $maxKb = max(100, (int) (Setting::get('lampiran.max_kb', 5120) ?: 5120));
+        $maxMbLabel = $this->formatMaxKbLabel($maxKb);
+
         $this->validate([
             'noPpd' => ['required', 'string', 'max:100', 'unique:pencairan,no_ppd'],
             'tglCair' => ['required', 'date'],
@@ -659,18 +573,22 @@ class PermohonanDetail extends Component
                 function ($attribute, $value, $fail) {
                     $cand = User::with('leveling')->find($value);
                     if (! $cand || ($cand->leveling?->urutan ?? 0) < 2) {
-                        $fail('Penanggung Jawab (PJ) UMP wajib pejabat berlevel Manager atau lebih tinggi.');
+                        $fail('Penanggung Jawab (PJ) Laporan wajib pejabat berlevel Manager atau lebih tinggi.');
                     }
                 },
             ],
             'penerimaIds' => ['array'],
             'penerimaIds.*' => ['integer', 'exists:users,id'],
+            'buktiTransferFile' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', "max:{$maxKb}"],
         ], [
             'noPpd.required' => 'Nomor PPD wajib diisi.',
             'noPpd.unique' => 'Nomor PPD sudah dipakai.',
             'tglCair.required' => 'Tanggal pencairan wajib diisi.',
-            'pjId.required' => 'Penanggung Jawab (PJ) UMP wajib dipilih (level Manager).',
+            'pjId.required' => 'Penanggung Jawab (PJ) Laporan wajib dipilih (minimal level Manager).',
             'penerimaIds.*.exists' => 'Penerima dana yang dipilih tidak valid.',
+            'buktiTransferFile.file' => 'Berkas bukti transfer tidak valid.',
+            'buktiTransferFile.mimes' => 'Bukti transfer harus berformat PDF, JPG, PNG, atau WEBP.',
+            'buktiTransferFile.max' => "Ukuran berkas bukti transfer maksimal {$maxMbLabel}.",
         ]);
 
         try {
@@ -680,8 +598,10 @@ class PermohonanDetail extends Component
                 'tgl_cair' => $this->tglCair,
                 'pj_id' => $this->pjId,
                 'penerima_ids' => $this->penerimaIds,
+                'bukti_transfer' => $this->buktiTransferFile,
             ]);
             $this->showCairkanModal = false;
+            $this->buktiTransferFile = null;
             unset($this->permohonan);
             $msg = "Pencairan PPD {$pencairan->no_ppd} berhasil diterbitkan.";
             session()->flash('success', $msg);
@@ -691,15 +611,78 @@ class PermohonanDetail extends Component
         }
     }
 
+    public function openBuktiTransferModal(): void
+    {
+        abort_unless($this->canUploadBuktiTransfer, 403, 'Anda tidak berwenang mengunggah bukti transfer pencairan.');
+        abort_unless($this->permohonan->pencairan !== null, 404);
+
+        $this->buktiTransferUpload = null;
+        $this->resetErrorBag('buktiTransferUpload');
+        $this->showBuktiTransferModal = true;
+    }
+
+    public function closeBuktiTransferModal(): void
+    {
+        $this->showBuktiTransferModal = false;
+        $this->buktiTransferUpload = null;
+        $this->resetErrorBag('buktiTransferUpload');
+    }
+
+    public function submitBuktiTransfer(): void
+    {
+        abort_unless($this->canUploadBuktiTransfer, 403, 'Anda tidak berwenang mengunggah bukti transfer pencairan.');
+
+        $pencairan = $this->permohonan->pencairan;
+        abort_unless($pencairan !== null, 404);
+
+        $maxKb = max(100, (int) (Setting::get('lampiran.max_kb', 5120) ?: 5120));
+        $maxMbLabel = $this->formatMaxKbLabel($maxKb);
+
+        $this->validate([
+            'buktiTransferUpload' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', "max:{$maxKb}"],
+        ], [
+            'buktiTransferUpload.required' => 'Berkas bukti transfer wajib dipilih.',
+            'buktiTransferUpload.file' => 'Berkas bukti transfer tidak valid.',
+            'buktiTransferUpload.mimes' => 'Bukti transfer harus berformat PDF, JPG, PNG, atau WEBP.',
+            'buktiTransferUpload.max' => "Ukuran berkas bukti transfer maksimal {$maxMbLabel}.",
+        ]);
+
+        try {
+            $lampiran = (new PermohonanWorkflow)->simpanBuktiTransfer(
+                $pencairan,
+                Auth::user(),
+                $this->buktiTransferUpload
+            );
+            $this->closeBuktiTransferModal();
+            unset($this->permohonan);
+
+            $msg = "Bukti transfer PPD {$pencairan->no_ppd} (v{$lampiran->version}) berhasil disimpan.";
+            session()->flash('success', $msg);
+            $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
+        } catch (RuntimeException $e) {
+            $this->addError('buktiTransferUpload', $e->getMessage());
+        }
+    }
+
+    private function formatMaxKbLabel(int $maxKb): string
+    {
+        if ($maxKb % 1024 === 0) {
+            return ($maxKb / 1024).' MB';
+        }
+
+        return number_format($maxKb / 1024, 1, ',', '.').' MB';
+    }
+
     /**
      * Semua pejabat level Manager ke atas (urutan >= 2) di seluruh organisasi.
-     * Urutan: manager unit permohonan, manager satu divisi, lalu sisanya; masing-masing A-Z.
+     * Urutan: PJ default (Kadiv untuk permohonan Kadiv, atau Manager unit untuk Supervisor/Manager),
+     * pejabat satu divisi, lalu sisanya; masing-masing A-Z.
      *
      * @return array<int, array{id: int, name: string, sub: string}>
      */
     private function pjCandidates(): array
     {
-        $unitManager = $this->permohonan->unit?->getManager();
+        $defaultPj = (new PermohonanWorkflow)->resolveDefaultPj($this->permohonan);
         $divisiId = $this->permohonan->unit?->getDivisiId();
 
         return User::with(['unit', 'leveling'])
@@ -708,7 +691,7 @@ class PermohonanDetail extends Component
             ->orderBy('name')
             ->get()
             ->sortBy(fn (User $u) => [
-                $u->is($unitManager) ? 0 : (($divisiId && $u->unit?->getDivisiId() === $divisiId) ? 1 : 2),
+                $u->is($defaultPj) ? 0 : (($divisiId && $u->unit?->getDivisiId() === $divisiId) ? 1 : 2),
                 $u->name,
             ])
             ->map(function (User $u) {
@@ -762,84 +745,20 @@ class PermohonanDetail extends Component
 
     public function render(): View
     {
-        $divisiId = $this->permohonan->unit?->getDivisiId();
-        $pjCandidates = $this->pjCandidates();
-
-        $levelingUrutan = $this->permohonan->levelingRequired?->urutan ?? 1;
-        if ($this->permohonan->status === 'diajukan' && $levelingUrutan <= 1) {
-            $pemeriksaCandidates = User::where('is_active', true)
-                ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 2))
-                ->where(function ($q) use ($divisiId) {
-                    if ($divisiId) {
-                        $q->where('unit_id', $divisiId)
-                            ->orWhereHas('unit', fn ($u) => $u->where('parent_id', $divisiId));
-                    }
-                })
-                ->orderBy('name')
-                ->get()
-                ->map(fn (User $u) => [
-                    'id' => $u->id,
-                    'name' => $u->name,
-                    'sub' => ($u->jabatan ?: $u->leveling?->nama).($u->unit?->kode ? ' ('.$u->unit->kode.')' : ''),
-                ]);
-        } else {
-            $pemeriksaCandidates = User::getPejabatKadiv()->map(fn (User $u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'sub' => ($u->jabatan ?: $u->leveling?->nama).($u->unit?->kode ? ' ('.$u->unit->kode.')' : ''),
-            ]);
-        }
-        if ($levelingUrutan <= 1) {
-            $kadivDivisi = (new PermohonanWorkflow)->getKadivDivisi($this->permohonan);
-            $finalSignerCandidates = collect();
-            if ($kadivDivisi) {
-                $finalSignerCandidates->push([
-                    'name' => $kadivDivisi->name,
-                    'jabatan' => $kadivDivisi->jabatan ?? 'Kepala Divisi',
-                    'sub' => $kadivDivisi->unit?->nama ?? 'Divisi',
-                ]);
-            }
-            $allKadivs = User::where('is_active', true)
-                ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
-                ->when($kadivDivisi, fn ($q) => $q->where('id', '!=', $kadivDivisi->id))
-                ->orderBy('name')
-                ->get();
-            foreach ($allKadivs as $k) {
-                $finalSignerCandidates->push([
-                    'name' => $k->name,
-                    'jabatan' => $k->jabatan ?? 'Kepala Divisi',
-                    'sub' => $k->unit?->nama ?? 'Divisi',
-                ]);
-            }
-        } else {
-            $kadivKeu = User::where('is_active', true)
-                ->where('role', 'keuangan')
-                ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
-                ->orderBy('name')
-                ->get();
-            $finalSignerCandidates = $kadivKeu->map(fn (User $u) => [
-                'name' => $u->name,
-                'jabatan' => $u->jabatan ?? 'Kepala Divisi Keuangan',
-                'sub' => 'Divisi Keuangan',
-            ]);
-            if ($finalSignerCandidates->isEmpty()) {
-                $finalSignerCandidates = collect([
-                    ['name' => 'Direktur Keuangan', 'jabatan' => 'Kepala Divisi Keuangan / Direktur Keuangan', 'sub' => 'Divisi Keuangan'],
-                ]);
-            }
-        }
+        $maxKb = max(100, (int) (Setting::get('lampiran.max_kb', 5120) ?: 5120));
 
         return view('livewire.permohonan.permohonan-detail', [
             'permohonan' => $this->permohonan,
+            'approvalChain' => $this->approvalChain,
             'statusBadge' => $this->statusBadge,
             'canApprove' => $this->canApprove,
             'canCancel' => $this->canCancel,
             'canResubmit' => $this->canResubmit,
             'canCairkan' => $this->canCairkan,
-            'pjCandidates' => $pjCandidates,
+            'canUploadBuktiTransfer' => $this->canUploadBuktiTransfer,
+            'maxLampiranLabel' => $this->formatMaxKbLabel($maxKb),
+            'pjCandidates' => $this->pjCandidates(),
             'penerimaCandidates' => $this->penerimaCandidates(),
-            'pemeriksaCandidates' => $pemeriksaCandidates,
-            'finalSignerCandidates' => $finalSignerCandidates,
             'isFinanceStage' => $this->isFinanceStage,
             'canProxyFinanceApprove' => $this->canProxyFinanceApprove,
         ]);

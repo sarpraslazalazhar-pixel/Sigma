@@ -49,7 +49,7 @@ class PengaturanTest extends TestCase
         $response->assertOk();
         $response->assertSee('Pengaturan Sistem');
         $response->assertSee('Ambang Peringatan Limit (%)');
-        $response->assertSee('Pengingat UMP Sebelum Jatuh Tempo (Hari)');
+        $response->assertSee('Pengingat Laporan Sebelum Jatuh Tempo (Hari)');
         $response->assertSee('Pengingat Permohonan Tertunda (Hari)');
         $response->assertSee('Notifikasi Email');
     }

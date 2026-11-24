@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\KodeAnggaran;
+use App\Models\Permohonan;
 use App\Models\Ump;
 use App\Models\User;
 use App\Policies\KodeAnggaranPolicy;
@@ -34,8 +35,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(KodeAnggaran::class, KodeAnggaranPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
 
-        // 2. Super-admin bypass: Admin memiliki semua izin secara otomatis
+        // 2. Super-admin bypass: Admin memiliki semua izin secara otomatis kecuali persetujuan permohonan (delegasi ke policy)
         Gate::before(function (User $user, string $ability): ?bool {
+            if (in_array($ability, ['approveKadiv', 'approveKeuangan'], true)) {
+                return null;
+            }
+
             if ($user->isAdmin()) {
                 return true;
             }

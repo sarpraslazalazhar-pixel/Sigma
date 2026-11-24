@@ -322,7 +322,7 @@ class PencairanWorkflowTest extends TestCase
             ->assertSee('PPD/202610/0001')
             ->call('exportExcel');
 
-        Excel::assertDownloaded('Rekap_PPD_dan_UMP_2026.xlsx');
+        Excel::assertDownloaded('Rekap_PPD_dan_Laporan_2026.xlsx');
     }
 
     public function test_cairkan_modal_suggests_4_angka_tahun_dan_bulan_and_allows_custom(): void
@@ -402,6 +402,100 @@ class PencairanWorkflowTest extends TestCase
             ->assertSet('sumber_dana_id', $zakat->id)
             ->call('addItem')
             ->assertCount('items', 2);
+    }
+
+    public function test_cairkan_modal_and_workflow_auto_select_kadiv_when_permohonan_owned_by_kadiv(): void
+    {
+        $kadivSek = User::where('username', 'rahmatullah.sidik')->firstOrFail();
+        $divSek = Unit::where('kode', 'DIV-SEK')->firstOrFail();
+        $unitHum = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
+
+        // 1. Kadiv mengajukan dengan unit Divisi (DIV-SEK) -> otomatis PJ = Kadiv (bukan Manager unit anak)
+        $pDiv = $this->makePermohonan('SEK-PMH-2026-KADIV-1');
+        $pDiv->update([
+            'unit_id' => $divSek->id,
+            'user_id' => $kadivSek->id,
+        ]);
+
+        $compDiv = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pDiv->id])
+            ->call('openCairkanModal');
+
+        $this->assertSame($kadivSek->id, $compDiv->get('pjId'));
+        $candidatesDiv = $compDiv->viewData('pjCandidates');
+        $this->assertSame($kadivSek->id, $candidatesDiv[0]['id']);
+
+        // 2. Kadiv mengajukan pada unit anak (UNT-SEK-HUM) -> tetap otomatis PJ = Kadiv (bukan Sigit Nugroho)
+        $pChild = $this->makePermohonan('HUM-PMH-2026-KADIV-2');
+        $pChild->update([
+            'unit_id' => $unitHum->id,
+            'user_id' => $kadivSek->id,
+        ]);
+
+        $compChild = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pChild->id])
+            ->call('openCairkanModal');
+
+        $this->assertSame($kadivSek->id, $compChild->get('pjId'));
+        $candidatesChild = $compChild->viewData('pjCandidates');
+        $this->assertSame($kadivSek->id, $candidatesChild[0]['id']);
+
+        // 3. Cairkan via workflow tanpa pj_id eksplisit -> PJ UMP otomatis Kadiv
+        $pencairan = (new PermohonanWorkflow)->cairkan($pChild, $this->financeUser, [
+            'no_ppd' => 'PPD/KEU/2026/KADIV-AUTO',
+            'tgl_cair' => '2026-11-24',
+        ]);
+
+        $ump = Ump::where('pencairan_id', $pencairan->id)->firstOrFail();
+        $this->assertSame($kadivSek->id, $ump->pj_id);
+
+        // 4. PDF PPD menampilkan header Kepala Divisi
+        $html = view('pdf.pencairan', [
+            'pencairan' => $pencairan->fresh(['permohonan.unit', 'permohonan.user', 'permohonan.kodeAnggaran', 'permohonan.sumberDana', 'permohonan.items', 'permohonan.approvals', 'ump.pj.leveling']),
+            'permohonan' => $pChild->fresh(),
+            'logoBase64' => null,
+        ])->render();
+        $this->assertStringContainsString('PENANGGUNG JAWAB (PJ / KEPALA DIVISI)', $html);
+    }
+
+    public function test_cairkan_modal_and_workflow_auto_select_manager_for_supervisor_and_manager(): void
+    {
+        $unitHum = Unit::where('kode', 'UNT-SEK-HUM')->firstOrFail();
+        $spvIt = User::where('username', 'rudiansah')->firstOrFail();
+        $mgrHum = User::where('username', 'sigit.nugroho')->firstOrFail();
+
+        // 1. Permohonan Supervisor (Rudiansah) -> otomatis PJ = Manager unit (Sigit Nugroho)
+        $pSpv = $this->makePermohonan('HUM-PMH-2026-SPV-1');
+        $pSpv->update([
+            'unit_id' => $unitHum->id,
+            'user_id' => $spvIt->id,
+        ]);
+
+        $compSpv = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pSpv->id])
+            ->call('openCairkanModal');
+        $this->assertSame($mgrHum->id, $compSpv->get('pjId'));
+
+        // 2. Permohonan Manager Pengeluaran di DIV-KEU -> otomatis PJ = Manager Pengeluaran itu sendiri
+        $divKeu = Unit::where('kode', 'DIV-KEU')->firstOrFail();
+        $mgrKeluar = User::where('username', 'manager.keuangan.keluar')->firstOrFail();
+
+        $pMgr = $this->makePermohonan('KEU-PMH-2026-MGR-1');
+        $pMgr->update([
+            'unit_id' => $divKeu->id,
+            'user_id' => $mgrKeluar->id,
+        ]);
+
+        $compMgr = Livewire::actingAs($this->financeUser)
+            ->test(PermohonanDetail::class, ['id' => $pMgr->id])
+            ->call('openCairkanModal');
+        $this->assertSame($mgrKeluar->id, $compMgr->get('pjId'));
+
+        $pencairan = (new PermohonanWorkflow)->cairkan($pMgr, $this->financeUser, [
+            'no_ppd' => 'PPD/KEU/2026/MGR-AUTO',
+            'tgl_cair' => '2026-11-24',
+        ]);
+        $this->assertSame($mgrKeluar->id, $pencairan->ump->pj_id);
     }
 
     protected function makePermohonan(string $noPengajuan): Permohonan

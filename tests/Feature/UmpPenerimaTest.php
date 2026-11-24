@@ -199,11 +199,16 @@ class UmpPenerimaTest extends TestCase
 
         Livewire::actingAs($this->pjUser)
             ->test(UmpDetail::class, ['id' => $this->ump->id])
-            ->call('setBuktiItemTarget', $item->id)
-            ->set('buktiItem', UploadedFile::fake()->image('bukti-tf.jpg', 200, 200))
-            ->call('simpanBuktiItem', $item->id)
+            ->assertDontSee('Bukti Pendukung Laporan')
+            ->assertSeeHtml('aria-label="Edit baris"')
+            ->assertDontSeeHtml('aria-label="Simpan baris"')
+            ->call('editBaris', 'pj', 0)
+            ->assertSeeHtml('aria-label="Upload bukti transaksi baris 1"')
+            ->set('pendingRowFiles.pj.0', UploadedFile::fake()->image('bukti-tf.jpg', 200, 200))
+            ->call('simpanBaris', 'pj', 0)
             ->assertHasNoErrors()
-            ->assertSee('bukti-tf.jpg');
+            ->assertSee('bukti-tf.jpg')
+            ->assertSet('itemsByPenerima.pj.0.is_editing', false);
 
         $lampiran = Lampiran::where('attachable_type', UmpItem::class)
             ->where('attachable_id', $item->id)
@@ -212,6 +217,71 @@ class UmpPenerimaTest extends TestCase
         $this->assertNotNull($lampiran);
         $this->assertSame('bukti_tf', $lampiran->jenis);
         Storage::disk('local')->assertExists($lampiran->path);
+    }
+
+    public function test_non_owner_penerima_cannot_edit_save_or_delete_other_section_row(): void
+    {
+        Storage::fake('local');
+
+        $pivotA = UmpPenerima::where('ump_id', $this->ump->id)
+            ->where('user_id', $this->penerimaA->id)
+            ->firstOrFail();
+        $pivotB = UmpPenerima::where('ump_id', $this->ump->id)
+            ->where('user_id', $this->penerimaB->id)
+            ->firstOrFail();
+
+        (new UmpWorkflow)->saveItems($this->ump, [
+            ['tgl' => now()->toDateString(), 'rincian' => 'Baris Penerima A', 'no_bukti' => 'A-10', 'jumlah' => 400000, 'penerima_id' => $pivotA->id],
+        ]);
+
+        $itemA = UmpItem::where('ump_id', $this->ump->id)->where('penerima_id', $pivotA->id)->firstOrFail();
+        $lampiranA = Lampiran::create([
+            'attachable_type' => UmpItem::class,
+            'attachable_id' => $itemA->id,
+            'jenis' => 'bukti_tf',
+            'path' => UploadedFile::fake()->image('a.jpg')->store('lampiran/ump-item', 'local'),
+            'original_name' => 'a.jpg',
+            'mime' => 'image/jpeg',
+            'size' => 100,
+            'sha256' => hash('sha256', 'a'),
+            'version' => 1,
+            'uploaded_by' => $this->penerimaA->id,
+        ]);
+
+        $sectionA = (string) $pivotA->id;
+        $sectionB = (string) $pivotB->id;
+
+        $component = Livewire::actingAs($this->penerimaB)
+            ->test(UmpDetail::class, ['id' => $this->ump->id])
+            ->call('editBaris', $sectionA, 0)
+            ->assertSet("itemsByPenerima.{$sectionA}.0.is_editing", false)
+            ->set("itemsByPenerima.{$sectionA}.0.rincian", 'Diubah pihak lain')
+            ->call('simpanBaris', $sectionA, 0)
+            ->call('hapusLampiranItem', $lampiranA->id)
+            ->call('hapusBaris', $sectionA, 0);
+
+        $this->assertSame('Baris Penerima A', $itemA->fresh()->rincian);
+        $this->assertDatabaseHas('ump_items', ['id' => $itemA->id]);
+        $this->assertDatabaseHas('lampiran', ['id' => $lampiranA->id]);
+
+        // Penerima B tetap bisa menambah, mengunggah bukti langsung, menyimpan, dan mengunci di section miliknya
+        $component
+            ->call('tambahBaris', $sectionB)
+            ->set("itemsByPenerima.{$sectionB}.0.tgl", now()->toDateString())
+            ->set("itemsByPenerima.{$sectionB}.0.rincian", 'Transport Penerima B')
+            ->set("itemsByPenerima.{$sectionB}.0.jumlah", 250000)
+            ->set("pendingRowFiles.{$sectionB}.0", UploadedFile::fake()->image('b-tf.png', 150, 150))
+            ->call('simpanBaris', $sectionB, 0)
+            ->assertHasNoErrors()
+            ->assertSet("itemsByPenerima.{$sectionB}.0.is_editing", false)
+            ->assertSee('b-tf.png');
+
+        $itemB = UmpItem::where('ump_id', $this->ump->id)->where('penerima_id', $pivotB->id)->firstOrFail();
+        $this->assertDatabaseHas('lampiran', [
+            'attachable_type' => UmpItem::class,
+            'attachable_id' => $itemB->id,
+            'jenis' => 'bukti_tf',
+        ]);
     }
 
     public function test_policy_allows_assigned_penerima_view_and_update(): void

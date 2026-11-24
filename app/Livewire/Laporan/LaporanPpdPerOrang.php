@@ -264,15 +264,7 @@ class LaporanPpdPerOrang extends Component
         }
 
         $tahunList = TahunAnggaran::orderBy('tahun', 'desc')->get();
-        $unitOptions = Unit::with('parent')
-            ->orderBy('nama', 'asc')
-            ->get()
-            ->map(fn (Unit $u) => [
-                'id' => (string) $u->id,
-                'kode' => $u->kode,
-                'nama' => $u->parent ? "{$u->parent->nama} — {$u->nama}" : $u->nama,
-            ])
-            ->toArray();
+        $unitOptions = Unit::formatDropdownOptions(null, true)->toArray();
 
         $sumberDanaList = SumberDana::where('is_active', true)->orderBy('id')->get();
         $rataRata = $totalPpd > 0 ? (int) round($totalNominal / $totalPpd) : 0;

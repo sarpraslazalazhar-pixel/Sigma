@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Livewire\Ump\UmpDetail;
 use App\Livewire\Ump\UmpIndex;
 use App\Models\KodeAnggaran;
+use App\Models\Lampiran;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
 use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
 use App\Models\Ump;
+use App\Models\UmpItem;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\PermohonanWorkflow;
@@ -17,6 +19,8 @@ use App\Services\UmpWorkflow;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use RuntimeException;
 use Tests\TestCase;
@@ -186,8 +190,8 @@ class UmpWorkflowTest extends TestCase
         $this->actingAs($this->financeUser)
             ->get(route('ump.index'))
             ->assertStatus(200)
-            ->assertSee('Laporan UMP')
-            ->assertSee('Total UMP Berjalan')
+            ->assertSee('Laporan')
+            ->assertSee('Total Laporan Berjalan')
             ->assertSee('Total Dana Diterima')
             ->assertSee('Total Realisasi Penggunaan')
             ->assertSee('Saldo Tersisa')
@@ -198,7 +202,7 @@ class UmpWorkflowTest extends TestCase
             ->set('search', 'PPD/KEU/2026/0100')
             ->assertSee('Kegiatan UMP Tes')
             ->set('statusFilter', 'draft')
-            ->assertSee('Buka Form UMP');
+            ->assertSee('Buka Form Laporan');
     }
 
     public function test_ui_detail_add_row_save_and_submit(): void
@@ -222,7 +226,7 @@ class UmpWorkflowTest extends TestCase
             ->assertCount('itemsByPenerima.pj', 1)
             ->assertSee('1 baris')
             ->assertSee('Rp 1.200.000')
-            ->assertSee('Draft UMP tersimpan')
+            ->assertSee('Draft Laporan tersimpan')
             ->assertDontSeeHtml('aria-label="Simpan baris"')
             ->assertSeeHtml('aria-label="Hapus baris"');
 
@@ -235,7 +239,7 @@ class UmpWorkflowTest extends TestCase
             ->test(UmpDetail::class, ['id' => $this->ump->id])
             ->call('ajukanUMP')
             ->assertHasNoErrors()
-            ->assertSee('UMP berhasil diajukan');
+            ->assertSee('Laporan berhasil diajukan');
 
         $this->assertSame('ttd_pj', $this->ump->fresh()->status);
 
@@ -289,5 +293,91 @@ class UmpWorkflowTest extends TestCase
             ->set('itemsByPenerima.pj.0.jumlah', 500000)
             ->call('simpanDraft')
             ->assertHasNoErrors();
+    }
+
+    public function test_ui_row_immediate_upload_crud_and_lock_flow(): void
+    {
+        Storage::fake('local');
+        $tgl = now()->toDateString();
+
+        // 1. Tambah baris langsung membuka upload bukti & tombol Simpan baris
+        $component = Livewire::actingAs($this->pjUser)
+            ->test(UmpDetail::class, ['id' => $this->ump->id])
+            ->call('tambahBaris', 'pj')
+            ->assertDontSee('Simpan draft dulu untuk mengunggah bukti.')
+            ->assertSeeHtml('aria-label="Upload bukti transaksi baris 1"')
+            ->assertSeeHtml('aria-label="Simpan baris"')
+            ->set('itemsByPenerima.pj.0.tgl', $tgl)
+            ->set('itemsByPenerima.pj.0.rincian', 'Pembelian perlengkapan')
+            ->set('itemsByPenerima.pj.0.no_bukti', 'NT-001')
+            ->set('itemsByPenerima.pj.0.jumlah', 750000)
+            ->set('pendingRowFiles.pj.0', UploadedFile::fake()->image('struk-1.png', 200, 200))
+            ->call('simpanBaris', 'pj', 0)
+            ->assertHasNoErrors()
+            ->assertSet('itemsByPenerima.pj.0.is_editing', false)
+            ->assertSee('struk-1.png')
+            ->assertSeeHtml('aria-label="Edit baris"')
+            ->assertDontSeeHtml('aria-label="Simpan baris"')
+            ->assertDontSeeHtml('aria-label="Upload bukti transaksi baris 1"');
+
+        $item = UmpItem::where('ump_id', $this->ump->id)->firstOrFail();
+        $firstLampiran = Lampiran::where('attachable_type', UmpItem::class)
+            ->where('attachable_id', $item->id)
+            ->firstOrFail();
+
+        $this->assertSame('bukti_tf', $firstLampiran->jenis);
+        Storage::disk('local')->assertExists($firstLampiran->path);
+        $this->assertSame(750000, (int) $this->ump->fresh()->total_penggunaan);
+
+        // 2. Klik Edit membuka kembali input & batalEditBaris membatalkan perubahan
+        $component
+            ->call('editBaris', 'pj', 0)
+            ->assertSet('itemsByPenerima.pj.0.is_editing', true)
+            ->assertSeeHtml('aria-label="Simpan baris"')
+            ->assertSeeHtml('aria-label="Batal edit baris"')
+            ->assertSeeHtml('aria-label="Hapus bukti"')
+            ->assertSeeHtml('aria-label="Upload bukti transaksi baris 1"')
+            ->set('itemsByPenerima.pj.0.rincian', 'Diubah sementara')
+            ->set('itemsByPenerima.pj.0.jumlah', 999000)
+            ->call('batalEditBaris', 'pj', 0)
+            ->assertSet('itemsByPenerima.pj.0.is_editing', false)
+            ->assertSet('itemsByPenerima.pj.0.rincian', 'Pembelian perlengkapan')
+            ->assertSet('itemsByPenerima.pj.0.jumlah', 750000);
+
+        $this->assertSame('Pembelian perlengkapan', $item->fresh()->rincian);
+        $this->assertSame(750000, (int) $item->fresh()->jumlah);
+
+        // 3. Edit: hapus bukti lama, unggah bukti baru, perbarui nominal, lalu simpan & kunci kembali
+        $component
+            ->call('editBaris', 'pj', 0)
+            ->call('hapusLampiranItem', $firstLampiran->id)
+            ->assertDontSee('struk-1.png')
+            ->set('itemsByPenerima.pj.0.rincian', 'Sewa kendaraan revisi')
+            ->set('itemsByPenerima.pj.0.jumlah', 850000)
+            ->set('pendingRowFiles.pj.0', UploadedFile::fake()->create('struk-2.pdf', 120, 'application/pdf'))
+            ->call('simpanBaris', 'pj', 0)
+            ->assertHasNoErrors()
+            ->assertSet('itemsByPenerima.pj.0.is_editing', false)
+            ->assertSee('struk-2.pdf')
+            ->assertSeeHtml('aria-label="Edit baris"');
+
+        $this->assertDatabaseMissing('lampiran', ['id' => $firstLampiran->id]);
+        Storage::disk('local')->assertMissing($firstLampiran->path);
+
+        $secondLampiran = Lampiran::where('attachable_type', UmpItem::class)
+            ->where('attachable_id', $item->id)
+            ->firstOrFail();
+        Storage::disk('local')->assertExists($secondLampiran->path);
+        $this->assertSame(850000, (int) $this->ump->fresh()->total_penggunaan);
+
+        // 4. Hapus baris menghapus UmpItem & Lampiran serta menghitung ulang total UMP
+        $component
+            ->call('hapusBaris', 'pj', 0)
+            ->assertCount('itemsByPenerima.pj', 0);
+
+        $this->assertDatabaseMissing('ump_items', ['id' => $item->id]);
+        $this->assertDatabaseMissing('lampiran', ['id' => $secondLampiran->id]);
+        Storage::disk('local')->assertMissing($secondLampiran->path);
+        $this->assertSame(0, (int) $this->ump->fresh()->total_penggunaan);
     }
 }

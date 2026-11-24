@@ -62,8 +62,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                 </div>
-                <h2 class="text-xs font-bold text-slate-900">Rekap PPD & UMP</h2>
-                <p class="text-[11px] text-slate-500 mt-1">Pencairan kas, pertanggungjawaban UMP, saldo, dan tenggat.</p>
+                <h2 class="text-xs font-bold text-slate-900">Rekap PPD &amp; Laporan</h2>
+                <p class="text-[11px] text-slate-500 mt-1">Pencairan kas, laporan penggunaan dana, saldo, dan tenggat.</p>
             </div>
             <button
                 type="button"
@@ -71,7 +71,7 @@
                 class="mt-3.5 inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-[#0F2F57] text-white text-xs font-semibold hover:bg-slate-800 transition-colors"
             >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                Unduh Rekap PPD & UMP (.xlsx)
+                Unduh Rekap PPD &amp; Laporan (.xlsx)
             </button>
         </div>
 

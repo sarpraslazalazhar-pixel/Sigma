@@ -373,8 +373,8 @@
 
                 {{-- Info Alur Pemeriksaan & Persetujuan Dana --}}
                 <div class="md:col-span-2 lg:col-span-3">
-                    <div class="p-3.5 rounded-xl border border-blue-100 bg-blue-50/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div class="flex items-start gap-2.5">
+                    @if ($approvalChainPreview === null)
+                        <div class="p-3.5 rounded-xl border border-blue-100 bg-blue-50/50 flex items-start gap-2.5">
                             <div class="p-1.5 rounded-lg bg-blue-100/70 text-[#1E60D5] mt-0.5 shrink-0">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -382,22 +382,67 @@
                             </div>
                             <div>
                                 <p class="text-xs font-semibold text-slate-800">
-                                    Alur Pemeriksaan &amp; Persetujuan Permohonan Dana
+                                    Alur Persetujuan Permohonan Dana
                                 </p>
                                 <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                                    <strong>Tahap 1 (Pembuat/Pengaju)</strong>: Supervisor (&le; Rp 2 Jt), Manager (&le; Rp 10 Jt), atau Kadiv.<br>
-                                    <strong>Tahap 2 (Pemeriksa)</strong>: <span class="text-[#1E60D5] font-semibold">Kepala Divisi (Kadiv)</span> &bull;
-                                    <strong>Tahap 3 (Penyetuju)</strong>: <span class="text-emerald-700 font-semibold">Bagian Keuangan</span>
+                                    Pilih <strong>Pejabat Pemohon</strong> di atas untuk melihat alur pemeriksaan dan persetujuan yang berlaku sesuai jabatan pemohon.
                                 </p>
                             </div>
                         </div>
-                        <div class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200/80 shadow-xs">
-                            <span class="text-[11px] text-slate-500">Pemeriksa Dokumen:</span>
-                            <span class="text-xs font-bold text-[#1E60D5]">
-                                Kepala Divisi (Kadiv)
-                            </span>
+                    @elseif (! empty($approvalChainPreview['missing_approvers']))
+                        <div class="p-3.5 rounded-xl border border-red-200 bg-red-50/80 flex items-start gap-2.5 text-red-900">
+                            <svg class="w-4 h-4 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div class="space-y-1">
+                                <p class="text-xs font-bold">
+                                    Alur Persetujuan Belum Lengkap — Pengajuan Diblokir
+                                </p>
+                                @foreach ($approvalChainPreview['missing_approvers'] as $missingMsg)
+                                    <p class="text-[11px] text-red-800">{{ $missingMsg }}</p>
+                                @endforeach
+                            </div>
                         </div>
-                    </div>
+                    @else
+                        <div class="p-3.5 rounded-xl border border-blue-100 bg-blue-50/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div class="flex items-start gap-2.5">
+                                <div class="p-1.5 rounded-lg bg-blue-100/70 text-[#1E60D5] mt-0.5 shrink-0">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-800">
+                                        Alur Pemeriksaan &amp; Persetujuan Berlaku
+                                    </p>
+                                    @if ($approvalChainPreview['auto_approve'])
+                                        <p class="text-[11px] text-emerald-700 font-medium mt-0.5">
+                                            Pemohon (Kepala Divisi Keuangan) &rarr; <span class="font-bold">Disetujui Otomatis</span> (Langsung Mengikat Anggaran)
+                                        </p>
+                                    @else
+                                        <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                            <strong>Pemohon</strong> ({{ $this->atasNamaUser?->name }})
+                                            @if ($approvalChainPreview['step1'])
+                                                &rarr; <span class="text-[#1E60D5] font-semibold">{{ $approvalChainPreview['step1']['label'] }}</span>
+                                                ({{ $approvalChainPreview['step1']['approver']?->name }})
+                                            @endif
+                                            @if ($approvalChainPreview['step2'])
+                                                &rarr; <span class="text-emerald-700 font-semibold">{{ $approvalChainPreview['step2']['label'] }}</span>
+                                                ({{ $approvalChainPreview['step2']['approver']?->name }})
+                                            @endif
+                                            &rarr; <span class="font-semibold text-slate-800">Disetujui</span>
+                                        </p>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200/80 shadow-xs">
+                                <span class="text-[11px] text-slate-500">Penyetuju Akhir:</span>
+                                <span class="text-xs font-bold text-[#1E60D5]">
+                                    {{ $approvalChainPreview['auto_approve'] ? 'Otomatis' : ($approvalChainPreview['step2']['label'] ?? '-') }}
+                                </span>
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </div>
 
@@ -617,7 +662,17 @@
                             <span>Tingkat {{ $requiredApprover?->nama ?? 'Supervisor' }} (Leveling {{ $requiredApprover?->urutan ?? 1 }})</span>
                         </span>
                         <p class="text-[11px] text-slate-400 mt-0.5">
-                            Tahap 1 (Pemohon): Supervisor, Manajer, atau Kadiv (dapat diinput oleh TU) &bull; Tahap 2 (Pemeriksa): Kepala Divisi Sekretariat &bull; Tahap 3 (Penyetuju): Bagian Keuangan
+                            @if ($approvalChainPreview && $approvalChainPreview['auto_approve'])
+                                Diajukan oleh Kepala Divisi Keuangan &rarr; langsung berstatus Disetujui (Mengikat Anggaran).
+                            @elseif ($approvalChainPreview)
+                                Alur otomatis mengikuti jabatan pemohon:
+                                @if ($approvalChainPreview['step1'])
+                                    {{ $approvalChainPreview['step1']['label'] }} &rarr;
+                                @endif
+                                {{ $approvalChainPreview['step2']['label'] ?? 'Penyetuju Akhir' }}.
+                            @else
+                                Pilih Pejabat Pemohon untuk menentukan jenjang persetujuan.
+                            @endif
                         </p>
                     </div>
 
@@ -671,6 +726,9 @@
         </div>
         @error('pemohon_limit')
             <p class="text-xs text-red-600 text-right mt-1">{{ $message }}</p>
+        @enderror
+        @error('approval_chain')
+            <p class="text-xs text-red-600 text-right mt-1 font-medium">{{ $message }}</p>
         @enderror
     </div>
 </div>

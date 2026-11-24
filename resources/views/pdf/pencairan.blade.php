@@ -318,7 +318,7 @@
                 </div>
             </td>
             <td class="sig-box">
-                <div class="sig-header">PENANGGUNG JAWAB (PJ / MANAGER)</div>
+                <div class="sig-header">{{ ($pencairan->ump?->pj?->isKadiv() ?? false) ? 'PENANGGUNG JAWAB (PJ / KEPALA DIVISI)' : 'PENANGGUNG JAWAB (PJ / MANAGER)' }}</div>
                 <div class="sig-name">
                     {{ $pencairan->ump?->pj?->name ?? ($permohonan->user?->name ?? '................................................') }}
                 </div>

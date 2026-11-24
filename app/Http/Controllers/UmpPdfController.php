@@ -28,7 +28,7 @@ class UmpPdfController extends Controller
         ])->setPaper('a4', 'portrait');
 
         $cleanNo = str_replace(['/', '\\'], '-', $ump->pencairan?->no_ppd ?? '') ?: (string) $ump->id;
-        $filename = "UMP-{$cleanNo}.pdf";
+        $filename = "Laporan-{$cleanNo}.pdf";
 
         return $pdf->stream($filename);
     }

@@ -19,12 +19,12 @@ class PengaturanIndex extends Component
         ['key' => 'ambang.over', 'label' => 'Ambang Over Budget (%)', 'type' => 'number', 'default' => 100, 'group' => 'Anggaran', 'hint' => 'Persentase pemakaian efektif yang memicu status Over Budget.'],
         ['key' => 'kode.max_depth', 'label' => 'Kedalaman Maksimum Kode Anggaran', 'type' => 'number', 'default' => 4, 'group' => 'Anggaran', 'hint' => 'Jumlah level kedalaman pohon kode anggaran.'],
         // Pembulatan
-        ['key' => 'pembulatan.kelipatan', 'label' => 'Kelipatan Pembulatan (Rp)', 'type' => 'number', 'default' => 1000, 'group' => 'Pembulatan', 'hint' => 'Nominal kelipatan pembulatan saldo UMP.'],
+        ['key' => 'pembulatan.kelipatan', 'label' => 'Kelipatan Pembulatan (Rp)', 'type' => 'number', 'default' => 1000, 'group' => 'Pembulatan', 'hint' => 'Nominal kelipatan pembulatan saldo Laporan.'],
         ['key' => 'pembulatan.arah', 'label' => 'Arah Pembulatan', 'type' => 'select', 'options' => ['terdekat', 'atas', 'bawah'], 'default' => 'terdekat', 'group' => 'Pembulatan', 'hint' => 'Arah pembulatan: terdekat, selalu ke atas, atau selalu ke bawah.'],
-        // UMP & Tenggat
-        ['key' => 'ump.tenggat_hari', 'label' => 'Jatuh Tempo UMP (Hari)', 'type' => 'number', 'default' => 14, 'group' => 'UMP & Reminder', 'hint' => 'Jumlah hari dari tanggal cair hingga jatuh tempo UMP. Kosong = nonaktif.', 'nullable' => true],
-        ['key' => 'ump.pengingat_hari', 'label' => 'Pengingat UMP Sebelum Jatuh Tempo (Hari)', 'type' => 'number', 'default' => 3, 'group' => 'UMP & Reminder', 'hint' => 'Kirim notifikasi pengingat H-X sebelum jatuh tempo UMP.'],
-        ['key' => 'permohonan.pengingat_hari', 'label' => 'Pengingat Permohonan Tertunda (Hari)', 'type' => 'number', 'default' => 3, 'group' => 'UMP & Reminder', 'hint' => 'Kirim notifikasi jika permohonan menunggu tindakan lebih dari X hari.'],
+        // Laporan & Tenggat
+        ['key' => 'ump.tenggat_hari', 'label' => 'Jatuh Tempo Laporan (Hari)', 'type' => 'number', 'default' => 14, 'group' => 'Laporan & Reminder', 'hint' => 'Jumlah hari dari tanggal cair hingga jatuh tempo Laporan. Kosong = nonaktif.', 'nullable' => true],
+        ['key' => 'ump.pengingat_hari', 'label' => 'Pengingat Laporan Sebelum Jatuh Tempo (Hari)', 'type' => 'number', 'default' => 3, 'group' => 'Laporan & Reminder', 'hint' => 'Kirim notifikasi pengingat H-X sebelum jatuh tempo Laporan.'],
+        ['key' => 'permohonan.pengingat_hari', 'label' => 'Pengingat Permohonan Tertunda (Hari)', 'type' => 'number', 'default' => 3, 'group' => 'Laporan & Reminder', 'hint' => 'Kirim notifikasi jika permohonan menunggu tindakan lebih dari X hari.'],
         // Lampiran
         ['key' => 'lampiran.max_kb', 'label' => 'Ukuran Maks Lampiran (KB)', 'type' => 'number', 'default' => 5120, 'group' => 'Lampiran', 'hint' => 'Ukuran maksimum per berkas lampiran dalam kilobyte (5120 = 5 MB).'],
         // Keuangan
@@ -63,8 +63,8 @@ class PengaturanIndex extends Component
             'values.kode.max_depth' => 'Kedalaman Maksimum Kode Anggaran',
             'values.pembulatan.kelipatan' => 'Kelipatan Pembulatan',
             'values.pembulatan.arah' => 'Arah Pembulatan',
-            'values.ump.tenggat_hari' => 'Jatuh Tempo UMP',
-            'values.ump.pengingat_hari' => 'Pengingat UMP Sebelum Jatuh Tempo',
+            'values.ump.tenggat_hari' => 'Jatuh Tempo Laporan',
+            'values.ump.pengingat_hari' => 'Pengingat Laporan Sebelum Jatuh Tempo',
             'values.permohonan.pengingat_hari' => 'Pengingat Permohonan Tertunda',
             'values.lampiran.max_kb' => 'Ukuran Maks Lampiran',
             'values.keuangan.mode' => 'Mode Keuangan',

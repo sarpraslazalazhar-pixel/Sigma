@@ -5,6 +5,8 @@ namespace App\Livewire\Master;
 use App\Models\SumberDana;
 use App\Models\Unit;
 use App\Services\AuditLogger;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -26,6 +28,8 @@ class UnitDivisiIndex extends Component
 
     public string $form_tipe = 'divisi';
 
+    public int $form_urutan = 0;
+
     public ?int $form_sumber_dana_default_id = null;
 
     public function openCreateModal(?int $parentId = null): void
@@ -36,6 +40,7 @@ class UnitDivisiIndex extends Component
         $this->form_kode = '';
         $this->form_nama = '';
         $this->form_tipe = $parentId ? 'unit' : 'divisi';
+        $this->form_urutan = $this->nextUrutanFor($parentId);
         $this->form_sumber_dana_default_id = null;
         $this->showModal = true;
     }
@@ -49,8 +54,26 @@ class UnitDivisiIndex extends Component
         $this->form_kode = $unit->kode;
         $this->form_nama = $unit->nama;
         $this->form_tipe = $unit->tipe;
+        $this->form_urutan = (int) ($unit->urutan ?? 0);
         $this->form_sumber_dana_default_id = $unit->sumber_dana_default_id;
         $this->showModal = true;
+    }
+
+    public function updatedFormTipe(string $value): void
+    {
+        if ($value === 'divisi') {
+            $this->form_parent_id = null;
+            if (! $this->editingId) {
+                $this->form_urutan = $this->nextUrutanFor(null);
+            }
+        }
+    }
+
+    public function updatedFormParentId(?int $value): void
+    {
+        if (! $this->editingId) {
+            $this->form_urutan = $this->nextUrutanFor($value ?: null);
+        }
     }
 
     public function save(): void
@@ -64,16 +87,20 @@ class UnitDivisiIndex extends Component
             ],
             'form_nama' => ['required', 'string', 'max:255'],
             'form_tipe' => ['required', 'in:unit,divisi'],
+            'form_urutan' => ['required', 'integer', 'min:0', 'max:9999'],
             'form_parent_id' => ['nullable', 'exists:units,id'],
             'form_sumber_dana_default_id' => ['nullable', 'exists:sumber_dana,id'],
         ]);
+
+        $parentId = $this->form_tipe === 'divisi' ? null : ($this->form_parent_id ?: null);
 
         $data = [
             'kode' => strtoupper(trim($this->form_kode)),
             'nama' => trim($this->form_nama),
             'tipe' => $this->form_tipe,
-            'parent_id' => $this->form_parent_id,
-            'sumber_dana_default_id' => $this->form_sumber_dana_default_id,
+            'urutan' => $this->form_urutan,
+            'parent_id' => $parentId,
+            'sumber_dana_default_id' => $this->form_sumber_dana_default_id ?: null,
             'is_active' => true,
         ];
 
@@ -94,6 +121,16 @@ class UnitDivisiIndex extends Component
         $this->showModal = false;
     }
 
+    public function moveUp(int $id): void
+    {
+        $this->reorderSibling($id, -1);
+    }
+
+    public function moveDown(int $id): void
+    {
+        $this->reorderSibling($id, 1);
+    }
+
     public function toggleActive(int $id): void
     {
         $unit = Unit::findOrFail($id);
@@ -106,23 +143,79 @@ class UnitDivisiIndex extends Component
         session()->flash('success', "Unit/Divisi {$unit->kode} berhasil {$statusStr}.");
     }
 
-    public function render()
+    private function nextUrutanFor(?int $parentId): int
     {
-        $units = Unit::with(['parent', 'children', 'sumberDanaDefault', 'users'])
-            ->whereNull('parent_id')
-            ->orderBy('kode')
-            ->get();
+        $max = (int) Unit::query()
+            ->when($parentId === null, fn ($q) => $q->whereNull('parent_id'), fn ($q) => $q->where('parent_id', $parentId))
+            ->max('urutan');
 
-        $allUnits = Unit::with(['parent', 'sumberDanaDefault', 'users'])
-            ->orderBy('parent_id')
-            ->orderBy('kode')
-            ->get();
+        return $max + 1;
+    }
 
-        $sumberDanaList = SumberDana::where('is_active', true)->get();
-        $parentChoices = Unit::whereNull('parent_id')->get();
+    private function reorderSibling(int $id, int $delta): void
+    {
+        $unit = Unit::findOrFail($id);
+
+        $siblings = Unit::sortHierarchically(
+            Unit::query()
+                ->when($unit->parent_id === null, fn ($q) => $q->whereNull('parent_id'), fn ($q) => $q->where('parent_id', $unit->parent_id))
+                ->get()
+        )->values();
+
+        $currentIndex = $siblings->search(fn (Unit $item) => $item->id === $unit->id);
+        if ($currentIndex === false) {
+            return;
+        }
+
+        $targetIndex = $currentIndex + $delta;
+        if ($targetIndex < 0 || $targetIndex >= $siblings->count()) {
+            return;
+        }
+
+        $ordered = $siblings->all();
+        [$ordered[$currentIndex], $ordered[$targetIndex]] = [$ordered[$targetIndex], $ordered[$currentIndex]];
+
+        DB::transaction(function () use ($ordered): void {
+            foreach ($ordered as $position => $item) {
+                $newOrder = $position + 1;
+                if ((int) $item->urutan !== $newOrder) {
+                    $item->update(['urutan' => $newOrder]);
+                }
+            }
+        });
+
+        (new AuditLogger)->log(
+            'unit.reordered',
+            $unit,
+            ['urutan' => $currentIndex + 1],
+            ['urutan' => $targetIndex + 1]
+        );
+
+        session()->flash('success', "Urutan {$unit->nama} berhasil diperbarui.");
+    }
+
+    public function render(): View
+    {
+        $rootDivisions = Unit::sortHierarchically(
+            Unit::with([
+                'parent',
+                'sumberDanaDefault',
+                'users.leveling',
+                'children' => fn ($q) => $q->with(['sumberDanaDefault', 'users.leveling']),
+            ])
+                ->whereNull('parent_id')
+                ->get()
+        );
+
+        $allUnits = Unit::sortHierarchically(
+            Unit::with(['parent', 'sumberDanaDefault', 'users.leveling'])->get()
+        );
+
+        $sumberDanaList = SumberDana::where('is_active', true)->orderBy('id')->get();
+        $parentChoices = Unit::sortHierarchically(Unit::whereNull('parent_id')->get());
 
         return view('livewire.master.unit-divisi-index', [
-            'units' => $units,
+            'units' => $rootDivisions,
             'allUnits' => $allUnits,
             'sumberDanaList' => $sumberDanaList,
             'parentChoices' => $parentChoices,

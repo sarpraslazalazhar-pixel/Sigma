@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Components\NotificationBell;
 use App\Mail\ReminderNotificationMail;
 use App\Models\KodeAnggaran;
+use App\Models\Leveling;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
 use App\Models\Setting;
@@ -87,15 +88,17 @@ class NotificationTest extends TestCase
         ]);
     }
 
-    private function createPermohonanDraft(int $nominal = 5000000): Permohonan
+    private function createPermohonanDraft(int $nominal = 5000000, ?User $submitter = null): Permohonan
     {
+        $pemohon = $submitter ?? ($nominal > 2000000 ? $this->managerUser : $this->staffUser);
+
         $permohonan = Permohonan::create([
             'no_pengajuan' => '',
             'kode_anggaran_id' => $this->leafNode->id,
             'program' => 'Program Sosial',
             'unit_id' => $this->unitKlm->id,
-            'user_id' => $this->staffUser->id,
-            'atasan_id' => $this->managerUser->id,
+            'user_id' => $pemohon->id,
+            'atasan_id' => null,
             'sumber_dana_id' => $this->sumberDana->id,
             'nama_kegiatan' => 'Kegiatan Notif Test',
             'latar_belakang' => 'Testing Notifikasi In-App',
@@ -172,7 +175,7 @@ class NotificationTest extends TestCase
 
         // Pengaju dapat notif putusan
         $this->assertDatabaseHas('notifications', [
-            'notifiable_id' => $this->staffUser->id,
+            'notifiable_id' => $this->managerUser->id,
             'type' => 'dokumen_diputuskan',
         ]);
 
@@ -200,7 +203,7 @@ class NotificationTest extends TestCase
         ]);
 
         $this->assertDatabaseHas('notifications', [
-            'notifiable_id' => $this->staffUser->id,
+            'notifiable_id' => $this->managerUser->id,
             'type' => 'dokumen_diputuskan',
             'dedup_key' => "putusan_permohonan_{$permohonan->id}_dicairkan_{$pencairan->id}",
         ]);
@@ -213,8 +216,8 @@ class NotificationTest extends TestCase
         $permohonan = $this->createPermohonanDraft(2000000);
         $workflow = new PermohonanWorkflow;
         $workflow->submit($permohonan);
+        $workflow->approve($permohonan, $this->managerUser);
         $workflow->approve($permohonan, $this->kadivUser);
-        $workflow->approve($permohonan, $this->financeUser);
         $pencairan = $workflow->cairkan($permohonan, $this->financeUser, [
             'no_ppd' => 'PPD-2026-777',
             'tgl_cair' => now()->toDateString(),
@@ -263,8 +266,8 @@ class NotificationTest extends TestCase
         $permohonan = $this->createPermohonanDraft(1000000);
         $workflow = new PermohonanWorkflow;
         $workflow->submit($permohonan);
+        $workflow->approve($permohonan, $this->managerUser);
         $workflow->approve($permohonan, $this->kadivUser);
-        $workflow->approve($permohonan, $this->financeUser);
         $pencairan = $workflow->cairkan($permohonan, $this->financeUser, [
             'no_ppd' => 'PPD-2026-888',
             'tgl_cair' => now()->toDateString(),
@@ -290,7 +293,7 @@ class NotificationTest extends TestCase
 
         $permohonan = $this->createPermohonanDraft(1500000);
         $workflow = new PermohonanWorkflow;
-        $workflow->submit($permohonan);
+        $permohonan = $workflow->submit($permohonan);
 
         // Manipulasi updated_at jadi 4 hari lalu
         $permohonan->timestamps = false;
@@ -321,7 +324,7 @@ class NotificationTest extends TestCase
 
         $permohonan = $this->createPermohonanDraft(1500000);
         $workflow = new PermohonanWorkflow;
-        $workflow->submit($permohonan);
+        $permohonan = $workflow->submit($permohonan);
 
         $permohonan->timestamps = false;
         $permohonan->updated_at = Carbon::today()->subDays(5);
@@ -426,5 +429,49 @@ class NotificationTest extends TestCase
         );
 
         Mail::assertSent(ReminderNotificationMail::class, 1);
+    }
+
+    public function test_permohonan_remind_notifies_all_active_kadiv_keuangan_users_on_diketahui_kadiv(): void
+    {
+        $kadivLevel = Leveling::where('urutan', 3)->firstOrFail();
+        $secondKadivKeu = User::create([
+            'name' => 'Kadiv Keuangan Kedua',
+            'username' => 'kadiv.keu.kedua',
+            'email' => 'kadiv.keu.kedua@alazharpeduli.or.id',
+            'password' => 'password',
+            'role' => 'keuangan',
+            'leveling_id' => $kadivLevel->id,
+            'unit_id' => $this->financeUser->unit_id,
+            'is_active' => true,
+        ]);
+
+        $pmh = Permohonan::create([
+            'no_pengajuan' => 'REM-KEU-001',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->kadivUser->id,
+            'pengusul_id' => $this->kadivUser->id,
+            'leveling_required_id' => $kadivLevel->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Divisi',
+            'nama_kegiatan' => 'Tertunda Kadiv Keuangan',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'diketahui_kadiv',
+            'total_diminta' => 15000000,
+        ]);
+
+        Permohonan::where('id', $pmh->id)->update(['updated_at' => now()->subDays(5)]);
+
+        $this->artisan('permohonan:remind')->assertExitCode(0);
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $this->financeUser->id,
+            'type' => 'permohonan_tertunda',
+        ]);
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $secondKadivKeu->id,
+            'type' => 'permohonan_tertunda',
+        ]);
     }
 }

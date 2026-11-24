@@ -216,9 +216,16 @@
 <body>
 
     @php
-        $approvalsByTahap = $permohonan->approvals->keyBy('tahap');
-        $signerAtasan = $approvalsByTahap->get('kadiv') ?: $approvalsByTahap->get('atasan');
-        $signerKeuangan = $approvalsByTahap->get('keuangan');
+        $workflowInstance = new \App\Services\PermohonanWorkflow;
+        $latestSiklus = $workflowInstance->getCurrentCycle($permohonan);
+        $approvalsByTahap = $permohonan->approvals->where('siklus', $latestSiklus)->keyBy('tahap');
+        $signerStep1 = $approvalsByTahap->get('kadiv') ?: $approvalsByTahap->get('atasan');
+        $signerStep2 = $approvalsByTahap->get('keuangan');
+
+        $chain = $approvalChain ?? $workflowInstance->resolveApprovalChainForPermohonan($permohonan);
+        $skipStep1 = empty($chain['step1']);
+        $step1Label = $chain['step1']['label'] ?? ($chain['mode'] === 'kadiv' ? 'Kepala Divisi (Pemohon)' : 'Pemeriksaan Tahap 1');
+        $step2Label = $chain['step2']['label'] ?? ($chain['auto_approve'] ? 'Kepala Divisi Keuangan (Otomatis)' : 'Penyetuju Akhir');
     @endphp
 
     {{-- HEADER KOP SURAT --}}
@@ -363,31 +370,42 @@
     {{-- KOTAK TANDA TANGAN (3 KOLOM: Diperiksa Oleh, Disetujui Oleh, Dibuat Oleh) --}}
     <table class="signature-table">
         <tr>
-            {{-- Kiri: Diperiksa Oleh --}}
+            {{-- Kiri: Diperiksa Oleh (Tahap 1 / Pemeriksa) --}}
             <td class="sig-box">
-                <div class="sig-header">DIPERIKSA OLEH (KEPALA DIVISI SEKRETARIAT)</div>
-                <div class="sig-name">
-                    {{ $signerAtasan ? $signerAtasan->signer_name : '................................................' }}
-                </div>
-                <div class="sig-role">
-                    {{ $signerAtasan ? $signerAtasan->signer_jabatan : 'Kepala Divisi Sekretariat' }}
-                </div>
-                <div class="sig-date">
-                    Tgl: {{ $signerAtasan && $signerAtasan->signed_at ? \Carbon\Carbon::parse($signerAtasan->signed_at)->format('d/m/Y') : '......................' }}
-                </div>
+                @if (! $signerStep1 && $skipStep1)
+                    <div class="sig-header">PEMERIKSAAN TAHAP 1 (DILEWATI)</div>
+                    <div class="sig-name">Tidak Diperlukan</div>
+                    <div class="sig-role">
+                        {{ $chain['mode'] === 'kadiv_keuangan' ? 'Pengajuan Kepala Divisi Keuangan' : 'Langsung ke Kepala Divisi Keuangan' }}
+                    </div>
+                    <div class="sig-date">
+                        Tgl: -
+                    </div>
+                @else
+                    <div class="sig-header">DIPERIKSA OLEH ({{ strtoupper($step1Label) }})</div>
+                    <div class="sig-name">
+                        {{ $signerStep1 ? $signerStep1->signer_name : '................................................' }}
+                    </div>
+                    <div class="sig-role">
+                        {{ $signerStep1 ? $signerStep1->signer_jabatan : $step1Label }}
+                    </div>
+                    <div class="sig-date">
+                        Tgl: {{ $signerStep1 && $signerStep1->signed_at ? \Carbon\Carbon::parse($signerStep1->signed_at)->format('d/m/Y') : '......................' }}
+                    </div>
+                @endif
             </td>
 
-            {{-- Tengah: Disetujui Oleh --}}
+            {{-- Tengah: Disetujui Oleh (Tahap Akhir) --}}
             <td class="sig-box" style="margin-left: 10px; margin-right: 10px;">
-                <div class="sig-header">DISETUJUI OLEH (BAGIAN KEUANGAN)</div>
+                <div class="sig-header">DISETUJUI OLEH ({{ strtoupper($step2Label) }})</div>
                 <div class="sig-name">
-                    {{ $signerKeuangan ? $signerKeuangan->signer_name : '................................................' }}
+                    {{ $signerStep2 ? $signerStep2->signer_name : '................................................' }}
                 </div>
                 <div class="sig-role">
-                    {{ $signerKeuangan ? $signerKeuangan->signer_jabatan : 'Manajer Anggaran & Treasury / Keuangan' }}
+                    {{ $signerStep2 ? $signerStep2->signer_jabatan : $step2Label }}
                 </div>
                 <div class="sig-date">
-                    Tgl: {{ $signerKeuangan && $signerKeuangan->signed_at ? \Carbon\Carbon::parse($signerKeuangan->signed_at)->format('d/m/Y') : '......................' }}
+                    Tgl: {{ $signerStep2 && $signerStep2->signed_at ? \Carbon\Carbon::parse($signerStep2->signed_at)->format('d/m/Y') : '......................' }}
                 </div>
             </td>
 
