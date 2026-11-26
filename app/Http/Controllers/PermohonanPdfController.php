@@ -15,7 +15,6 @@ class PermohonanPdfController extends Controller
         $permohonan = Permohonan::with([
             'unit.parent',
             'user.leveling',
-            'pengusul',
             'atasan',
             'kodeAnggaran',
             'sumberDana',

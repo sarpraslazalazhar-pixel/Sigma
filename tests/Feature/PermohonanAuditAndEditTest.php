@@ -13,6 +13,7 @@ use App\Models\SumberDana;
 use App\Models\TahunAnggaran;
 use App\Models\Unit;
 use App\Models\User;
+use App\Services\PermohonanWorkflow;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -121,6 +122,15 @@ class PermohonanAuditAndEditTest extends TestCase
             ->test(PermohonanDetail::class, ['id' => $pmh->id])
             ->assertSee('Diusulkan oleh')
             ->assertSee($this->staffUser->name);
+
+        $pdfHtml = view('pdf.permohonan', [
+            'permohonan' => $pmh->fresh(['unit.parent', 'user.leveling', 'pengusul', 'kodeAnggaran', 'sumberDana', 'items.asnaf', 'items.programUtama', 'approvals']),
+            'approvalChain' => (new PermohonanWorkflow)->resolveApprovalChainForPermohonan($pmh),
+            'logoBase64' => null,
+        ])->render();
+
+        $this->assertStringNotContainsString('Diusulkan oleh', $pdfHtml);
+        $this->assertStringContainsString($this->managerUser->name, $pdfHtml);
     }
 
     public function test_change_pemohon_modal_in_detail_updates_user_and_unit(): void

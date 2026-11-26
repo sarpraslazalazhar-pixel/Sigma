@@ -10,6 +10,7 @@ use App\Models\Ump;
 use App\Models\Unit;
 use App\Services\BudgetCalculator;
 use App\Services\PermohonanWorkflow;
+use App\Services\UmpWorkflow;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -235,9 +236,6 @@ class Dashboard extends Component
         }
 
         $antrean = collect();
-        $levelingUrutan = $user->leveling?->urutan ?? 0;
-        $isFinance = $user->role === 'keuangan' || $user->is_petugas_input || $user->role === 'admin';
-        $isAdmin = $user->role === 'admin';
         $workflow = new PermohonanWorkflow;
 
         // Permohonan: gunakan Single Source of Truth dari PermohonanWorkflow
@@ -261,40 +259,23 @@ class Dashboard extends Component
             ]);
         }
 
-        // UMP
-        $umpList = Ump::with(['pj', 'pencairan.permohonan.unit'])
+        // UMP: gunakan Single Source of Truth dari UmpWorkflow
+        $umpWorkflow = new UmpWorkflow;
+        $umpList = Ump::with(['pj.unit', 'pencairan.permohonan.unit', 'pencairan.permohonan.user.unit'])
             ->whereIn('status', ['ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan'])
             ->get()
-            ->filter(function ($u) use ($user, $levelingUrutan, $isFinance, $isAdmin) {
-                if ($isAdmin) {
-                    return true;
-                }
-                if ($u->status === 'ttd_pj') {
-                    if ((bool) $user->is_petugas_input) {
-                        return true;
-                    }
-
-                    $pj = $u->pj ?: $u->pencairan?->permohonan?->user;
-                    if ($pj && $user->id === $pj->id) {
-                        return false;
-                    }
-
-                    $pjDivisiId = $pj?->unit?->getDivisiId() ?? $u->pencairan?->permohonan?->unit?->getDivisiId();
-                    $pjUnitId = $pj?->unit_id ?? $u->pencairan?->permohonan?->unit_id;
-                    $userDivisiId = $user->unit?->getDivisiId();
-                    $sameDivisi = $pjDivisiId !== null && $userDivisiId !== null && $pjDivisiId === $userDivisiId;
-                    $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
-
-                    return ($sameDivisi || $sameUnit) && $levelingUrutan >= 2;
-                }
-                if (in_array($u->status, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
-                    return $isFinance;
-                }
-
-                return false;
-            });
+            ->filter(fn (Ump $u) => $umpWorkflow->canUserApprove($user, $u));
 
         foreach ($umpList as $u) {
+            $statusLabel = match ($u->status) {
+                'ttd_pj' => 'Menunggu Diperiksa',
+                'ttd_manager_keuangan' => $u->verifikasi_keuangan_at === null
+                    ? 'Menunggu Verifikasi Keuangan'
+                    : 'Menunggu TTD Mgr Keuangan',
+                'ttd_kepala_keuangan' => 'Menunggu TTD Kepala Keuangan',
+                default => ucfirst(str_replace('_', ' ', $u->status)),
+            };
+
             $antrean->push([
                 'jenis' => 'ump',
                 'no_dokumen' => $u->pencairan?->no_ppd ?? 'Laporan',
@@ -303,7 +284,7 @@ class Dashboard extends Component
                 'unit' => $u->pencairan?->permohonan?->unit?->nama ?? '',
                 'nominal' => $u->jumlah_total,
                 'status' => $u->status,
-                'status_label' => ucfirst(str_replace('_', ' ', $u->status)),
+                'status_label' => $statusLabel,
                 'url' => route('ump.detail', $u->id),
                 'updated_at' => $u->updated_at,
             ]);

@@ -82,7 +82,6 @@
                 @endforeach
             </div>
         </div>
-        @include('livewire.keuangan.status-verifikasi', ['document' => $ppd, 'type' => 'pencairan'])
     @endif
 
     {{-- Metrics Grid --}}
@@ -157,7 +156,7 @@
                 >
                     <option value="">Semua Status PPD</option>
                     <option value="dicairkan">Dicairkan</option>
-                    <option value="dibatalkan">Dibatalkan</option>
+                    <option value="dibatalkan">Void</option>
                 </select>
             </div>
 
@@ -173,7 +172,7 @@
                     <option value="menunggu_keuangan">Menunggu Keuangan</option>
                     <option value="disetujui_keuangan">Disetujui Keuangan</option>
                     <option value="selesai">Selesai (LPJ Tuntas)</option>
-                    <option value="dibatalkan">Dibatalkan</option>
+                    <option value="dibatalkan">Void</option>
                 </select>
             </div>
 
@@ -252,7 +251,7 @@
                     <div class="flex flex-col items-end gap-1 shrink-0">
                         @if ($isBatal)
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                Dibatalkan
+                                Void
                             </span>
                         @else
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-[#006C4C] border border-emerald-200">
@@ -262,7 +261,7 @@
                         @if ($ump)
                             <a href="{{ route('ump.detail', $ump->id) }}" wire:navigate
                                 class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold {{ $ump->status === 'selesai' ? 'bg-[#DCE5F6] text-[#001B3E]' : 'bg-amber-50 text-amber-800 border border-amber-200' }}">
-                                Laporan: {{ ucfirst(str_replace('_', ' ', $ump->status)) }}
+                                Laporan: {{ $ump->status === 'dibatalkan' ? 'Void' : ucfirst(str_replace('_', ' ', $ump->status)) }}
                             </a>
                         @endif
                     </div>
@@ -337,7 +336,7 @@
                                 wire:click="bukaModalBatal({{ $item->id }})"
                                 class="inline-flex min-h-[44px] items-center rounded-full border border-rose-200 bg-rose-50/70 px-4 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
                             >
-                                Batal
+                                Void
                             </button>
                         @endif
                     </div>
@@ -416,7 +415,7 @@
                             <td class="py-3 px-3.5 text-center whitespace-nowrap">
                                 @if ($isBatal)
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                        Dibatalkan
+                                        Void
                                     </span>
                                 @else
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -431,7 +430,7 @@
                                         wire:navigate
                                         class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold hover:underline {{ $ump->status === 'selesai' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-amber-50 text-amber-700 border border-amber-200' }}"
                                     >
-                                        {{ ucfirst(str_replace('_', ' ', $ump->status)) }}
+                                        {{ $ump->status === 'dibatalkan' ? 'Void' : ucfirst(str_replace('_', ' ', $ump->status)) }}
                                     </a>
                                 @else
                                     <span class="text-slate-400 text-[11px]">-</span>
@@ -492,15 +491,15 @@
                                         PDF
                                     </a>
 
-                                    {{-- Batalkan PPD (Keuangan / Admin) --}}
+                                    {{-- Void PPD (Keuangan / Admin) --}}
                                     @if ($canManage && ! $isBatal && ($ump?->status !== 'selesai'))
                                         <button
                                             type="button"
                                             wire:click="bukaModalBatal({{ $item->id }})"
                                             class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-rose-200 bg-rose-50/50 hover:bg-rose-50 text-rose-700 text-xs font-medium transition-colors"
-                                            title="Batalkan PPD"
+                                            title="Void PPD"
                                         >
-                                            Batal
+                                            Void
                                         </button>
                                     @endif
                                 </div>
@@ -605,7 +604,7 @@
         </div>
     @endif
 
-    {{-- Modal Pembatalan PPD --}}
+    {{-- Modal Void PPD --}}
     @if ($batalModalOpen)
         <div class="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
             <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
@@ -616,21 +615,21 @@
                         </svg>
                     </div>
                     <div>
-                        <h2 class="text-sm font-bold text-slate-900">Batalkan Pencairan PPD</h2>
+                        <h2 class="text-sm font-bold text-slate-900">Void Pencairan PPD</h2>
                         <p class="text-xs text-slate-500">Tindakan ini tidak dapat diurungkan</p>
                     </div>
                 </div>
 
                 <p class="text-xs text-slate-600 leading-relaxed">
-                    Sesuai aturan BR-PCR-2, nomor PPD tidak dapat dihapus, melainkan ditandai Dibatalkan. Permohonan dana terkait akan dikembalikan ke status <strong>Disetujui Keuangan</strong>.
+                    Nomor PPD tidak dapat dihapus, melainkan ditandai Void. Permohonan dana terkait akan dikembalikan ke status <strong>Disetujui Keuangan</strong>.
                 </p>
 
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1">Alasan Pembatalan <span class="text-rose-500">*</span></label>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Alasan Void <span class="text-rose-500">*</span></label>
                     <textarea
                         wire:model="alasanBatal"
                         rows="3"
-                        placeholder="Tuliskan alasan pembatalan pencairan secara rinci..."
+                        placeholder="Tuliskan alasan void pencairan secara rinci..."
                         class="w-full text-xs rounded-xl border border-slate-200 p-2.5 text-slate-800 focus:border-rose-500 focus:outline-hidden"
                     ></textarea>
                     @error('alasanBatal')
@@ -651,7 +650,7 @@
                         wire:click="prosesBatal"
                         class="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs"
                     >
-                        Konfirmasi Pembatalan
+                        Konfirmasi Void
                     </button>
                 </div>
             </div>

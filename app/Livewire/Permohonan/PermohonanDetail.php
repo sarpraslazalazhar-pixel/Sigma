@@ -138,7 +138,7 @@ class PermohonanDetail extends Component
                 'class' => 'bg-red-50 text-red-700 border-red-200',
             ],
             'dibatalkan' => [
-                'label' => 'Dibatalkan',
+                'label' => 'Void',
                 'class' => 'bg-slate-100 text-slate-500 border-slate-200',
             ],
             'dicairkan' => [
@@ -356,7 +356,7 @@ class PermohonanDetail extends Component
     public function openAction(string $type): void
     {
         if ($type === 'batal') {
-            abort_unless($this->canCancel, 403, 'Anda tidak berwenang membatalkan permohonan ini.');
+            abort_unless($this->canCancel, 403, 'Anda tidak berwenang me-void permohonan ini.');
         } else {
             abort_unless($this->canApprove, 403, 'Anda tidak berwenang melakukan tindakan pada tahap ini.');
         }
@@ -380,7 +380,7 @@ class PermohonanDetail extends Component
         $user = Auth::user();
 
         if ($this->actionType === 'batal') {
-            abort_unless($this->canCancel, 403, 'Anda tidak berwenang membatalkan permohonan ini.');
+            abort_unless($this->canCancel, 403, 'Anda tidak berwenang me-void permohonan ini.');
         } elseif ($this->actionType === 'setuju') {
             abort_unless($this->canApprove && $this->permohonan->status === 'diajukan', 403, 'Anda tidak berwenang menyetujui permohonan pada tahap ini.');
         } elseif (in_array($this->actionType, ['perbaikan', 'tolak'], true)) {
@@ -416,7 +416,7 @@ class PermohonanDetail extends Component
                 $msg = 'Permohonan berhasil ditolak.';
             } elseif ($this->actionType === 'batal') {
                 $workflow->cancel($this->permohonan, $user, $this->actionNotes);
-                $msg = 'Permohonan berhasil dibatalkan.';
+                $msg = 'Permohonan berhasil di-void.';
             }
         } catch (RuntimeException $e) {
             $this->addError('actionNotes', $e->getMessage());

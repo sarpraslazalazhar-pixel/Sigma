@@ -2,194 +2,209 @@
 
 namespace App\Services;
 
+use App\Models\Approval;
 use App\Models\AuditLog;
-use App\Models\Pencairan;
-use App\Models\Permohonan;
 use App\Models\Ump;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
-use Throwable;
 
 class VerifikasiKeuangan
 {
-    public const TYPES = ['permohonan', 'pencairan', 'ump'];
-
-    public function documents(string $type): Builder
+    public function documents(): Builder
     {
-        return match ($type) {
-            'permohonan' => Permohonan::query(),
-            'pencairan' => Pencairan::query(),
-            'ump' => Ump::query(),
-            default => abort(404),
-        };
+        return Ump::query();
     }
 
-    public function active(Builder $query, string $type): Builder
+    public function active(?Builder $query = null): Builder
     {
-        return match ($type) {
-            'permohonan' => $query->where(fn ($request) => $request
-                ->whereIn('status', ['disetujui_keuangan', 'dicairkan'])
-                ->orWhere(fn ($waiting) => $waiting->where('status', 'diketahui_kadiv')
-                    ->where(fn ($level) => $level->whereHas('levelingRequired', fn ($snapshot) => $snapshot->where('urutan', '>=', 2))
-                        ->orWhere(fn ($legacy) => $legacy->whereDoesntHave('levelingRequired')
-                            ->whereHas('user.leveling', fn ($submitter) => $submitter->where('urutan', '>=', 2)))))),
-            'pencairan' => $query->where('status', 'dicairkan')
-                ->whereHas('permohonan', fn ($parent) => $parent->whereNotIn('status', ['selesai', 'ditolak', 'dibatalkan']))
-                ->whereDoesntHave('ump', fn ($report) => $report->whereIn('status', ['selesai', 'dibatalkan'])),
-            'ump' => $query->whereIn('status', ['ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan'])
-                ->whereHas('pencairan', fn ($payout) => $payout->where('status', 'dicairkan')),
-            default => abort(404),
-        };
+        return ($query ?? $this->documents())
+            ->whereIn('status', ['ttd_manager_keuangan', 'ttd_kepala_keuangan'])
+            ->whereHas('pencairan', fn (Builder $payout) => $payout->where('status', 'dicairkan'));
     }
 
-    public function isActive(string $type, int $id): bool
+    public function isActive(int|Ump $ump): bool
     {
-        return $this->active($this->documents($type), $type)->whereKey($id)->exists();
+        $id = $ump instanceof Ump ? $ump->id : $ump;
+
+        return $this->active()->whereKey($id)->exists();
     }
 
-    public function pending(string $type): Builder
+    public function pending(?Builder $query = null): Builder
     {
-        return $this->active($this->documents($type), $type)
-            ->whereNull('verifikasi_keuangan_at')->whereNull('verifikasi_keuangan_catatan');
+        return $this->active($query)->whereNull('verifikasi_keuangan_at');
     }
 
-    public function sourceUrl(string $type, int $id): string
+    public function awaitingApproval(?Builder $query = null): Builder
     {
-        return match ($type) {
-            'permohonan' => route('permohonan.detail', $id),
-            'pencairan' => route('pencairan.index', ['ppd' => $id]),
-            'ump' => route('ump.detail', $id),
-            default => abort(404),
-        };
+        return $this->active($query)->whereNotNull('verifikasi_keuangan_at');
     }
 
-    /** @return list<int> */
-    private function responsibleIds(Permohonan|Pencairan|Ump $document): array
+    public function returned(?Builder $query = null): Builder
     {
-        $ids = match (true) {
-            $document instanceof Permohonan => [$document->user_id, $document->pengusul_id],
-            $document instanceof Pencairan => [$document->dicairkan_oleh],
-            $document instanceof Ump => [$document->pj_id, $document->pencairan?->dicairkan_oleh],
-        };
-
-        return array_values(array_filter($ids));
+        return ($query ?? $this->documents())
+            ->where('status', 'perlu_perbaikan')
+            ->whereNull('verifikasi_keuangan_at')
+            ->whereNotNull('verifikasi_keuangan_catatan');
     }
 
-    public function isResponsible(Permohonan|Pencairan|Ump $document, User $user): bool
+    public function sourceUrl(int|Ump $ump): string
     {
-        return $user->is_active && in_array($user->id, $this->responsibleIds($document), true);
+        $id = $ump instanceof Ump ? $ump->id : $ump;
+
+        return route('ump.detail', $id);
     }
 
-    public function mayReview(Permohonan|Pencairan|Ump $document, User $user): bool
+    public function isResponsible(Ump $ump, User $user): bool
     {
-        return $user->is_active && Gate::forUser($user)->allows('verifikasi-keuangan')
-            && ! $this->isResponsible($document, $user)
-            && (! $document instanceof Pencairan || $document->dicairkan_oleh !== null);
+        return $user->is_active
+            && $ump->pj_id !== null
+            && (int) $ump->pj_id === (int) $user->id;
     }
 
-    public function decide(string $type, int $id, User $user, string $decision, ?string $note = null): void
+    public function mayReview(Ump $ump, User $user): bool
     {
-        DB::transaction(function () use ($type, $id, $user, $decision, $note): void {
-            $document = $this->documents($type)->lockForUpdate()->findOrFail($id);
-            abort_unless($this->mayReview($document, $user), 403);
-            $isVerified = $document->verifikasi_keuangan_at !== null;
-            $isReturned = ! $isVerified && $document->verifikasi_keuangan_catatan !== null;
-            if ($isReturned || $isVerified !== ($decision === 'unverified')) {
-                throw ValidationException::withMessages(['catatan' => 'Status verifikasi sudah berubah. Muat ulang antrean dan coba lagi.']);
+        return $user->is_active
+            && Gate::forUser($user)->allows('verifikasi-keuangan')
+            && ! $this->isResponsible($ump, $user);
+    }
+
+    public function decide(int $id, User $user, string $decision, ?string $note = null): void
+    {
+        if (! in_array($decision, ['verified', 'returned', 'unverified'], true)) {
+            throw ValidationException::withMessages(['catatan' => 'Keputusan verifikasi tidak valid.']);
+        }
+
+        DB::transaction(function () use ($id, $user, $decision, $note): void {
+            $ump = Ump::with(['pencairan.permohonan', 'pj'])->lockForUpdate()->findOrFail($id);
+            abort_unless($this->mayReview($ump, $user), 403);
+
+            if (! $this->isActive($ump->id)) {
+                throw ValidationException::withMessages([
+                    'catatan' => 'Laporan tidak berada pada tahap Verifikasi Keuangan.',
+                ]);
             }
-            $this->ensureActive($type, $id, 'catatan');
+
+            $isVerified = $ump->verifikasi_keuangan_at !== null;
+            if ($decision === 'unverified') {
+                if (! $isVerified || $ump->status !== 'ttd_manager_keuangan') {
+                    throw ValidationException::withMessages([
+                        'catatan' => 'Verifikasi hanya dapat dibatalkan sebelum disetujui Manager Keuangan.',
+                    ]);
+                }
+            } elseif ($isVerified) {
+                throw ValidationException::withMessages([
+                    'catatan' => 'Status verifikasi sudah berubah. Muat ulang antrean dan coba lagi.',
+                ]);
+            }
+
             $note = trim($note ?? '');
             Validator::make(['catatan' => $note], [
-                'catatan' => [$decision === 'returned' ? 'required' : 'nullable', 'string', 'max:1000'],
-            ], ['catatan.required' => 'Alasan perbaikan wajib diisi.'])->validate();
+                'catatan' => $decision === 'returned'
+                    ? ['required', 'string', 'min:5', 'max:1000']
+                    : ['nullable', 'string', 'max:1000'],
+            ], [
+                'catatan.required' => 'Alasan perbaikan wajib diisi.',
+                'catatan.min' => 'Alasan perbaikan minimal 5 karakter.',
+                'catatan.max' => 'Catatan maksimal 1000 karakter.',
+            ])->validate();
             $note = $note === '' ? null : $note;
 
-            $audit = $this->record($document, $decision, [
-                'verifikasi_keuangan_at' => $decision === 'verified' ? now() : null,
-                'verifikasi_keuangan_oleh' => $decision === 'unverified' ? null : $user->id,
-                'verifikasi_keuangan_catatan' => $decision === 'unverified' ? null : $note,
-            ]);
+            if ($decision === 'verified') {
+                $audit = $this->record($ump, 'verified', [
+                    'verifikasi_keuangan_at' => now(),
+                    'verifikasi_keuangan_oleh' => $user->id,
+                    'verifikasi_keuangan_catatan' => $note,
+                ]);
+
+                $isKepalaStage = $ump->status === 'ttd_kepala_keuangan';
+                $approvers = User::where('is_active', true)
+                    ->where('role', 'keuangan')
+                    ->whereHas('leveling', fn (Builder $q) => $isKepalaStage ? $q->where('urutan', '>=', 3) : $q->where('urutan', 2))
+                    ->get();
+
+                if ($approvers->isEmpty()) {
+                    $approvers = User::where('is_active', true)
+                        ->where('role', 'keuangan')
+                        ->get();
+                }
+
+                $targetRoleLabel = $isKepalaStage ? 'Kepala Divisi Keuangan' : 'Manager Keuangan';
+                foreach ($approvers as $approver) {
+                    NotificationService::kirim($approver, 'dokumen_menunggu_tindakan', [
+                        'judul' => 'Laporan Lolos Verifikasi Keuangan',
+                        'no_ppd' => $ump->pencairan?->no_ppd,
+                        'jenis' => 'ump',
+                        'entity_id' => $ump->id,
+                        'url' => $this->sourceUrl($ump->id),
+                        'pesan' => "Laporan No. PPD {$ump->pencairan?->no_ppd} telah lolos Verifikasi Keuangan dan menunggu persetujuan {$targetRoleLabel}.",
+                    ], "tunggu_ump_{$ump->id}_{$ump->status}_verified_{$audit->id}");
+                }
+
+                return;
+            }
 
             if ($decision === 'returned') {
-                foreach (User::whereKey($this->responsibleIds($document))->where('is_active', true)->get() as $recipient) {
-                    NotificationService::kirim($recipient, 'dokumen_diputuskan', [
-                        'judul' => 'Kelengkapan Dokumen Perlu Perbaikan',
-                        'pesan' => $note,
-                        'url' => $this->sourceUrl($type, $id),
-                        'jenis' => $type,
-                        'entity_id' => $id,
+                $siklus = max(1, (int) $ump->approvals()->max('siklus'));
+
+                $audit = $this->record($ump, 'returned', [
+                    'status' => 'perlu_perbaikan',
+                    'verifikasi_keuangan_at' => null,
+                    'verifikasi_keuangan_oleh' => $user->id,
+                    'verifikasi_keuangan_catatan' => $note,
+                ]);
+
+                Approval::create([
+                    'approvable_type' => Ump::class,
+                    'approvable_id' => $ump->id,
+                    'siklus' => $siklus,
+                    'tahap' => 'verifikasi_keuangan',
+                    'keputusan' => 'perlu_perbaikan',
+                    'approver_id' => $user->id,
+                    'signer_name' => $user->name,
+                    'signer_jabatan' => $user->jabatan,
+                    'signed_at' => now(),
+                    'recorded_by' => Auth::id() ?? $user->id,
+                    'catatan' => $note,
+                ]);
+
+                if ($ump->pj && $ump->pj->is_active) {
+                    NotificationService::kirim($ump->pj, 'dokumen_diputuskan', [
+                        'judul' => 'Kelengkapan Laporan Perlu Perbaikan',
+                        'no_ppd' => $ump->pencairan?->no_ppd,
+                        'pesan' => "Laporan No. PPD {$ump->pencairan?->no_ppd} dikembalikan Verifikasi Keuangan: {$note}",
+                        'url' => $this->sourceUrl($ump->id),
+                        'jenis' => 'ump',
+                        'entity_id' => $ump->id,
+                        'keputusan' => 'perlu_perbaikan',
                     ], "verifikasi_keuangan_perbaikan_{$audit->id}");
                 }
+
+                return;
             }
+
+            $this->record($ump, 'unverified', [
+                'verifikasi_keuangan_at' => null,
+                'verifikasi_keuangan_oleh' => null,
+                'verifikasi_keuangan_catatan' => null,
+            ]);
         });
     }
 
-    public function resubmit(string $type, int $id, User $user, ?UploadedFile $attachment): void
-    {
-        $path = null;
-
-        try {
-            DB::transaction(function () use ($type, $id, $user, $attachment, &$path): void {
-                $document = $this->documents($type)->lockForUpdate()->findOrFail($id);
-                abort_unless($this->isResponsible($document, $user), 403);
-                if ($document->verifikasi_keuangan_at !== null || $document->verifikasi_keuangan_catatan === null) {
-                    throw ValidationException::withMessages(['bukti_koreksi' => 'Dokumen ini tidak sedang menunggu perbaikan kelengkapan.']);
-                }
-                $this->ensureActive($type, $id, 'bukti_koreksi');
-
-                if ($attachment !== null) {
-                    $path = $attachment->store('lampiran/verifikasi-keuangan', 'local');
-                    if ($path === false) {
-                        throw new RuntimeException('Bukti perbaikan gagal disimpan.');
-                    }
-
-                    $document->lampiran()->create([
-                        'jenis' => 'bukti',
-                        'path' => $path,
-                        'original_name' => $attachment->getClientOriginalName(),
-                        'mime' => $attachment->getMimeType(),
-                        'size' => $attachment->getSize(),
-                        'sha256' => hash_file('sha256', $attachment->getRealPath()),
-                        'uploaded_by' => $user->id,
-                    ]);
-                }
-
-                $this->record($document, 'resubmitted', [
-                    'verifikasi_keuangan_at' => null,
-                    'verifikasi_keuangan_oleh' => null,
-                    'verifikasi_keuangan_catatan' => null,
-                ]);
-            });
-        } catch (Throwable $e) {
-            if ($path) {
-                Storage::disk('local')->delete($path);
-            }
-            throw $e;
-        }
-    }
-
-    private function ensureActive(string $type, int $id, string $errorField): void
-    {
-        if (! $this->isActive($type, $id)) {
-            throw ValidationException::withMessages([$errorField => 'Dokumen tidak berada pada tahap verifikasi kelengkapan.']);
-        }
-    }
-
-    /** @param array{verifikasi_keuangan_at: Carbon|null, verifikasi_keuangan_oleh: int|null, verifikasi_keuangan_catatan: string|null} $changes */
-    private function record(Permohonan|Pencairan|Ump $document, string $action, array $changes): AuditLog
+    /**
+     * @param  array{status?: string, verifikasi_keuangan_at: Carbon|null, verifikasi_keuangan_oleh: int|null, verifikasi_keuangan_catatan: string|null}  $changes
+     */
+    private function record(Ump $ump, string $action, array $changes): AuditLog
     {
         $keys = array_keys($changes);
-        $before = $document->only($keys);
-        $document->forceFill($changes)->save();
+        $before = $ump->only($keys);
+        $ump->forceFill($changes)->save();
 
-        return (new AuditLogger)->log('verifikasi_keuangan.'.$action, $document, $before, $document->only($keys));
+        return (new AuditLogger)->log('verifikasi_keuangan.'.$action, $ump, $before, $ump->only($keys));
     }
 }

@@ -93,7 +93,7 @@
                     wire:click="openAction('batal')"
                     class="min-h-[44px] px-4 py-2.5 rounded-full border border-red-200 text-xs font-semibold text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
                 >
-                    Batalkan Pengajuan
+                    Void Pengajuan
                 </button>
             @endif
         </div>
@@ -116,8 +116,6 @@
             <span>{{ session('error') }}</span>
         </div>
     @endif
-
-    @include('livewire.keuangan.status-verifikasi', ['document' => $permohonan, 'type' => 'permohonan'])
 
     {{-- OVER BUDGET ALERT BANNER --}}
     @if ($permohonan->catatan_over)
@@ -1077,7 +1075,7 @@
                         @elseif ($actionType === 'tolak')
                             Konfirmasi Penolakan Pengajuan
                         @elseif ($actionType === 'batal')
-                            Konfirmasi Pembatalan Pengajuan
+                            Konfirmasi Void Pengajuan
                         @endif
                     </h2>
                     <button
@@ -1100,7 +1098,7 @@
                         @elseif ($actionType === 'tolak')
                             Tuliskan alasan penolakan permohonan dana ini secara jelas:
                         @elseif ($actionType === 'batal')
-                            Apakah Anda yakin membatalkan permohonan ini? Dokumen yang dibatalkan tidak dapat diproses lebih lanjut.
+                            Apakah Anda yakin melakukan void pada permohonan ini? Dokumen yang di-void tidak dapat diproses lebih lanjut.
                         @endif
                     </p>
 

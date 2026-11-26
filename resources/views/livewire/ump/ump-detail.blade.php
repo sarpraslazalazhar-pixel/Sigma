@@ -704,7 +704,7 @@
     {{-- STEPPER TIMELINE PERSETUJUAN UMP (FR-UMP-4) --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-2 border-b border-slate-100">
-            Alur Tanda Tangan Berjenjang (PJ - Diperiksa Oleh - Manager Keuangan - Kepala Keuangan - Selesai)
+            Alur Tanda Tangan Berjenjang (PJ - Diperiksa Oleh - Verifikasi Keuangan - Manager Keuangan - Kepala Keuangan - Selesai)
         </h2>
 
         <div class="flex flex-col lg:flex-row lg:items-start gap-3">
@@ -712,7 +712,8 @@
                 $steps = [
                     ['label' => 'Tanda Tangan PJ', 'sub' => 'Penanggung Jawab'],
                     ['label' => 'Diperiksa Oleh', 'sub' => 'Kadiv / Manager PJ / TU'],
-                    ['label' => 'TTD Manager Keuangan', 'sub' => 'Treasury'],
+                    ['label' => 'Verifikasi Keuangan', 'sub' => 'Keuangan / TU'],
+                    ['label' => 'TTD Manager Keuangan', 'sub' => 'Manager Keuangan'],
                     ['label' => 'TTD Kepala Keuangan', 'sub' => 'Kepala Divisi Keuangan'],
                     ['label' => 'Selesai', 'sub' => 'Realisasi dicatat'],
                 ];
@@ -772,9 +773,6 @@
             <p class="text-xs text-slate-600">
                 Anda berwenang memproses tahap
                 <span class="font-semibold">{{ $this->getStatusBadge($ump->status)['label'] }}</span>.
-                @if ($ump->status === 'ttd_kepala_keuangan')
-                    Scan fisik Laporan bertanda tangan wajib diunggah pada persetujuan akhir ini.
-                @endif
             </p>
             <div class="flex items-center gap-2.5 flex-wrap pt-1">
                 <button
@@ -796,7 +794,7 @@
                     wire:click="openApproval('batal')"
                     class="min-h-[44px] px-4 py-2.5 rounded-full border border-red-300 text-xs font-semibold text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
                 >
-                    Batal
+                    Void
                 </button>
             </div>
         </div>
@@ -830,7 +828,7 @@
                         @elseif ($approvalAction === 'perbaikan')
                             Minta Perbaikan Laporan
                         @else
-                            Konfirmasi Pembatalan Laporan
+                            Konfirmasi Void Laporan
                         @endif
                     </h2>
                     <button type="button" wire:click="closeApprovalModal" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
@@ -847,28 +845,9 @@
                         @elseif ($approvalAction === 'perbaikan')
                             Laporan kembali ke Penanggung Jawab untuk perbaikan.
                         @else
-                            Laporan yang dibatalkan tidak dapat diproses lebih lanjut.
+                            Laporan yang di-void tidak dapat diproses lebih lanjut.
                         @endif
                     </p>
-
-                    @if ($approvalAction === 'setuju' && $ump->status === 'ttd_kepala_keuangan')
-                        <div>
-                            <label for="scanFinalFile" class="block text-xs font-semibold text-slate-700 mb-1">
-                                Scan Laporan Final Bertanda Tangan * (PDF / JPG / PNG, maks 10 MB)
-                            </label>
-                            <input
-                                type="file"
-                                id="scanFinalFile"
-                                wire:model="scanFinalFile"
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                class="w-full text-xs text-slate-600 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200 @error('scanFinalFile') border-red-500 @enderror"
-                            />
-                            <div wire:loading wire:target="scanFinalFile" class="text-[11px] text-slate-500 mt-1">Mengunggah berkas...</div>
-                            @error('scanFinalFile')
-                                <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                    @endif
 
                     <div>
                         <label for="approvalNotes" class="block text-xs font-semibold text-slate-700 mb-1">

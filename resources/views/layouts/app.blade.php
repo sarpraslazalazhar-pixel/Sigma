@@ -252,6 +252,14 @@
                                         >
                                             • Rekap PPD per Orang
                                         </a>
+                                        <a
+                                            href="{{ route('laporan.laporan-per-orang') }}"
+                                            wire:navigate
+                                            @click="sidebarOpen = false"
+                                            class="{{ request()->routeIs('laporan.laporan-per-orang') ? 'text-blue-700 font-bold' : 'text-slate-600 hover:text-slate-900' }} block py-1.5 text-xs transition-colors"
+                                        >
+                                            • Rekap Laporan per Orang
+                                        </a>
                                     </div>
                                 </div>
                             </div>
@@ -413,6 +421,8 @@
                                     Pencairan PPD
                                 @elseif (request()->routeIs('ump.*'))
                                     Laporan
+                                @elseif (request()->routeIs('keuangan.verifikasi'))
+                                    Verifikasi Keuangan
                                 @elseif (request()->routeIs('laporan.*'))
                                     Laporan & Monitoring
                                 @elseif (request()->routeIs('master.pengaturan'))
@@ -439,12 +449,16 @@
                                     Pencairan Kas & Bank
                                 @elseif (request()->routeIs('ump.*'))
                                     Laporan Penggunaan Dana
+                                @elseif (request()->routeIs('keuangan.verifikasi'))
+                                    Pemeriksaan Kelengkapan Laporan
                                 @elseif (request()->routeIs('laporan.pengeluaran-bulanan'))
                                     Pengeluaran Bulanan
                                 @elseif (request()->routeIs('laporan.monitoring'))
                                     Monitoring Anggaran & Export
                                 @elseif (request()->routeIs('laporan.ppd-per-orang'))
                                     Rekap PPD per Orang
+                                @elseif (request()->routeIs('laporan.laporan-per-orang'))
+                                    Rekap Laporan per Orang
                                 @elseif (request()->routeIs('master.pengaturan'))
                                     Konfigurasi Sistem
                                 @elseif (request()->routeIs('master.users'))

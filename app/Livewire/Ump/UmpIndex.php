@@ -63,8 +63,22 @@ class UmpIndex extends Component
         $this->resetPage();
     }
 
-    public function getStatusBadge(string $status): array
+    public function getStatusBadge(string $status, ?Ump $ump = null): array
     {
+        if ($status === 'ttd_manager_keuangan') {
+            if ($ump !== null && $ump->verifikasi_keuangan_at === null) {
+                return [
+                    'label' => 'Menunggu Verifikasi Keuangan',
+                    'class' => 'bg-amber-50 text-amber-800 border-amber-200',
+                ];
+            }
+
+            return [
+                'label' => 'Menunggu TTD Mgr Keuangan',
+                'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
+            ];
+        }
+
         return match ($status) {
             'draft' => [
                 'label' => 'Draft',
@@ -78,16 +92,12 @@ class UmpIndex extends Component
                 'label' => 'Menunggu Diperiksa',
                 'class' => 'bg-blue-50 text-blue-700 border-blue-200',
             ],
-            'ttd_manager_keuangan' => [
-                'label' => 'Menunggu TTD Mgr Keuangan',
-                'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
-            ],
             'ttd_kepala_keuangan' => [
                 'label' => 'Menunggu TTD Kepala Keuangan',
                 'class' => 'bg-purple-50 text-purple-700 border-purple-200',
             ],
             'dibatalkan' => [
-                'label' => 'Dibatalkan',
+                'label' => 'Void',
                 'class' => 'bg-red-50 text-red-700 border-red-200',
             ],
             'selesai' => [

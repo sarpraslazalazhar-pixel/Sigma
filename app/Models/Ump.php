@@ -26,6 +26,7 @@ class Ump extends Model
         'jatuh_tempo',
         'verifikasi_keuangan_at',
         'verifikasi_keuangan_oleh',
+        'verifikasi_keuangan_catatan',
     ];
 
     protected function casts(): array

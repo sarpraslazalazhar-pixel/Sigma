@@ -149,15 +149,15 @@ class PencairanIndex extends Component
         $this->validate([
             'alasanBatal' => ['required', 'string', 'min:5'],
         ], [
-            'alasanBatal.required' => 'Alasan pembatalan wajib diisi.',
-            'alasanBatal.min' => 'Alasan pembatalan minimal 5 karakter.',
+            'alasanBatal.required' => 'Alasan void wajib diisi.',
+            'alasanBatal.min' => 'Alasan void minimal 5 karakter.',
         ]);
 
         $pencairan = Pencairan::findOrFail($this->selectedPencairanId);
 
         try {
             (new PermohonanWorkflow)->batalkanPencairan($pencairan, Auth::user(), $this->alasanBatal);
-            $msg = "Pencairan PPD {$pencairan->no_ppd} berhasil dibatalkan.";
+            $msg = "Pencairan PPD {$pencairan->no_ppd} berhasil di-void.";
             session()->flash('success', $msg);
             $this->dispatch('notify', ['type' => 'success', 'message' => $msg]);
             $this->tutupModalBatal();
@@ -181,7 +181,7 @@ class PencairanIndex extends Component
         abort_unless($this->canManageBuktiTransfer(), 403, 'Anda tidak berwenang mengunggah bukti transfer pencairan.');
 
         $pencairan = Pencairan::with('buktiTransfer')->findOrFail($id);
-        abort_if($pencairan->status === 'dibatalkan', 422, 'Bukti transfer tidak dapat diunggah untuk PPD yang sudah dibatalkan.');
+        abort_if($pencairan->status === 'dibatalkan', 422, 'Bukti transfer tidak dapat diunggah untuk PPD yang berstatus Void.');
 
         $this->buktiTransferPencairanId = $pencairan->id;
         $this->buktiTransferNoPpd = $pencairan->no_ppd;

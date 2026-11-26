@@ -140,6 +140,10 @@
             font-weight: bold;
         }
 
+        .uppercase {
+            text-transform: uppercase;
+        }
+
         .total-row td {
             background-color: #e2e8f0;
             font-weight: bold;
@@ -164,19 +168,31 @@
         .sig-box {
             width: 33.33%;
             border: 1px solid #94a3b8;
-            padding: 6px;
+            padding: 8px 10px;
             vertical-align: top;
             background-color: #ffffff;
         }
 
         .sig-header {
-            font-size: 8pt;
+            font-size: 7.5pt;
             font-weight: bold;
             color: #334155;
             text-align: center;
             border-bottom: 1px dashed #cbd5e1;
-            padding-bottom: 3px;
-            margin-bottom: 45px;
+            padding-bottom: 4px;
+        }
+
+        .sig-space {
+            height: 42px;
+            text-align: center;
+        }
+
+        .sig-badge {
+            font-size: 7pt;
+            font-weight: bold;
+            color: #166534;
+            font-family: DejaVu Sans, sans-serif;
+            padding-top: 26px;
         }
 
         .sig-name {
@@ -185,6 +201,13 @@
             color: #0f172a;
             text-align: center;
             text-decoration: underline;
+        }
+
+        .sig-name-muted {
+            font-size: 8.5pt;
+            font-weight: bold;
+            color: #64748b;
+            text-align: center;
         }
 
         .sig-role {
@@ -198,7 +221,7 @@
             font-size: 7pt;
             color: #94a3b8;
             text-align: center;
-            margin-top: 2px;
+            margin-top: 3px;
         }
 
         .footer-table {
@@ -304,7 +327,7 @@
                         <td class="meta-label">STATUS DOKUMEN</td>
                         <td class="meta-colon">:</td>
                         <td class="meta-val font-bold" style="color: #0f2f57;">
-                            {{ strtoupper(str_replace('_', ' ', $permohonan->status)) }}
+                            {{ $permohonan->status === 'dibatalkan' ? 'VOID' : strtoupper(str_replace('_', ' ', $permohonan->status)) }}
                         </td>
                     </tr>
                     @if ($permohonan->catatan_over)
@@ -374,15 +397,19 @@
             <td class="sig-box">
                 @if (! $signerStep1 && $skipStep1)
                     <div class="sig-header">PEMERIKSAAN TAHAP 1 (DILEWATI)</div>
-                    <div class="sig-name">Tidak Diperlukan</div>
+                    <div class="sig-space"></div>
+                    <div class="sig-name-muted">Tidak Diperlukan</div>
                     <div class="sig-role">
                         {{ $chain['mode'] === 'kadiv_keuangan' ? 'Pengajuan Kepala Divisi Keuangan' : 'Langsung ke Kepala Divisi Keuangan' }}
                     </div>
-                    <div class="sig-date">
-                        Tgl: -
-                    </div>
+                    <div class="sig-date">Tgl: -</div>
                 @else
                     <div class="sig-header">DIPERIKSA OLEH ({{ strtoupper($step1Label) }})</div>
+                    <div class="sig-space">
+                        @if ($signerStep1)
+                            <div class="sig-badge">&#10003; Disetujui Digital</div>
+                        @endif
+                    </div>
                     <div class="sig-name">
                         {{ $signerStep1 ? $signerStep1->signer_name : '................................................' }}
                     </div>
@@ -396,8 +423,13 @@
             </td>
 
             {{-- Tengah: Disetujui Oleh (Tahap Akhir) --}}
-            <td class="sig-box" style="margin-left: 10px; margin-right: 10px;">
+            <td class="sig-box">
                 <div class="sig-header">DISETUJUI OLEH ({{ strtoupper($step2Label) }})</div>
+                <div class="sig-space">
+                    @if ($signerStep2)
+                        <div class="sig-badge">&#10003; Disetujui Digital</div>
+                    @endif
+                </div>
                 <div class="sig-name">
                     {{ $signerStep2 ? $signerStep2->signer_name : '................................................' }}
                 </div>
@@ -412,17 +444,17 @@
             {{-- Kanan: Dibuat Oleh --}}
             <td class="sig-box">
                 <div class="sig-header">DIBUAT OLEH (PEMOHON / PIC KEGIATAN)</div>
+                <div class="sig-space">
+                    @if ($permohonan->submitted_at && $permohonan->status !== 'draft')
+                        <div class="sig-badge">&#10003; Diajukan Digital</div>
+                    @endif
+                </div>
                 <div class="sig-name">
                     {{ $permohonan->user?->name ?? '................................................' }}
                 </div>
                 <div class="sig-role">
                     {{ $permohonan->user?->jabatan ?? 'Pemohon Anggaran' }}
                 </div>
-                @if ($permohonan->pengusul && $permohonan->pengusul_id !== $permohonan->user_id)
-                    <div style="font-size: 8px; color: #64748b; margin-top: 4px;">
-                        Diusulkan oleh: {{ $permohonan->pengusul->name }} ({{ $permohonan->pengusul->jabatan ?? 'Staf' }})
-                    </div>
-                @endif
                 <div class="sig-date">
                     Tgl: {{ $permohonan->submitted_at ? $permohonan->submitted_at->format('d/m/Y') : ($permohonan->created_at ? $permohonan->created_at->format('d/m/Y') : '......................') }}
                 </div>
@@ -433,11 +465,11 @@
     {{-- FOOTER COPYRIGHT & DOKUMEN SISTEM --}}
     <table class="footer-table">
         <tr>
-            <td style="width: 50%;" class="footer-text">
+            <td style="width: 60%;" class="footer-text">
                 Dicetak secara otomatis melalui Sistem SIGMA LAZ Al-Azhar pada {{ now()->timezone('Asia/Jakarta')->format('d/m/Y H:i:s') }} WIB
             </td>
-            <td style="width: 50%; text-align: right;" class="footer-text">
-                Copyright @2024, www.alazharpeduli.or.id
+            <td style="width: 40%; text-align: right;" class="footer-text">
+                &copy; {{ now()->year }} LAZ Al-Azhar &bull; www.alazharpeduli.or.id
             </td>
         </tr>
     </table>

@@ -164,6 +164,105 @@ class UmpWorkflow
     }
 
     /**
+     * Periksa apakah pengguna berwenang menyetujui tahap Manager Keuangan.
+     */
+    public function canApproveManagerKeuangan(User $user): bool
+    {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        if ($user->role === 'admin') {
+            return true;
+        }
+
+        $user->loadMissing('leveling');
+
+        return $user->role === 'keuangan' && ($user->leveling?->urutan ?? 2) === 2;
+    }
+
+    /**
+     * Periksa apakah pengguna berwenang menyetujui tahap Kepala Divisi Keuangan.
+     */
+    public function canApproveKepalaKeuangan(User $user): bool
+    {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        if ($user->role === 'admin') {
+            return true;
+        }
+
+        $user->loadMissing('leveling');
+
+        return $user->role === 'keuangan' && ($user->leveling?->urutan ?? 0) >= 3;
+    }
+
+    /**
+     * Single Source of Truth: periksa apakah pengguna berwenang menyetujui Laporan pada tahap berjalan.
+     */
+    public function canUserApprove(User $user, Ump $ump): bool
+    {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        return match ($ump->status) {
+            'ttd_pj' => $this->canApproveDiperiksaOleh($user, $ump),
+            'ttd_manager_keuangan' => $ump->verifikasi_keuangan_at !== null && $this->canApproveManagerKeuangan($user),
+            'ttd_kepala_keuangan' => $ump->verifikasi_keuangan_at !== null && $this->canApproveKepalaKeuangan($user),
+            default => false,
+        };
+    }
+
+    /**
+     * Periksa apakah pengguna berwenang mengelola keputusan (minta perbaikan / void) sesuai tahap berjalan.
+     */
+    public function canUserManageDecision(User $user, Ump $ump): bool
+    {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        return match ($ump->status) {
+            'ttd_pj' => $this->canApproveDiperiksaOleh($user, $ump),
+            'ttd_manager_keuangan' => $this->canApproveManagerKeuangan($user),
+            'ttd_kepala_keuangan' => $this->canApproveKepalaKeuangan($user),
+            default => false,
+        };
+    }
+
+    private function canApproveDiperiksaOleh(User $user, Ump $ump): bool
+    {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        if ($user->role === 'admin' || (bool) $user->is_petugas_input) {
+            return true;
+        }
+
+        $ump->loadMissing(['pj.unit', 'pencairan.permohonan.user.unit', 'pencairan.permohonan.unit']);
+        $user->loadMissing(['unit', 'leveling']);
+
+        $pj = $ump->pj ?: $ump->pencairan?->permohonan?->user;
+        if ($pj && $user->id === $pj->id) {
+            return false;
+        }
+
+        $pjDivisiId = $pj?->unit?->getDivisiId() ?? $ump->pencairan?->permohonan?->unit?->getDivisiId();
+        $pjUnitId = $pj?->unit_id ?? $ump->pencairan?->permohonan?->unit_id;
+
+        $approverDivisiId = $user->unit?->getDivisiId();
+        $sameDivisi = $pjDivisiId !== null && $approverDivisiId !== null && $pjDivisiId === $approverDivisiId;
+        $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
+        $urutan = $user->leveling?->urutan ?? 0;
+
+        return ($sameDivisi || $sameUnit) && $urutan >= 2;
+    }
+
+    /**
      * Ajukan UMP oleh Penanggung Jawab untuk tanda tangan berjenjang (FR-UMP-4).
      */
     public function submitByPj(Ump $ump, User $user, string $catatan = ''): Ump
@@ -204,6 +303,9 @@ class UmpWorkflow
             ]);
 
             $ump->status = 'ttd_pj';
+            $ump->verifikasi_keuangan_at = null;
+            $ump->verifikasi_keuangan_oleh = null;
+            $ump->verifikasi_keuangan_catatan = null;
             $ump->save();
 
             (new AuditLogger)->log('ump.submitted_pj', $ump, $before, $ump->fresh()->toArray());
@@ -238,16 +340,17 @@ class UmpWorkflow
     }
 
     /**
-     * Persetujuan berjenjang UMP: ttd_pj -> ttd_kadiv -> ttd_manager_keuangan -> ttd_kepala_keuangan -> selesai.
+     * Persetujuan berjenjang UMP: ttd_pj -> ttd_kadiv -> Verifikasi Keuangan -> ttd_manager_keuangan -> ttd_kepala_keuangan -> selesai.
      */
     public function approve(Ump $ump, User $approver, array $data = []): Ump
     {
         return DB::transaction(function () use ($ump, $approver, $data) {
-            $locked = Ump::lockForUpdate()->findOrFail($ump->id);
-
-            $isFinanceRole = $approver->role === 'keuangan';
-            $isPetugasInput = (bool) $approver->is_petugas_input;
-            $isKadiv = ($approver->leveling?->urutan ?? 0) >= 3;
+            $locked = Ump::with([
+                'pj.unit',
+                'pencairan.permohonan.user.unit',
+                'pencairan.permohonan.unit',
+                'pencairan.permohonan.kodeAnggaran',
+            ])->lockForUpdate()->findOrFail($ump->id);
 
             $tahap = '';
             $nextStatus = '';
@@ -256,39 +359,36 @@ class UmpWorkflow
                 $tahap = 'ttd_kadiv';
                 $nextStatus = 'ttd_manager_keuangan';
 
-                $isTu = $isPetugasInput || $approver->role === 'admin';
-                $pj = $locked->pj ?: $locked->pencairan?->permohonan?->user;
-                $pjDivisiId = $pj?->unit?->getDivisiId() ?? $locked->pencairan?->permohonan?->unit?->getDivisiId();
-                $pjUnitId = $pj?->unit_id ?? $locked->pencairan?->permohonan?->unit_id;
-
-                $approverDivisiId = $approver->unit?->getDivisiId();
-                $sameDivisi = $pjDivisiId !== null && $approverDivisiId !== null && $pjDivisiId === $approverDivisiId;
-                $sameUnit = $pjUnitId !== null && $approver->unit_id !== null && $pjUnitId === $approver->unit_id;
-                $urutan = $approver->leveling?->urutan ?? 0;
-
-                $isPj = $pj && $approver->id === $pj->id;
-                $isKadivOrManager = ! $isPj && ($sameDivisi || $sameUnit) && $urutan >= 2;
-
-                if (! $isTu && ! $isKadivOrManager) {
+                if (! $this->canApproveDiperiksaOleh($approver, $locked)) {
                     throw new RuntimeException('Tahap "Diperiksa Oleh" hanya dapat diperiksa oleh TU, Kepala Divisi PJ, atau Manager PJ.');
                 }
+
+                $locked->verifikasi_keuangan_at = null;
+                $locked->verifikasi_keuangan_oleh = null;
+                $locked->verifikasi_keuangan_catatan = null;
             } elseif ($locked->status === 'ttd_manager_keuangan') {
                 $tahap = 'ttd_manager_keuangan';
                 $nextStatus = 'ttd_kepala_keuangan';
 
-                if (! $isFinanceRole && ! $isPetugasInput && $approver->role !== 'admin') {
-                    throw new RuntimeException('Tahap ini memerlukan persetujuan Manager Keuangan / Treasury.');
+                if (! $this->canApproveManagerKeuangan($approver)) {
+                    throw new RuntimeException('Tahap ini memerlukan persetujuan Manager Keuangan.');
+                }
+
+                if ($locked->verifikasi_keuangan_at === null) {
+                    throw new RuntimeException('Laporan wajib lolos Verifikasi Keuangan terlebih dahulu sebelum disetujui Manager Keuangan.');
                 }
             } elseif ($locked->status === 'ttd_kepala_keuangan') {
                 $tahap = 'ttd_kepala_keuangan';
                 $nextStatus = 'selesai';
 
-                if (! $isFinanceRole && ! $isPetugasInput && $approver->role !== 'admin') {
+                if (! $this->canApproveKepalaKeuangan($approver)) {
                     throw new RuntimeException('Tahap ini memerlukan persetujuan Kepala Divisi Keuangan.');
                 }
 
-                // FR-UMP-8: scan UMP final bertanda tangan wajib ada sebelum Selesai
-                $hasScan = $locked->lampiran()->where('jenis', 'scan_final')->exists();
+                if ($locked->verifikasi_keuangan_at === null) {
+                    throw new RuntimeException('Laporan wajib lolos Verifikasi Keuangan terlebih dahulu sebelum disetujui Kepala Divisi Keuangan.');
+                }
+
                 if (! empty($data['scan_final'])) {
                     $file = $data['scan_final'];
                     $path = $file->store('lampiran/ump/scan_final', 'local');
@@ -302,10 +402,6 @@ class UmpWorkflow
                         'version' => 1,
                         'uploaded_by' => $approver->id,
                     ]);
-                    $hasScan = true;
-                }
-                if (! $hasScan) {
-                    throw new RuntimeException('Scan fisik Laporan bertanda tangan wajib diunggah sebelum status Selesai.');
                 }
             } else {
                 throw new RuntimeException("Laporan berstatus {$locked->status} tidak dalam antrean persetujuan.");
@@ -359,22 +455,49 @@ class UmpWorkflow
                 );
             }
 
-            // FR-NTF: Notifikasi ke approver tahap berikutnya
-            if (in_array($nextStatus, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
-                $keuanganUsers = User::where('is_active', true)
+            // FR-NTF: Notifikasi ke verifikator atau approver tahap berikutnya
+            if ($nextStatus === 'ttd_manager_keuangan') {
+                $verifikatorUsers = User::where('is_active', true)
                     ->where(fn ($q) => $q->where('role', 'keuangan')->orWhere('is_petugas_input', true))
                     ->get();
-                foreach ($keuanganUsers as $ku) {
+                foreach ($verifikatorUsers as $vu) {
                     NotificationService::kirim(
-                        $ku,
+                        $vu,
                         'dokumen_menunggu_tindakan',
                         [
-                            'judul' => 'Dokumen Laporan Menunggu Persetujuan',
+                            'judul' => 'Laporan Masuk Antrean Verifikasi Keuangan',
+                            'no_ppd' => $locked->pencairan?->no_ppd,
+                            'jenis' => 'ump',
+                            'entity_id' => $locked->id,
+                            'url' => route('keuangan.verifikasi'),
+                            'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} memerlukan Verifikasi Keuangan sebelum persetujuan Manager Keuangan.",
+                        ],
+                        "tunggu_ump_{$locked->id}_{$nextStatus}_{$siklus}"
+                    );
+                }
+            } elseif ($nextStatus === 'ttd_kepala_keuangan') {
+                $kadivKeuanganUsers = User::where('is_active', true)
+                    ->where('role', 'keuangan')
+                    ->whereHas('leveling', fn ($q) => $q->where('urutan', '>=', 3))
+                    ->get();
+
+                if ($kadivKeuanganUsers->isEmpty()) {
+                    $kadivKeuanganUsers = User::where('is_active', true)
+                        ->where('role', 'keuangan')
+                        ->get();
+                }
+
+                foreach ($kadivKeuanganUsers as $kku) {
+                    NotificationService::kirim(
+                        $kku,
+                        'dokumen_menunggu_tindakan',
+                        [
+                            'judul' => 'Laporan Menunggu TTD Kepala Divisi Keuangan',
                             'no_ppd' => $locked->pencairan?->no_ppd,
                             'jenis' => 'ump',
                             'entity_id' => $locked->id,
                             'url' => route('ump.detail', $locked->id),
-                            'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} memerlukan verifikasi/persetujuan Keuangan.",
+                            'pesan' => "Dokumen Laporan No. PPD {$locked->pencairan?->no_ppd} telah disetujui Manager Keuangan dan menunggu persetujuan Kepala Divisi Keuangan.",
                         ],
                         "tunggu_ump_{$locked->id}_{$nextStatus}_{$siklus}"
                     );
@@ -424,10 +547,18 @@ class UmpWorkflow
     public function requestRevision(Ump $ump, User $user, string $alasan): Ump
     {
         return DB::transaction(function () use ($ump, $user, $alasan) {
-            $locked = Ump::lockForUpdate()->findOrFail($ump->id);
+            $locked = Ump::with([
+                'pj.unit',
+                'pencairan.permohonan.user.unit',
+                'pencairan.permohonan.unit',
+            ])->lockForUpdate()->findOrFail($ump->id);
 
             if (! in_array($locked->status, ['ttd_pj', 'ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
                 throw new RuntimeException('Hanya Laporan dalam proses persetujuan yang dapat diminta perbaikan.');
+            }
+
+            if (! $this->canUserManageDecision($user, $locked)) {
+                throw new RuntimeException('Anda tidak berwenang meminta perbaikan Laporan pada tahap ini.');
             }
 
             $before = $locked->toArray();
@@ -449,6 +580,9 @@ class UmpWorkflow
             ]);
 
             $locked->status = 'perlu_perbaikan';
+            $locked->verifikasi_keuangan_at = null;
+            $locked->verifikasi_keuangan_oleh = null;
+            $locked->verifikasi_keuangan_catatan = null;
             $locked->save();
 
             (new AuditLogger)->log('ump.revision_requested', $locked, $before, $locked->fresh()->toArray());
@@ -480,10 +614,18 @@ class UmpWorkflow
     public function cancel(Ump $ump, User $user, string $alasan): Ump
     {
         return DB::transaction(function () use ($ump, $user, $alasan) {
-            $locked = Ump::lockForUpdate()->findOrFail($ump->id);
+            $locked = Ump::with([
+                'pj.unit',
+                'pencairan.permohonan.user.unit',
+                'pencairan.permohonan.unit',
+            ])->lockForUpdate()->findOrFail($ump->id);
 
             if ($locked->status === 'selesai' || $locked->status === 'dibatalkan') {
-                throw new RuntimeException('Laporan tidak dapat dibatalkan pada status saat ini.');
+                throw new RuntimeException('Laporan tidak dapat di-void pada status saat ini.');
+            }
+
+            if (! $this->canUserManageDecision($user, $locked)) {
+                throw new RuntimeException('Anda tidak berwenang me-void Laporan pada tahap ini.');
             }
 
             $before = $locked->toArray();

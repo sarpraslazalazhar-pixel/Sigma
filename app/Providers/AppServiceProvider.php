@@ -35,9 +35,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(KodeAnggaran::class, KodeAnggaranPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
 
-        // 2. Super-admin bypass: Admin memiliki semua izin secara otomatis kecuali persetujuan permohonan (delegasi ke policy)
+        // 2. Super-admin bypass: Admin memiliki semua izin secara otomatis kecuali persetujuan berjenjang (delegasi ke policy)
         Gate::before(function (User $user, string $ability): ?bool {
-            if (in_array($ability, ['approveKadiv', 'approveKeuangan'], true)) {
+            if (in_array($ability, ['approveKadiv', 'approveKeuangan', 'approve'], true)) {
                 return null;
             }
 
@@ -53,7 +53,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-master-data', fn (User $user) => $user->isAdmin());
         Gate::define('view-audit-logs', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
         Gate::define('manage-budget', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
-        Gate::define('verifikasi-keuangan', fn (User $user) => $user->hasRole(['admin', 'keuangan']));
+        Gate::define('verifikasi-keuangan', fn (User $user) => $user->hasRole(['admin', 'keuangan']) || (bool) $user->is_petugas_input);
         Gate::define('cairkan-dana', fn (User $user) => $user->hasRole(['admin', 'keuangan']) || (bool) $user->is_petugas_input);
         Gate::define('create-permohonan', fn (User $user) => ! $user->isViewer());
 

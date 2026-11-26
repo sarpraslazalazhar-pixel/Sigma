@@ -55,7 +55,7 @@ class RekapPermohonanExport implements FromCollection, ShouldAutoSize, WithColum
                 'sumber_dana' => $p->sumberDana?->nama ?? '-',
                 'nilai_diminta' => (int) $p->total_diminta,
                 'nilai_disetujui' => (int) ($p->total_disetujui ?? 0),
-                'status' => ucfirst(str_replace('_', ' ', $p->status)),
+                'status' => $p->status === 'dibatalkan' ? 'Void' : ucfirst(str_replace('_', ' ', $p->status)),
                 'approver_terakhir' => $approver,
             ];
         });

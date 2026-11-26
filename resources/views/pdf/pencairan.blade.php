@@ -258,7 +258,7 @@
                     <tr>
                         <td class="meta-label">STATUS DOKUMEN</td>
                         <td class="meta-colon">:</td>
-                        <td class="font-bold" style="color: #0f2f57;">{{ strtoupper(str_replace('_', ' ', $pencairan->status)) }}</td>
+                        <td class="font-bold" style="color: #0f2f57;">{{ $pencairan->status === 'dibatalkan' ? 'VOID' : strtoupper(str_replace('_', ' ', $pencairan->status)) }}</td>
                     </tr>
                 </table>
             </td>

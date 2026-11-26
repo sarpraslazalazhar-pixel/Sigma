@@ -65,7 +65,7 @@ class RekapPpdUmpExport implements FromCollection, ShouldAutoSize, WithColumnFor
                 'no_ppd' => $pencairan->no_ppd,
                 'tgl_cair' => $pencairan->tgl_cair ? Carbon::parse($pencairan->tgl_cair)->format('d/m/Y') : '-',
                 'nominal_ppd' => (int) $pencairan->jumlah,
-                'status_ump' => $ump ? ucfirst(str_replace('_', ' ', $ump->status)) : 'Belum Ada',
+                'status_ump' => $ump ? ($ump->status === 'dibatalkan' ? 'Void' : ucfirst(str_replace('_', ' ', $ump->status))) : 'Belum Ada',
                 'tgl_terima' => $ump?->tgl_terima ? Carbon::parse($ump->tgl_terima)->format('d/m/Y') : '-',
                 'pj' => $ump?->pj?->name ?? ($pencairan->permohonan?->user?->name ?? '-'),
                 'total_penggunaan' => (int) ($ump?->total_penggunaan ?? 0),

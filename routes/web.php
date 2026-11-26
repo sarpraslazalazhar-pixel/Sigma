@@ -4,12 +4,12 @@ use App\Http\Controllers\LampiranController;
 use App\Http\Controllers\PencairanPdfController;
 use App\Http\Controllers\PermohonanPdfController;
 use App\Http\Controllers\UmpPdfController;
-use App\Http\Controllers\VerifikasiKeuanganController;
 use App\Livewire\Auth\Login;
 use App\Livewire\Dashboard;
 use App\Livewire\Keuangan\VerifikasiKeuanganIndex;
 use App\Livewire\Laporan\LaporanMonitoringIndex;
 use App\Livewire\Laporan\LaporanPpdPerOrang;
+use App\Livewire\Laporan\LaporanUmpPerOrang;
 use App\Livewire\Master\AuditLogIndex;
 use App\Livewire\Master\KodeAnggaranIndex;
 use App\Livewire\Master\PengaturanIndex;
@@ -47,6 +47,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/laporan/pengeluaran-bulanan', LaporanPengeluaranIndex::class)->name('laporan.pengeluaran-bulanan');
     Route::get('/laporan/monitoring', LaporanMonitoringIndex::class)->name('laporan.monitoring');
     Route::get('/laporan/ppd-per-orang', LaporanPpdPerOrang::class)->name('laporan.ppd-per-orang');
+    Route::get('/laporan/laporan-per-orang', LaporanUmpPerOrang::class)->name('laporan.laporan-per-orang');
 
     // Permohonan Dana
     Route::get('/permohonan', PermohonanIndex::class)->name('permohonan.index');
@@ -66,8 +67,6 @@ Route::middleware('auth')->group(function () {
 
     // Verifikasi Keuangan
     Route::get('/keuangan/verifikasi', VerifikasiKeuanganIndex::class)->middleware('can:verifikasi-keuangan')->name('keuangan.verifikasi');
-    Route::post('/keuangan/verifikasi/{type}/{id}/cek-ulang', VerifikasiKeuanganController::class)
-        ->whereNumber('id')->name('keuangan.verifikasi.cek-ulang');
 
     // Lampiran Download/Stream
     Route::get('/lampiran/{id}', [LampiranController::class, 'show'])->name('lampiran.show');

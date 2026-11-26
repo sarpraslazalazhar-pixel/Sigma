@@ -62,8 +62,6 @@ class UmpDetail extends Component
 
     public string $approvalNotes = '';
 
-    public $scanFinalFile = null;
-
     public function mount(int $id): void
     {
         $this->umpId = $id;
@@ -75,7 +73,8 @@ class UmpDetail extends Component
         return Ump::with([
             'pencairan.permohonan.unit',
             'pencairan.buktiTransfer',
-            'pj',
+            'pj.unit',
+            'verifikator',
             'items.lampiran',
             'penerima.user',
             'approvals',
@@ -88,16 +87,31 @@ class UmpDetail extends Component
         return in_array($this->ump->status, ['draft', 'perlu_perbaikan'], true);
     }
 
-    public function getStatusBadge(string $status): array
+    public function getStatusBadge(string $status, ?Ump $ump = null): array
     {
+        $target = $ump ?? $this->ump;
+
+        if ($status === 'ttd_manager_keuangan') {
+            if ($target->verifikasi_keuangan_at === null) {
+                return [
+                    'label' => 'Menunggu Verifikasi Keuangan',
+                    'class' => 'bg-amber-50 text-amber-800 border-amber-200',
+                ];
+            }
+
+            return [
+                'label' => 'Menunggu TTD Mgr Keuangan',
+                'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200',
+            ];
+        }
+
         return match ($status) {
             'draft' => ['label' => 'Draft', 'class' => 'bg-slate-100 text-slate-700 border-slate-200'],
             'perlu_perbaikan' => ['label' => 'Perlu Perbaikan', 'class' => 'bg-amber-50 text-amber-800 border-amber-200'],
             'ttd_pj' => ['label' => 'Menunggu Diperiksa', 'class' => 'bg-blue-50 text-blue-700 border-blue-200'],
-            'ttd_manager_keuangan' => ['label' => 'Menunggu TTD Mgr Keuangan', 'class' => 'bg-indigo-50 text-indigo-700 border-indigo-200'],
             'ttd_kepala_keuangan' => ['label' => 'Menunggu TTD Kepala Keuangan', 'class' => 'bg-purple-50 text-purple-700 border-purple-200'],
             'selesai' => ['label' => 'Selesai', 'class' => 'bg-emerald-50 text-emerald-700 border-emerald-200'],
-            'dibatalkan' => ['label' => 'Dibatalkan', 'class' => 'bg-red-50 text-red-700 border-red-200'],
+            'dibatalkan' => ['label' => 'Void', 'class' => 'bg-red-50 text-red-700 border-red-200'],
             default => ['label' => ucfirst(str_replace('_', ' ', $status)), 'class' => 'bg-slate-100 text-slate-600 border-slate-200'],
         };
     }
@@ -170,7 +184,7 @@ class UmpDetail extends Component
     }
 
     /**
-     * Hak akses approve tahap berjalan (FR-UMP-4): Kadiv -> Manager Keuangan -> Kepala Keuangan.
+     * Hak akses approve tahap berjalan (FR-UMP-4): Diperiksa Oleh -> Verifikasi Keuangan -> Manager Keuangan -> Kepala Keuangan.
      */
     public function canApprove(): bool
     {
@@ -179,48 +193,18 @@ class UmpDetail extends Component
             return false;
         }
 
-        $status = $this->ump->status;
-
-        if ($status === 'ttd_pj') {
-            if ($user->role === 'admin' || (bool) $user->is_petugas_input) {
-                return true;
-            }
-
-            $pj = $this->ump->pj ?: $this->ump->pencairan?->permohonan?->user;
-            if ($pj && $user->id === $pj->id) {
-                return false;
-            }
-
-            $pjDivisiId = $pj?->unit?->getDivisiId() ?? $this->ump->pencairan?->permohonan?->unit?->getDivisiId();
-            $pjUnitId = $pj?->unit_id ?? $this->ump->pencairan?->permohonan?->unit_id;
-
-            $userDivisiId = $user->unit?->getDivisiId();
-            $sameDivisi = $pjDivisiId !== null && $userDivisiId !== null && $pjDivisiId === $userDivisiId;
-            $sameUnit = $pjUnitId !== null && $user->unit_id !== null && $pjUnitId === $user->unit_id;
-
-            $urutan = $user->leveling?->urutan ?? 0;
-
-            return ($sameDivisi || $sameUnit) && $urutan >= 2;
-        }
-
-        if (in_array($status, ['ttd_manager_keuangan', 'ttd_kepala_keuangan'], true)) {
-            return $user->role === 'keuangan'
-                || (bool) $user->is_petugas_input
-                || $user->role === 'admin';
-        }
-
-        return false;
+        return (new UmpWorkflow)->canUserApprove($user, $this->ump);
     }
 
-    /** Progres stepper: 0=draft, 1=PJ, 2=Kadiv, 3=Mgr Keuangan, 4=Kepala Keuangan, 5=Selesai. */
+    /** Progres stepper: 0=draft, 1=PJ, 2=Diperiksa, 3=Verifikasi Keu, 4=Mgr Keu, 5=Kepala Keu, 6=Selesai. */
     public function getStepProgressProperty(): int
     {
         return match ($this->ump->status) {
             'draft', 'perlu_perbaikan', 'dibatalkan' => 0,
             'ttd_pj' => 1,
-            'ttd_manager_keuangan' => 2,
-            'ttd_kepala_keuangan' => 3,
-            'selesai' => 5,
+            'ttd_manager_keuangan' => $this->ump->verifikasi_keuangan_at !== null ? 3 : 2,
+            'ttd_kepala_keuangan' => 4,
+            'selesai' => 6,
             default => 0,
         };
     }
@@ -229,7 +213,6 @@ class UmpDetail extends Component
     {
         $this->approvalAction = $action;
         $this->approvalNotes = '';
-        $this->scanFinalFile = null;
         $this->showApprovalModal = true;
     }
 
@@ -258,21 +241,6 @@ class UmpDetail extends Component
             ]);
         }
 
-        $isFinalStage = $this->ump->status === 'ttd_kepala_keuangan';
-        $hasScan = $this->ump->lampiran()->where('jenis', 'scan_final')->exists();
-
-        if ($action === 'setuju') {
-            $this->validate([
-                'scanFinalFile' => ($isFinalStage && ! $hasScan)
-                    ? ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240']
-                    : ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
-            ], [
-                'scanFinalFile.required' => 'Scan fisik Laporan bertanda tangan wajib diunggah sebelum status Selesai.',
-                'scanFinalFile.mimes' => 'Berkas scan harus berformat PDF, JPG, atau PNG.',
-                'scanFinalFile.max' => 'Ukuran berkas scan maksimal 10 MB.',
-            ]);
-        }
-
         $workflow = new UmpWorkflow;
         $user = Auth::user();
 
@@ -281,7 +249,6 @@ class UmpDetail extends Component
             if ($action === 'setuju') {
                 $workflow->approve($this->ump, $user, [
                     'catatan' => $this->approvalNotes ?: null,
-                    'scan_final' => $this->scanFinalFile,
                 ]);
                 $msg = 'Persetujuan Laporan tercatat. Tahap berikutnya diproses sistem.';
             } elseif ($action === 'perbaikan') {
@@ -289,7 +256,7 @@ class UmpDetail extends Component
                 $msg = 'Laporan dikembalikan untuk perbaikan.';
             } elseif ($action === 'batal') {
                 $workflow->cancel($this->ump, $user, $this->approvalNotes);
-                $msg = 'Laporan berhasil dibatalkan.';
+                $msg = 'Laporan berhasil di-void.';
             }
 
             session()->flash('success', $msg);
@@ -302,7 +269,6 @@ class UmpDetail extends Component
             return;
         }
 
-        $this->reset('scanFinalFile');
         $this->closeApprovalModal();
     }
 
@@ -883,7 +849,7 @@ class UmpDetail extends Component
         // Segarkan atribut & relasi pada instance yang sama (computed $this->ump ter-cache per request),
         // agar UI langsung menampilkan data tersimpan tanpa perlu refresh halaman.
         $ump->refresh();
-        $ump->load(['items.lampiran', 'penerima.user']);
+        $ump->load(['items.lampiran', 'penerima.user', 'approvals', 'verifikator']);
 
         return $ump;
     }

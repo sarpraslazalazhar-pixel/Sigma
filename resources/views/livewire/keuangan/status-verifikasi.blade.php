@@ -1,42 +1,56 @@
 @php
-    $verification = app(\App\Services\VerifikasiKeuangan::class);
     $user = auth()->user();
-    $responsible = $user && $verification->isResponsible($document, $user);
+    $verified = $document->verifikasi_keuangan_at !== null;
+    $note = $document->verifikasi_keuangan_catatan;
+    $latestRevision = $document->approvals->where('keputusan', 'perlu_perbaikan')->sortByDesc('id')->first();
+    $returnedByVerification = $document->status === 'perlu_perbaikan'
+        && ! $verified
+        && $note !== null
+        && $latestRevision?->tahap !== 'revisi';
+    $isWaitingVerification = $document->status === 'ttd_manager_keuangan' && ! $verified;
+    $canOpenVerification = $user && $user->can('verifikasi-keuangan');
 @endphp
 
-@if ($responsible || $user?->can('verifikasi-keuangan'))
-    @php
-        $active = $verification->isActive($type, $document->id);
-        $verified = $document->verifikasi_keuangan_at !== null;
-        $note = $document->verifikasi_keuangan_catatan;
-    @endphp
+@if ($isWaitingVerification || $verified || $returnedByVerification)
+    <section aria-labelledby="kelengkapan-judul" class="rounded-2xl border p-4 sm:p-5 space-y-3 {{ $verified ? 'border-emerald-200 bg-[#D0F7E3]/35' : ($returnedByVerification ? 'border-amber-300 bg-[#FEF3C7]/60' : 'border-[#CBD5E1] bg-[#E9EFF6]/60') }}">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="space-y-1">
+                <h2 id="kelengkapan-judul" class="text-xs font-bold uppercase tracking-wider text-[#0F2F57]">
+                    Verifikasi Keuangan
+                </h2>
+                @if ($verified)
+                    <p class="text-sm font-semibold text-[#006C4C]">
+                        Terverifikasi{{ $document->verifikator?->name ? ' oleh '.$document->verifikator->name : '' }}
+                        @if ($document->verifikasi_keuangan_at)
+                            <span class="font-normal text-xs text-[#424750] tabular-nums">
+                                • {{ $document->verifikasi_keuangan_at->format('d/m/Y H:i') }}
+                            </span>
+                        @endif
+                    </p>
+                @elseif ($returnedByVerification)
+                    <p class="text-sm font-semibold text-[#92400E]">
+                        Dikembalikan Verifikasi Keuangan untuk Perbaikan{{ $document->verifikator?->name ? ' ('.$document->verifikator->name.')' : '' }}
+                    </p>
+                @else
+                    <p class="text-sm font-semibold text-[#0F2F57]">
+                        Menunggu Verifikasi Keuangan
+                    </p>
+                    <p class="text-xs text-[#424750]">
+                        Kelengkapan rincian dan bukti transaksi harus lolos Verifikasi Keuangan sebelum persetujuan Manager Keuangan.
+                    </p>
+                @endif
+            </div>
 
-    @if ($active || $verified || $note !== null)
-        <section aria-labelledby="kelengkapan-judul" class="space-y-2 rounded-2xl border border-slate-300 bg-white p-4 sm:p-5">
-            <h2 id="kelengkapan-judul" class="text-sm font-bold text-[#0F2F57]">Verifikasi kelengkapan</h2>
-            <p class="text-sm font-semibold {{ $verified ? 'text-emerald-800' : ($note !== null ? 'text-amber-900' : 'text-slate-700') }}">
-                {{ $verified ? 'Terverifikasi' : ($note !== null ? 'Perlu perbaikan kelengkapan' : 'Menunggu pemeriksaan') }}
-            </p>
-            @if ($note !== null)
-                <p class="whitespace-pre-wrap break-words text-sm text-slate-800">{{ $note }}</p>
+            @if ($isWaitingVerification && $canOpenVerification)
+                <a href="{{ route('keuangan.verifikasi') }}" wire:navigate
+                    class="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full bg-[#0F2F57] px-5 text-xs font-semibold text-white hover:bg-[#1E60D5] transition-colors">
+                    Buka Verifikasi Keuangan
+                </a>
             @endif
+        </div>
 
-            @if ($responsible && ! $verified && $note !== null && $active)
-                <form action="{{ route('keuangan.verifikasi.cek-ulang', ['type' => $type, 'id' => $document->id]) }}"
-                    method="POST" enctype="multipart/form-data" class="space-y-2 border-t border-slate-200 pt-3">
-                    @csrf
-                    <label for="bukti-koreksi" class="block text-sm font-semibold text-slate-800">Bukti perbaikan (opsional)</label>
-                    <p id="petunjuk-bukti" class="text-xs text-slate-600">JPG, PNG, atau PDF. Maksimal 5 MB.</p>
-                    <input type="file" id="bukti-koreksi" name="bukti_koreksi" accept=".jpg,.jpeg,.png,.pdf" aria-describedby="petunjuk-bukti"
-                        class="block w-full max-w-md rounded-xl border border-slate-500 bg-white text-sm text-slate-700 file:mr-2 file:min-h-11 file:border-0 file:bg-slate-100 file:px-3 file:font-semibold file:text-slate-900">
-                    @error('bukti_koreksi')
-                        <p role="alert" class="text-sm text-red-800">{{ $message }}</p>
-                    @enderror
-                    <button type="submit" class="min-h-11 rounded-full bg-[#0F2F57] px-5 text-sm font-semibold text-white hover:bg-[#1d426d]">
-                        Siap Dicek Ulang
-                    </button>
-                </form>
-            @endif
-        </section>
-    @endif
+        @if ($note !== null && ($verified || $returnedByVerification))
+            <p class="whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white/90 px-3.5 py-2.5 text-xs text-[#171C22]">{{ $note }}</p>
+        @endif
+    </section>
 @endif

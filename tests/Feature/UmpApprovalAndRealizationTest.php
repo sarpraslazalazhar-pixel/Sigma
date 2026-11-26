@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Pencairan\PencairanIndex;
+use App\Livewire\Permohonan\PermohonanDetail;
+use App\Livewire\Permohonan\PermohonanIndex;
+use App\Livewire\Ump\UmpDetail;
+use App\Livewire\Ump\UmpIndex;
 use App\Models\KodeAnggaran;
 use App\Models\Permohonan;
 use App\Models\PermohonanItem;
@@ -13,10 +18,12 @@ use App\Models\User;
 use App\Services\BudgetCalculator;
 use App\Services\PermohonanWorkflow;
 use App\Services\UmpWorkflow;
+use App\Services\VerifikasiKeuangan;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Livewire\Livewire;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -25,6 +32,10 @@ class UmpApprovalAndRealizationTest extends TestCase
     use RefreshDatabase;
 
     protected User $financeUser;
+
+    protected User $kepalaKeuanganUser;
+
+    protected User $tuUser;
 
     protected User $kadivUser;
 
@@ -45,6 +56,8 @@ class UmpApprovalAndRealizationTest extends TestCase
         ]);
 
         $this->financeUser = User::where('username', 'rochadi.kohar')->firstOrFail();
+        $this->kepalaKeuanganUser = User::where('username', 'direktur.keuangan')->firstOrFail();
+        $this->tuUser = User::where('username', 'subakti')->firstOrFail();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->firstOrFail();
         $this->pjUser = User::where('username', 'deden.salim')->firstOrFail();
 
@@ -101,6 +114,78 @@ class UmpApprovalAndRealizationTest extends TestCase
         $workflow->submitByPj($this->ump, $this->pjUser, $catatan);
     }
 
+    protected function verifyKeuangan(?User $reviewer = null): void
+    {
+        (new VerifikasiKeuangan)->decide(
+            $this->ump->id,
+            $reviewer ?? $this->tuUser,
+            'verified',
+            'Kelengkapan terverifikasi.'
+        );
+    }
+
+    public function test_blocking_gate_rejects_manager_keuangan_before_verifikasi_keuangan(): void
+    {
+        $this->submitUmp();
+        $workflow = new UmpWorkflow;
+        $workflow->approve($this->ump, $this->kadivUser, []);
+        $this->assertSame('ttd_manager_keuangan', $this->ump->fresh()->status);
+        $this->assertNull($this->ump->fresh()->verifikasi_keuangan_at);
+
+        $this->assertFalse($workflow->canUserApprove($this->financeUser, $this->ump->fresh()));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Verifikasi Keuangan terlebih dahulu');
+
+        $workflow->approve($this->ump->fresh(), $this->financeUser, []);
+    }
+
+    public function test_role_separation_between_tu_manager_keuangan_and_kepala_keuangan(): void
+    {
+        $this->submitUmp();
+        $workflow = new UmpWorkflow;
+        $workflow->approve($this->ump, $this->kadivUser, []);
+        $this->verifyKeuangan();
+
+        $ump = $this->ump->fresh();
+        $this->assertTrue($workflow->canUserApprove($this->financeUser, $ump));
+        $this->assertFalse($workflow->canUserApprove($this->kepalaKeuanganUser, $ump));
+        $this->assertFalse($workflow->canUserApprove($this->tuUser, $ump));
+
+        // TU dan Kepala Divisi Keuangan ditolak pada tahap Manager Keuangan
+        foreach ([$this->tuUser, $this->kepalaKeuanganUser] as $unauthorized) {
+            try {
+                $workflow->approve($ump, $unauthorized, []);
+                $this->fail("User {$unauthorized->username} seharusnya ditolak pada tahap ttd_manager_keuangan.");
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('Manager Keuangan', $e->getMessage());
+            }
+        }
+
+        // Manager Keuangan menyetujui -> naik ke ttd_kepala_keuangan
+        $workflow->approve($ump, $this->financeUser, []);
+        $umpAtKepala = $this->ump->fresh();
+        $this->assertSame('ttd_kepala_keuangan', $umpAtKepala->status);
+
+        $this->assertTrue($workflow->canUserApprove($this->kepalaKeuanganUser, $umpAtKepala));
+        $this->assertFalse($workflow->canUserApprove($this->financeUser, $umpAtKepala));
+        $this->assertFalse($workflow->canUserApprove($this->tuUser, $umpAtKepala));
+
+        // Manager Keuangan dan TU ditolak pada tahap Kepala Divisi Keuangan
+        foreach ([$this->financeUser, $this->tuUser] as $unauthorized) {
+            try {
+                $workflow->approve($umpAtKepala, $unauthorized, []);
+                $this->fail("User {$unauthorized->username} seharusnya ditolak pada tahap ttd_kepala_keuangan.");
+            } catch (RuntimeException $e) {
+                $this->assertStringContainsString('Kepala Divisi Keuangan', $e->getMessage());
+            }
+        }
+
+        // Kepala Divisi Keuangan menyetujui -> selesai
+        $workflow->approve($umpAtKepala, $this->kepalaKeuanganUser, []);
+        $this->assertSame('selesai', $this->ump->fresh()->status);
+    }
+
     public function test_full_approval_chain_until_selesai(): void
     {
         $this->submitUmp();
@@ -112,21 +197,15 @@ class UmpApprovalAndRealizationTest extends TestCase
         $workflow->approve($this->ump, $this->kadivUser, ['catatan' => 'Disetujui Kadiv']);
         $this->assertSame('ttd_manager_keuangan', $this->ump->fresh()->status);
 
-        // 2. ttd_manager_keuangan -> ttd_kepala_keuangan oleh Manager Keuangan
-        $workflow->approve($this->ump, $this->financeUser, []);
+        // 2. Verifikasi Keuangan (blocking gate)
+        $this->verifyKeuangan();
+
+        // 3. ttd_manager_keuangan -> ttd_kepala_keuangan oleh Manager Keuangan
+        $workflow->approve($this->ump->fresh(), $this->financeUser, []);
         $this->assertSame('ttd_kepala_keuangan', $this->ump->fresh()->status);
 
-        // 3. Final: wajib scan_final
-        try {
-            $workflow->approve($this->ump, $this->financeUser, []);
-            $this->fail('Approve tanpa scan final seharusnya gagal.');
-        } catch (RuntimeException $e) {
-            $this->assertStringContainsString('scan fisik laporan', strtolower($e->getMessage()));
-        }
-
-        $workflow->approve($this->ump, $this->financeUser, [
-            'scan_final' => UploadedFile::fake()->create('scan-ump.pdf', 512, 'application/pdf'),
-        ]);
+        // 4. Final: persetujuan selesai oleh Kepala Divisi Keuangan tanpa wajib scan_final
+        $workflow->approve($this->ump->fresh(), $this->kepalaKeuanganUser, []);
 
         $this->ump->refresh();
         $this->assertSame('selesai', $this->ump->status);
@@ -141,17 +220,35 @@ class UmpApprovalAndRealizationTest extends TestCase
             ]);
         }
 
-        $this->assertDatabaseHas('lampiran', [
-            'attachable_type' => Ump::class,
-            'attachable_id' => $this->ump->id,
-            'jenis' => 'scan_final',
-        ]);
-
         $this->assertDatabaseHas('audit_logs', ['action' => 'ump.approved.ttd_kepala_keuangan']);
 
         // Setelah selesai, approve ulang ditolak
         $this->expectException(RuntimeException::class);
-        $workflow->approve($this->ump, $this->financeUser, []);
+        $workflow->approve($this->ump, $this->kepalaKeuanganUser, []);
+    }
+
+    public function test_final_approval_modal_approves_without_scan_final_upload(): void
+    {
+        $this->submitUmp();
+
+        $workflow = new UmpWorkflow;
+        $workflow->approve($this->ump, $this->kadivUser, []);
+        $this->verifyKeuangan();
+        $workflow->approve($this->ump->fresh(), $this->financeUser, []);
+        $this->assertSame('ttd_kepala_keuangan', $this->ump->fresh()->status);
+
+        Livewire::actingAs($this->kepalaKeuanganUser)
+            ->test(UmpDetail::class, ['id' => $this->ump->id])
+            ->assertDontSee('Scan fisik Laporan bertanda tangan wajib diunggah')
+            ->call('openApproval', 'setuju')
+            ->assertSee('Konfirmasi Persetujuan Laporan')
+            ->assertSee('Catatan (Opsional)')
+            ->assertDontSee('Scan Laporan Final Bertanda Tangan')
+            ->assertDontSeeHtml('id="scanFinalFile"')
+            ->call('submitApproval')
+            ->assertHasNoErrors();
+
+        $this->assertSame('selesai', $this->ump->fresh()->status);
     }
 
     public function test_budget_tree_reflects_realization_after_selesai(): void
@@ -166,8 +263,9 @@ class UmpApprovalAndRealizationTest extends TestCase
 
         $workflow = new UmpWorkflow;
         $workflow->approve($this->ump, $this->kadivUser, []);
-        $workflow->approve($this->ump, $this->financeUser, []);
-        $workflow->approve($this->ump, $this->financeUser, [
+        $this->verifyKeuangan();
+        $workflow->approve($this->ump->fresh(), $this->financeUser, []);
+        $workflow->approve($this->ump->fresh(), $this->kepalaKeuanganUser, [
             'scan_final' => UploadedFile::fake()->create('scan.pdf', 256, 'application/pdf'),
         ]);
 
@@ -194,8 +292,9 @@ class UmpApprovalAndRealizationTest extends TestCase
 
         $workflow = new UmpWorkflow;
         $workflow->approve($this->ump, $this->kadivUser, []);
-        $workflow->approve($this->ump, $this->financeUser, []);
-        $workflow->approve($this->ump, $this->financeUser, [
+        $this->verifyKeuangan();
+        $workflow->approve($this->ump->fresh(), $this->financeUser, []);
+        $workflow->approve($this->ump->fresh(), $this->kepalaKeuanganUser, [
             'scan_final' => UploadedFile::fake()->create('scan.pdf', 128, 'application/pdf'),
         ]);
 
@@ -238,8 +337,16 @@ class UmpApprovalAndRealizationTest extends TestCase
         $workflow->submitByPj($this->ump, $this->pjUser, '');
         $this->assertSame('ttd_pj', $this->ump->fresh()->status);
 
-        // Batalkan
-        $workflow->cancel($this->ump, $this->financeUser, 'Kegiatan dibatalkan pihak unit.');
+        // Keuangan tahap Manager tidak bisa mem-void saat masih di tahap Diperiksa Oleh unit
+        try {
+            $workflow->cancel($this->ump->fresh(), $this->financeUser, 'Coba void lintas tahap.');
+            $this->fail('Finance manager tidak boleh mem-void saat status ttd_pj.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('tidak berwenang', $e->getMessage());
+        }
+
+        // Batalkan oleh approver tahap berjalan (Kadiv)
+        $workflow->cancel($this->ump->fresh(), $this->kadivUser, 'Kegiatan dibatalkan pihak unit.');
         $this->assertSame('dibatalkan', $this->ump->fresh()->status);
         $this->assertDatabaseHas('approvals', [
             'approvable_type' => Ump::class,
@@ -263,15 +370,29 @@ class UmpApprovalAndRealizationTest extends TestCase
         (new UmpWorkflow)->requestRevision($this->ump, $this->kadivUser, 'alasan tes');
     }
 
+    public function test_request_revision_by_manager_keuangan_resets_verifikasi_keuangan_at(): void
+    {
+        $this->submitUmp();
+        $workflow = new UmpWorkflow;
+        $workflow->approve($this->ump, $this->kadivUser, []);
+        $this->verifyKeuangan();
+        $this->assertNotNull($this->ump->fresh()->verifikasi_keuangan_at);
+
+        $workflow->requestRevision($this->ump->fresh(), $this->financeUser, 'Lampiran nota belum terbaca.');
+
+        $afterRevision = $this->ump->fresh();
+        $this->assertSame('perlu_perbaikan', $afterRevision->status);
+        $this->assertNull($afterRevision->verifikasi_keuangan_at);
+    }
+
     public function test_diperiksa_oleh_can_be_approved_by_tu_staff(): void
     {
         $this->submitUmp();
         $this->assertSame('ttd_pj', $this->ump->fresh()->status);
 
-        $tuUser = User::where('username', 'subakti')->firstOrFail();
-        $this->assertTrue((bool) $tuUser->is_petugas_input);
+        $this->assertTrue((bool) $this->tuUser->is_petugas_input);
 
-        (new UmpWorkflow)->approve($this->ump, $tuUser, ['catatan' => 'Diperiksa oleh TU']);
+        (new UmpWorkflow)->approve($this->ump, $this->tuUser, ['catatan' => 'Diperiksa oleh TU']);
 
         $this->assertSame('ttd_manager_keuangan', $this->ump->fresh()->status);
     }
@@ -279,15 +400,14 @@ class UmpApprovalAndRealizationTest extends TestCase
     public function test_diperiksa_oleh_can_be_approved_by_manager_pj(): void
     {
         // Buat UMP dengan staf sebagai PJ (bukan manager)
-        $staffUser = User::where('username', 'subakti')->firstOrFail();
-        $this->ump->pj_id = $staffUser->id;
+        $this->ump->pj_id = $this->tuUser->id;
         $this->ump->save();
 
         $workflow = new UmpWorkflow;
         $workflow->saveItems($this->ump, [
             ['tgl' => now()->toDateString(), 'rincian' => 'Pengeluaran staf', 'jumlah' => 1000000],
         ]);
-        $workflow->submitByPj($this->ump, $staffUser, '');
+        $workflow->submitByPj($this->ump, $this->tuUser, '');
         $this->assertSame('ttd_pj', $this->ump->fresh()->status);
 
         // Manager dari unit PJ (deden.salim) menyetujui tahap Diperiksa Oleh
@@ -332,5 +452,60 @@ class UmpApprovalAndRealizationTest extends TestCase
         $this->expectExceptionMessage('Diperiksa Oleh');
 
         (new UmpWorkflow)->approve($this->ump, $otherDivManager, []);
+    }
+
+    public function test_void_labels_rendered_across_permohonan_pencairan_and_ump_ui(): void
+    {
+        $this->submitUmp();
+
+        Livewire::actingAs($this->kadivUser)
+            ->test(UmpDetail::class, ['id' => $this->ump->id])
+            ->assertSee('Void')
+            ->assertDontSeeHtml('>Batal<')
+            ->call('openApproval', 'batal')
+            ->assertSee('Konfirmasi Void Laporan')
+            ->assertSee('Laporan yang di-void tidak dapat diproses lebih lanjut.')
+            ->set('approvalNotes', 'Uji void laporan')
+            ->call('submitApproval')
+            ->assertHasNoErrors()
+            ->assertSee('Void');
+
+        Livewire::actingAs($this->financeUser)
+            ->test(UmpIndex::class)
+            ->assertSee('Void')
+            ->assertDontSee('Dibatalkan');
+
+        Livewire::actingAs($this->financeUser)
+            ->test(PencairanIndex::class)
+            ->assertSee('Void')
+            ->assertDontSee('Dibatalkan');
+
+        Livewire::actingAs($this->pjUser)
+            ->test(PermohonanIndex::class)
+            ->assertSee('Void')
+            ->assertDontSee('Dibatalkan');
+
+        $draftPermohonan = Permohonan::create([
+            'no_pengajuan' => 'KLM-PMH-2026-9901',
+            'unit_id' => $this->permohonan->unit_id,
+            'user_id' => $this->pjUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Uji Void',
+            'nama_kegiatan' => 'Kegiatan Uji Void',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->permohonan->sumber_dana_id,
+            'status' => 'draft',
+            'total_diminta' => 100000,
+        ]);
+
+        Livewire::actingAs($this->pjUser)
+            ->test(PermohonanDetail::class, ['id' => $draftPermohonan->id])
+            ->assertSee('Void Pengajuan')
+            ->call('openAction', 'batal')
+            ->assertSee('Konfirmasi Void Pengajuan')
+            ->set('actionNotes', 'Dibatalkan untuk uji void')
+            ->call('submitAction')
+            ->assertHasNoErrors()
+            ->assertSee('Void');
     }
 }

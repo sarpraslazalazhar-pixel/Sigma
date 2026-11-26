@@ -266,7 +266,7 @@ class PencairanBuktiTransferTest extends TestCase
         $file = UploadedFile::fake()->create('batal.pdf', 120, 'application/pdf');
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('dibatalkan');
+        $this->expectExceptionMessage('Void');
         $workflow->simpanBuktiTransfer($pencairan->fresh(), $this->financeUser, $file);
     }
 

@@ -91,7 +91,7 @@ class PermohonanIndex extends Component
                 'class' => 'bg-red-50 text-red-700 border-red-200',
             ],
             'dibatalkan' => [
-                'label' => 'Dibatalkan',
+                'label' => 'Void',
                 'class' => 'bg-slate-100 text-slate-500 border-slate-200',
             ],
             'dicairkan' => [

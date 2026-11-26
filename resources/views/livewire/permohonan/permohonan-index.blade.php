@@ -64,7 +64,7 @@
                     <option value="disetujui_keuangan">Disetujui Keuangan</option>
                     <option value="perlu_perbaikan">Perlu Perbaikan</option>
                     <option value="ditolak">Ditolak</option>
-                    <option value="dibatalkan">Dibatalkan</option>
+                    <option value="dibatalkan">Void</option>
                     <option value="dicairkan">Dicairkan</option>
                     <option value="selesai">Selesai</option>
                 </select>

@@ -69,9 +69,9 @@
                     <option value="draft">Draft</option>
                     <option value="perlu_perbaikan">Perlu Perbaikan</option>
                     <option value="ttd_pj">Menunggu Diperiksa</option>
-                    <option value="ttd_manager_keuangan">Menunggu TTD Mgr Keuangan</option>
+                    <option value="ttd_manager_keuangan">Verifikasi / TTD Mgr Keuangan</option>
                     <option value="ttd_kepala_keuangan">Menunggu TTD Kepala Keuangan</option>
-                    <option value="dibatalkan">Dibatalkan</option>
+                    <option value="dibatalkan">Void</option>
                     <option value="selesai">Selesai</option>
                 </select>
             </div>
@@ -108,7 +108,7 @@
     <div class="block lg:hidden space-y-3">
         @forelse ($umpList as $item)
             @php
-                $badge = $this->getStatusBadge($item->status);
+                $badge = $this->getStatusBadge($item->status, $item);
                 $permohonan = $item->pencairan?->permohonan;
             @endphp
             <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs space-y-3">
@@ -192,7 +192,7 @@
             <tbody class="divide-y divide-slate-100">
                 @forelse ($umpList as $item)
                     @php
-                        $badge = $this->getStatusBadge($item->status);
+                        $badge = $this->getStatusBadge($item->status, $item);
                         $permohonan = $item->pencairan?->permohonan;
                     @endphp
                     <tr class="group hover:bg-slate-50/80 transition-colors">
