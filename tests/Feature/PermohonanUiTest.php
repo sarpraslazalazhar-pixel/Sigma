@@ -1190,6 +1190,44 @@ class PermohonanUiTest extends TestCase
         $this->assertEquals(15000000, $pmh->fresh()->total_disetujui);
     }
 
+    public function test_petugas_tu_sees_approval_panel_and_approves_other_accounts_permohonan(): void
+    {
+        $supervisor = User::where('username', 'anas.priyogi')->firstOrFail();
+
+        $draft = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $supervisor->id,
+            'pengusul_id' => $supervisor->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Kelembagaan',
+            'nama_kegiatan' => 'Pengajuan Supervisor Untuk Disetujui TU',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDanaInfak->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $draft->id,
+            'uraian' => 'Sewa Ruang Rapat',
+            'jumlah_diminta' => 1000000,
+        ]);
+
+        $this->actingAs($supervisor);
+        $pmh = (new PermohonanWorkflow)->submit($draft);
+        $this->assertEquals('diajukan', $pmh->status);
+
+        Livewire::actingAs($this->staffUser)
+            ->test(PermohonanDetail::class, ['id' => $pmh->id])
+            ->assertSet('canApprove', true)
+            ->assertSee('Setujui Dokumen')
+            ->call('openAction', 'setuju')
+            ->call('submitAction')
+            ->assertHasNoErrors();
+
+        $this->assertEquals('diketahui_kadiv', $pmh->fresh()->status);
+    }
+
     public function test_permohonan_detail_and_edit_lock_permohonan_id_against_idor_tampering(): void
     {
         $managerProgram = User::where('username', 'manager.program')->firstOrFail();

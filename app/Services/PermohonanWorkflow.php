@@ -459,6 +459,7 @@ class PermohonanWorkflow
 
     /**
      * Single Source of Truth: periksa apakah pengguna berwenang menyetujui / merevisi / menolak permohonan pada tahap saat ini.
+     * Admin dan Petugas TU (is_petugas_input) berwenang di semua tahap, kecuali pada permohonan yang ia ajukan atau usulkan sendiri.
      */
     public function canUserApprove(User $user, Permohonan $permohonan): bool
     {
@@ -474,7 +475,7 @@ class PermohonanWorkflow
             return false;
         }
 
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $user->is_petugas_input) {
             return true;
         }
 
@@ -1017,14 +1018,14 @@ class PermohonanWorkflow
             $locked = Permohonan::lockForUpdate()->findOrFail($permohonan->id);
 
             if (in_array($locked->status, ['dicairkan', 'selesai', 'dibatalkan', 'ditolak'], true)) {
-                throw new RuntimeException('Dokumen tidak dapat dibatalkan pada status saat ini.');
+                throw new RuntimeException('Dokumen tidak dapat di-void pada status saat ini.');
             }
 
             $canCancel = $user->isAdmin()
                 || $locked->user_id === $user->id
                 || $locked->pengusul_id === $user->id;
             if (! $canCancel) {
-                throw new RuntimeException('Anda tidak berwenang membatalkan permohonan ini.');
+                throw new RuntimeException('Anda tidak berwenang me-void permohonan ini.');
             }
 
             $currentCycle = $this->getCurrentCycle($locked);
@@ -1244,7 +1245,7 @@ class PermohonanWorkflow
                 $lockedPencairan = Pencairan::lockForUpdate()->findOrFail($pencairan->id);
 
                 if ($lockedPencairan->status === 'dibatalkan') {
-                    throw new RuntimeException('Bukti transfer tidak dapat diunggah untuk PPD yang sudah dibatalkan.');
+                    throw new RuntimeException('Bukti transfer tidak dapat diunggah untuk PPD yang berstatus Void.');
                 }
 
                 $previousBukti = $lockedPencairan->lampiran()

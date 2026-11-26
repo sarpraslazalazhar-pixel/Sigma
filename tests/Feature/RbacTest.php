@@ -111,7 +111,11 @@ class RbacTest extends TestCase
         $this->assertFalse(Gate::forUser($this->staffKlm)->allows('manage-users'));
         $this->assertFalse(Gate::forUser($this->staffKlm)->allows('view-audit-logs'));
         $this->assertFalse(Gate::forUser($this->staffKlm)->allows('manage-budget'));
+        $this->assertTrue(Gate::forUser($this->staffKlm)->allows('verifikasi-keuangan'));
         $this->assertTrue(Gate::forUser($this->staffKlm)->allows('create-permohonan'));
+
+        $plainUnitUser = User::where('username', 'rudiansah')->firstOrFail();
+        $this->assertFalse(Gate::forUser($plainUnitUser)->allows('verifikasi-keuangan'));
 
         // Viewer user
         $viewer = User::create([
@@ -137,10 +141,11 @@ class RbacTest extends TestCase
         $this->actingAs($this->keuangan)->get('/master/audit-logs')->assertOk();
         $this->actingAs($this->staffKlm)->get('/master/audit-logs')->assertStatus(403);
 
-        // 3. /keuangan/verifikasi: Hanya admin dan keuangan yang diizinkan
+        // 3. /keuangan/verifikasi: Admin, Keuangan, dan TU (is_petugas_input) diizinkan; unit biasa tetap 403
         $plainUnitUser = User::where('username', 'rudiansah')->firstOrFail(); // is_petugas_input = false
         $this->actingAs($this->admin)->get('/keuangan/verifikasi')->assertOk();
         $this->actingAs($this->keuangan)->get('/keuangan/verifikasi')->assertOk();
+        $this->actingAs($this->staffKlm)->get('/keuangan/verifikasi')->assertOk();
         $this->actingAs($plainUnitUser)->get('/keuangan/verifikasi')->assertStatus(403);
     }
 

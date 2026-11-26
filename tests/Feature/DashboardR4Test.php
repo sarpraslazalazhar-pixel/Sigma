@@ -17,6 +17,7 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Services\PermohonanWorkflow;
 use App\Services\UmpWorkflow;
+use App\Services\VerifikasiKeuangan;
 use Database\Seeders\MasterDataSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,6 +35,8 @@ class DashboardR4Test extends TestCase
     protected User $managerUser;
 
     protected User $kadivUser;
+
+    protected User $managerFinanceUser;
 
     protected User $financeUser;
 
@@ -60,6 +63,7 @@ class DashboardR4Test extends TestCase
         $this->staffUser = User::where('username', 'subakti')->first();
         $this->managerUser = User::where('username', 'deden.salim')->first();
         $this->kadivUser = User::where('username', 'rahmatullah.sidik')->first();
+        $this->managerFinanceUser = User::where('username', 'rochadi.kohar')->first();
         $this->financeUser = User::where('username', 'direktur.keuangan')->first();
         $this->adminUser = User::where('username', 'admin')->first();
 
@@ -137,8 +141,9 @@ class DashboardR4Test extends TestCase
         ]);
         $uWorkflow->submitByPj($ump, $this->staffUser, 'Realisasi selesai');
         $uWorkflow->approve($ump, $this->kadivUser);
-        $uWorkflow->approve($ump, $this->financeUser);
-        $uWorkflow->approve($ump, $this->financeUser, [
+        (new VerifikasiKeuangan)->decide($ump->id, $this->staffUser, 'verified', 'Kelengkapan lengkap.');
+        $uWorkflow->approve($ump->fresh(), $this->managerFinanceUser);
+        $uWorkflow->approve($ump->fresh(), $this->financeUser, [
             'scan_final' => UploadedFile::fake()->create('scan.pdf', 100),
         ]);
     }

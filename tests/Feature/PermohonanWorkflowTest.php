@@ -993,6 +993,94 @@ class PermohonanWorkflowTest extends TestCase
         $this->assertEquals(12000000, $confirmed->total_disetujui);
     }
 
+    public function test_petugas_tu_can_approve_permohonan_submitted_by_other_accounts(): void
+    {
+        $workflow = new PermohonanWorkflow;
+        $bukanPetugasTu = User::where('username', 'rudiansah')->firstOrFail();
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->supervisorUser->id,
+            'pengusul_id' => $this->supervisorUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sosial',
+            'nama_kegiatan' => 'Pengajuan Supervisor Disetujui TU',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Konsumsi Rapat',
+            'jumlah_diminta' => 1000000,
+        ]);
+
+        $this->actingAs($this->supervisorUser);
+        $submitted = $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $submitted->status);
+
+        $this->assertFalse($workflow->canUserApprove($bukanPetugasTu, $submitted));
+        $this->assertTrue($workflow->canUserApprove($this->staffUser, $submitted));
+        $this->assertTrue(Gate::forUser($this->staffUser)->allows('approveKadiv', $submitted));
+
+        $this->actingAs($this->staffUser);
+        $step1Done = $workflow->approve($submitted, $this->staffUser);
+        $this->assertEquals('diketahui_kadiv', $step1Done->status);
+
+        $this->assertTrue($workflow->canUserApprove($this->staffUser, $step1Done));
+        $this->assertTrue(Gate::forUser($this->staffUser)->allows('approveKeuangan', $step1Done));
+
+        $finalDone = $workflow->approve($step1Done, $this->staffUser);
+        $this->assertEquals('disetujui_keuangan', $finalDone->status);
+        $this->assertEquals(1000000, $finalDone->total_disetujui);
+
+        foreach (['kadiv', 'keuangan'] as $tahap) {
+            $this->assertDatabaseHas('approvals', [
+                'approvable_type' => Permohonan::class,
+                'approvable_id' => $finalDone->id,
+                'tahap' => $tahap,
+                'keputusan' => 'setuju',
+                'approver_id' => $this->staffUser->id,
+            ]);
+        }
+    }
+
+    public function test_petugas_tu_cannot_approve_permohonan_they_filed(): void
+    {
+        $workflow = new PermohonanWorkflow;
+
+        $permohonan = Permohonan::create([
+            'no_pengajuan' => '',
+            'unit_id' => $this->unitKlm->id,
+            'user_id' => $this->supervisorUser->id,
+            'pengusul_id' => $this->staffUser->id,
+            'kode_anggaran_id' => $this->leafNode->id,
+            'program' => 'Program Sosial',
+            'nama_kegiatan' => 'Pengajuan TU Atas Nama Supervisor',
+            'tgl_mulai' => now()->toDateString(),
+            'sumber_dana_id' => $this->sumberDana->id,
+            'status' => 'draft',
+        ]);
+
+        PermohonanItem::create([
+            'permohonan_id' => $permohonan->id,
+            'uraian' => 'Alat Tulis Kantor',
+            'jumlah_diminta' => 1000000,
+        ]);
+
+        $this->actingAs($this->staffUser);
+        $submitted = $workflow->submit($permohonan);
+        $this->assertEquals('diajukan', $submitted->status);
+
+        $this->assertFalse($workflow->canUserApprove($this->staffUser, $submitted));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/pengusul/i');
+        $workflow->approve($submitted, $this->staffUser);
+    }
+
     public function test_legacy_in_flight_backfill_migration_repairs_amount_based_leveling_required(): void
     {
         $workflow = new PermohonanWorkflow;
